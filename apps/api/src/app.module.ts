@@ -1,9 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
 import { validateEnv } from './config/env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { HealthController } from './health.controller.js';
+import { AuthModule } from './auth/auth.module.js';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
+import { RolesGuard } from './auth/guards/roles.guard.js';
+import { TenantInterceptor } from './auth/tenant.interceptor.js';
 import { CategoryModule } from './category/category.module.js';
 import { PaymentMethodModule } from './payment-method/payment-method.module.js';
 import { CounterpartyModule } from './counterparty/counterparty.module.js';
@@ -27,6 +32,7 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
       })(),
     }),
     PrismaModule,
+    AuthModule,
     CategoryModule,
     PaymentMethodModule,
     CounterpartyModule,
@@ -35,5 +41,11 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     IngestionModule,
   ],
   controllers: [HealthController],
+  providers: [
+    // 전역 인증 가드(@Public 예외) → 역할 가드 → 테넌트 컨텍스트 주입
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
+  ],
 })
 export class AppModule {}
