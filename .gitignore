@@ -1,0 +1,28 @@
+# 환경변수 (비밀번호 포함 — 커밋 금지)
+.env
+.env.local
+.env.*.local
+
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Prisma 생성물
+**/generated/
+
+# 로그
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store

@@ -1,0 +1,373 @@
+// 가계부 DB 스키마 — DATABASE.md 를 Prisma 모델로 구현.
+// 컬럼은 snake_case(@map), 모델/필드는 camelCase 규약.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums (DATABASE.md CHECK 제약 대응)
+// ─────────────────────────────────────────────
+enum TransactionType {
+  income
+  expense
+}
+
+enum MethodType {
+  bank
+  card
+}
+
+enum TransactionStatus {
+  settled
+  pending
+  info
+}
+
+enum ExcludeReason {
+  card_settlement
+  self_transfer
+}
+
+enum MatchType {
+  contains
+  exact
+  regex
+}
+
+enum BankTxnDirection {
+  in
+  out
+  both
+}
+
+enum YesNo {
+  Y
+  N
+}
+
+enum ImportJobStatus {
+  queued
+  parsing
+  classifying
+  review
+  completed
+  failed
+}
+
+// ─────────────────────────────────────────────
+// 계정 (인증)
+// ─────────────────────────────────────────────
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String?  @map("display_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  transactions Transaction[]
+
+  @@map("user")
+}
+
+// ─────────────────────────────────────────────
+// 마스터 — 결제수단 / 분류 / 거래상대
+// ─────────────────────────────────────────────
+model PaymentMethod {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique
+  methodType  MethodType @map("method_type")
+  issuer      String?
+  identifier  String?
+  accountNo   String?    @map("account_no")
+  owner       String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  transactions     Transaction[]
+  bankTransactions BankTransaction[]
+  cardStatements   CardStatement[]   @relation("CardOfStatement")
+  settledStatements CardStatement[]  @relation("SettleAccount")
+  cardTransactions CardTransaction[]
+  monthlyPaymentStats MonthlyPaymentStat[]
+
+  @@map("payment_method")
+}
+
+model Category {
+  code       String          @id
+  parentCode String?         @map("parent_code")
+  name       String
+  type       TransactionType
+  depth      Int
+  sortOrder  Int             @default(0) @map("sort_order")
+  useYn      YesNo           @default(Y) @map("use_yn")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentCode], references: [code])
+  children Category[] @relation("CategoryTree")
+
+  transactions  Transaction[]
+  merchantRules MerchantCategoryMap[]
+  monthlyStats  MonthlyCategoryStat[]
+
+  @@index([parentCode])
+  @@map("category")
+}
+
+model Counterparty {
+  id   Int     @id @default(autoincrement())
+  name String  @unique
+  type String?
+
+  transactions Transaction[]
+  monthlyStats MonthlySourceStat[]
+
+  @@map("counterparty")
+}
+
+// ─────────────────────────────────────────────
+// 거래 (수입/지출 공용)
+// ─────────────────────────────────────────────
+model Transaction {
+  id              Int               @id @default(autoincrement())
+  type            TransactionType
+  categoryCode    String            @map("category_code")
+  counterpartyId  Int?              @map("counterparty_id")
+  paymentMethodId Int               @map("payment_method_id")
+  description     String?
+  amount          Decimal?          @db.Decimal(15, 2)
+  transactionDate DateTime          @map("transaction_date") @db.Date
+  settledDate     DateTime?         @map("settled_date") @db.Date
+  status          TransactionStatus @default(settled)
+  memo            String?
+  userId          Int?              @map("user_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  category      Category       @relation(fields: [categoryCode], references: [code])
+  counterparty  Counterparty?  @relation(fields: [counterpartyId], references: [id])
+  paymentMethod PaymentMethod  @relation(fields: [paymentMethodId], references: [id])
+  user          User?          @relation(fields: [userId], references: [id])
+
+  bankTransaction BankTransaction?
+  cardTransaction CardTransaction?
+
+  @@index([transactionDate])
+  @@index([type])
+  @@index([categoryCode])
+  @@index([paymentMethodId])
+  @@map("transaction")
+}
+
+// ─────────────────────────────────────────────
+// 은행 거래내역 (원천 적재)
+// ─────────────────────────────────────────────
+model BankTxnType {
+  code      String           @id
+  name      String
+  direction BankTxnDirection?
+  useYn     YesNo            @default(Y) @map("use_yn")
+
+  bankTransactions BankTransaction[]
+
+  @@map("bank_txn_type")
+}
+
+model BankTransaction {
+  id              Int            @id @default(autoincrement())
+  paymentMethodId Int            @map("payment_method_id")
+  txnAt           DateTime       @map("txn_at")
+  txnTypeCode     String?        @map("txn_type_code")
+  txnTypeRaw      String?        @map("txn_type_raw")
+  counterpartOrg  String?        @map("counterpart_org")
+  description     String?
+  withdrawal      Decimal        @default(0) @db.Decimal(15, 2)
+  deposit         Decimal        @default(0) @db.Decimal(15, 2)
+  balance         Decimal?       @db.Decimal(15, 2)
+  branch          String?
+  transactionId   Int?           @unique @map("transaction_id")
+  isClassified    YesNo          @default(N) @map("is_classified")
+  excludeReason   ExcludeReason? @map("exclude_reason")
+  importBatch     String?        @map("import_batch")
+  dedupHash       String?        @unique @map("dedup_hash")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  txnType       BankTxnType?  @relation(fields: [txnTypeCode], references: [code])
+  transaction   Transaction?  @relation(fields: [transactionId], references: [id])
+
+  @@index([paymentMethodId])
+  @@index([txnAt])
+  @@index([isClassified])
+  @@map("bank_transaction")
+}
+
+// ─────────────────────────────────────────────
+// 카드 명세서 (원천 적재)
+// ─────────────────────────────────────────────
+model CardStatement {
+  id               Int       @id @default(autoincrement())
+  paymentMethodId  Int       @map("payment_method_id")
+  statementYm      String    @map("statement_ym") @db.Char(7)
+  billingDate      DateTime? @map("billing_date") @db.Date
+  settleAccountId  Int?      @map("settle_account_id")
+  settleAccountRaw String?   @map("settle_account_raw")
+  totalAmount      Decimal?  @map("total_amount") @db.Decimal(15, 2)
+  lumpSum          Decimal   @default(0) @map("lump_sum") @db.Decimal(15, 2)
+  installmentAmt   Decimal   @default(0) @map("installment_amt") @db.Decimal(15, 2)
+  cashAdvance      Decimal   @default(0) @map("cash_advance") @db.Decimal(15, 2)
+  cardLoan         Decimal   @default(0) @map("card_loan") @db.Decimal(15, 2)
+  revolving        Decimal   @default(0) @db.Decimal(15, 2)
+  annualFee        Decimal   @default(0) @map("annual_fee") @db.Decimal(15, 2)
+  prevUnpaid       Decimal   @default(0) @map("prev_unpaid") @db.Decimal(15, 2)
+  lateFee          Decimal   @default(0) @map("late_fee") @db.Decimal(15, 2)
+  totalCount       Int?      @map("total_count")
+  benefitTotal     Decimal   @default(0) @map("benefit_total") @db.Decimal(15, 2)
+  creditFrom       DateTime? @map("credit_from") @db.Date
+  creditTo         DateTime? @map("credit_to") @db.Date
+  createdDate      DateTime? @map("created_date") @db.Date
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  card          PaymentMethod  @relation("CardOfStatement", fields: [paymentMethodId], references: [id])
+  settleAccount PaymentMethod? @relation("SettleAccount", fields: [settleAccountId], references: [id])
+  transactions  CardTransaction[]
+
+  @@unique([paymentMethodId, statementYm])
+  @@map("card_statement")
+}
+
+model CardTransaction {
+  id                  Int       @id @default(autoincrement())
+  statementId         Int       @map("statement_id")
+  paymentMethodId     Int       @map("payment_method_id")
+  cardLabel           String?   @map("card_label")
+  txnDate             DateTime  @map("txn_date") @db.Date
+  merchantName        String    @map("merchant_name")
+  usageAmount         Decimal   @map("usage_amount") @db.Decimal(15, 2)
+  principal           Decimal   @db.Decimal(15, 2)
+  fee                 Decimal   @default(0) @db.Decimal(15, 2)
+  installmentPeriod   String?   @map("installment_period")
+  billingRound        String?   @map("billing_round")
+  installmentTotalAmt Decimal?  @map("installment_total_amt") @db.Decimal(15, 2)
+  benefitType         String?   @map("benefit_type")
+  benefitRate         Decimal?  @map("benefit_rate") @db.Decimal(5, 2)
+  benefitAmount       Decimal   @default(0) @map("benefit_amount") @db.Decimal(15, 2)
+  benefitNote         String?   @map("benefit_note")
+  region              String?
+  saleType            String?   @map("sale_type")
+  isCanceled          YesNo     @default(N) @map("is_canceled")
+  balanceAfter        Decimal?  @map("balance_after") @db.Decimal(15, 2)
+  pointName           String?   @map("point_name")
+  point               Decimal   @default(0) @db.Decimal(15, 2)
+  transactionId       Int?      @unique @map("transaction_id")
+  isClassified        YesNo     @default(N) @map("is_classified")
+  dedupHash           String?   @unique @map("dedup_hash")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  statement     CardStatement @relation(fields: [statementId], references: [id])
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  transaction   Transaction?  @relation(fields: [transactionId], references: [id])
+
+  @@index([statementId])
+  @@index([paymentMethodId])
+  @@index([txnDate])
+  @@index([isClassified])
+  @@map("card_transaction")
+}
+
+model MerchantCategoryMap {
+  id           Int       @id @default(autoincrement())
+  pattern      String
+  matchType    MatchType @default(contains) @map("match_type")
+  categoryCode String    @map("category_code")
+  priority     Int       @default(100)
+  useYn        YesNo     @default(Y) @map("use_yn")
+
+  category Category @relation(fields: [categoryCode], references: [code])
+
+  @@index([priority])
+  @@map("merchant_category_map")
+}
+
+// ─────────────────────────────────────────────
+// 월별 요약 통계 (집계 테이블)
+// ─────────────────────────────────────────────
+model MonthlySummary {
+  ym                 String   @id @db.Char(7)
+  incomeTotal        Decimal  @default(0) @map("income_total") @db.Decimal(15, 2)
+  expenseTotal       Decimal  @default(0) @map("expense_total") @db.Decimal(15, 2)
+  netAmount          Decimal  @default(0) @map("net_amount") @db.Decimal(15, 2)
+  incomeCount        Int      @default(0) @map("income_count")
+  expenseCount       Int      @default(0) @map("expense_count")
+  transferExcluded   Decimal  @default(0) @map("transfer_excluded") @db.Decimal(15, 2)
+  cardSettleExcluded Decimal  @default(0) @map("card_settle_excluded") @db.Decimal(15, 2)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("monthly_summary")
+}
+
+model MonthlyCategoryStat {
+  ym           String          @db.Char(7)
+  categoryCode String          @map("category_code")
+  type         TransactionType
+  amountTotal  Decimal         @default(0) @map("amount_total") @db.Decimal(15, 2)
+  txCount      Int             @default(0) @map("tx_count")
+  ratio        Decimal?        @db.Decimal(5, 2)
+
+  category Category @relation(fields: [categoryCode], references: [code])
+
+  @@id([ym, categoryCode])
+  @@map("monthly_category_stat")
+}
+
+model MonthlySourceStat {
+  ym             String  @db.Char(7)
+  counterpartyId Int     @map("counterparty_id")
+  amountTotal    Decimal @default(0) @map("amount_total") @db.Decimal(15, 2)
+  txCount        Int     @default(0) @map("tx_count")
+
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id])
+
+  @@id([ym, counterpartyId])
+  @@map("monthly_source_stat")
+}
+
+model MonthlyPaymentStat {
+  ym              String     @db.Char(7)
+  paymentMethodId Int        @map("payment_method_id")
+  methodType      MethodType @map("method_type")
+  incomeTotal     Decimal    @default(0) @map("income_total") @db.Decimal(15, 2)
+  expenseTotal    Decimal    @default(0) @map("expense_total") @db.Decimal(15, 2)
+  txCount         Int        @default(0) @map("tx_count")
+
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  @@id([ym, paymentMethodId])
+  @@map("monthly_payment_stat")
+}
+
+// ─────────────────────────────────────────────
+// 적재 잡 (업로드 파이프라인 상태 추적)
+// ─────────────────────────────────────────────
+model ImportJob {
+  id              String          @id
+  issuer          String
+  status          ImportJobStatus @default(queued)
+  fileKey         String          @map("file_key")
+  originalName    String?         @map("original_name")
+  paymentMethodId Int?            @map("payment_method_id")
+  statementYm     String?         @map("statement_ym") @db.Char(7)
+  parsedRows      Int             @default(0) @map("parsed_rows")
+  classifiedRows  Int             @default(0) @map("classified_rows")
+  pendingRows     Int             @default(0) @map("pending_rows")
+  error           String?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("import_job")
+}
