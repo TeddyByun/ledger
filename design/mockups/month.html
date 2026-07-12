@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>월 결산 · 가계부 Ledger</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">₩</div><div class="name">가계부<small>Ledger</small></div></div>
+    <div class="hh" role="button" tabindex="0"><div class="av">우</div><div class="info"><b>우리집</b><span>구성원 2명 · owner</span></div><span class="caret"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 9 5 3 5-3M7 15l5 3 5-3"/></svg></span></div>
+    <div class="nav-label">개요</div>
+    <nav class="nav"><a href="menu.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg></span>대시보드</a></nav>
+    <div class="nav-label">기록</div>
+    <nav class="nav">
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h10"/></svg></span>거래 내역</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>업로드·검토<span class="badge">3</span></a>
+      <a href="card.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg></span>카드 내역</a>
+      <a href="bank.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 12 4l9 6"/><path d="M5 10v8m5-8v8m4-8v8m5-8v8M3 20h18"/></svg></span>은행 내역</a>
+    </nav>
+    <div class="nav-label">분석</div>
+    <nav class="nav">
+      <a href="month.html" class="active"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4m8-4v4"/></svg></span>월 결산</a>
+      <a href="year.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8"/></svg></span>년 결산</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>예산</a>
+    </nav>
+    <div class="nav-label">설정</div>
+    <nav class="nav"><a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.06-.33.1-.66.1-1z"/></svg></span>설정</a></nav>
+    <div class="side-foot"><div class="userchip"><div class="av">T</div><div class="info"><b>Teddy</b><span>teddy@example.com</span></div></div></div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="crumb">분석 / <b>월 결산</b></span>
+      <div class="spacer"></div>
+      <div class="seg"><button class="on">월간</button><button>연간</button></div>
+      <div class="period"><button aria-label="이전 달">‹</button><span class="cur">2026 · 6월</span><button aria-label="다음 달">›</button></div>
+      <button class="btn ghost"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 12-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>내보내기</button>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <div class="titles"><h1>6월 결산</h1><p>2026년 6월 1일 – 30일 · settled 거래 기준</p></div>
+      </div>
+
+      <!-- KPI -->
+      <div class="grid cols-3" style="margin-bottom:16px">
+        <div class="stat accent-income"><div class="lbl"><span class="dot" style="background:var(--income)"></span>수입</div><div class="val income"><span class="w">₩</span>7,182,000</div><div class="delta up">▲ 2.1% <span class="muted">전월 대비</span></div></div>
+        <div class="stat accent-expense"><div class="lbl"><span class="dot" style="background:var(--expense)"></span>지출</div><div class="val expense"><span class="w">₩</span>3,940,000</div><div class="delta up">▼ 9.4% <span class="muted">전월 대비</span></div></div>
+        <div class="stat accent-net"><div class="lbl"><span class="dot" style="background:var(--brand)"></span>순액</div><div class="val net"><span class="w">₩</span>3,242,000</div><div class="delta up">▲ 12% <span class="muted">전월 대비</span></div></div>
+      </div>
+
+      <div class="grid split-64" style="margin-bottom:16px">
+        <!-- 분류 도넛 -->
+        <div class="card">
+          <div class="card-head"><h3>분류별 지출</h3><span class="sub">6월 · 클릭 시 거래로 이동</span></div>
+          <div class="donut-wrap">
+            <div class="donut" role="img" aria-label="6월 분류별 지출 도넛" style="background:conic-gradient(
+              var(--c1) 0 31%, var(--surface) 0 31.4%,
+              var(--c2) 31.4% 51%, var(--surface) 0 51.4%,
+              var(--c3) 51.4% 65%, var(--surface) 0 65.4%,
+              var(--c4) 65.4% 77%, var(--surface) 0 77.4%,
+              var(--c5) 77.4% 87%, var(--surface) 0 87.4%,
+              var(--c6) 87.4% 94%, var(--surface) 0 94.4%,
+              var(--c8) 94.4% 100%)">
+              <div class="donut-mid"><span class="k">총지출</span><span class="v">₩3.94M</span></div>
+            </div>
+            <div class="legend">
+              <div class="row"><span class="sw" style="background:var(--c1)"></span><span class="nm">생활</span><span class="amt">₩1,221,400</span><span class="pct">31%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c2)"></span><span class="nm">보험</span><span class="amt">₩788,000</span><span class="pct">20%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c3)"></span><span class="nm">교통</span><span class="amt">₩551,600</span><span class="pct">14%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c4)"></span><span class="nm">대출</span><span class="amt">₩472,800</span><span class="pct">12%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c5)"></span><span class="nm">통신</span><span class="amt">₩394,000</span><span class="pct">10%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c6)"></span><span class="nm">건강</span><span class="amt">₩275,800</span><span class="pct">7%</span></div>
+              <div class="row"><span class="sw" style="background:var(--c8)"></span><span class="nm">기타</span><span class="amt">₩236,400</span><span class="pct">6%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 예산 소진율 -->
+        <div class="card">
+          <div class="card-head"><h3>예산 소진율</h3><span class="sub">61% 사용</span></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm"><span class="cat-dot" style="background:var(--c1)"></span>생활</span><span class="fig">₩1,221,400 / 1,200,000</span></div><div class="meter"><i class="over" style="width:100%"></i></div><span class="pill expense" style="align-self:flex-start;margin-top:2px">102% 초과</span></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm"><span class="cat-dot" style="background:var(--c3)"></span>교통</span><span class="fig">₩551,600 / 600,000</span></div><div class="meter"><i class="warn" style="width:92%"></i></div></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm"><span class="cat-dot" style="background:var(--c6)"></span>건강</span><span class="fig">₩275,800 / 500,000</span></div><div class="meter"><i style="width:55%"></i></div></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm"><span class="cat-dot" style="background:var(--c5)"></span>통신</span><span class="fig">₩394,000 / 400,000</span></div><div class="meter"><i class="warn" style="width:98%"></i></div></div>
+        </div>
+      </div>
+
+      <div class="grid cols-2">
+        <!-- 일별 추세 -->
+        <div class="card">
+          <div class="card-head"><h3>일별 지출 추세</h3><span class="sub">6월</span></div>
+          <div class="barchart" style="height:150px" role="img" aria-label="6월 일별 지출">
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:30%;width:9px"></i></div><span class="mlab">1</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:12%;width:9px"></i></div><span class="mlab">5</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:65%;width:9px"></i></div><span class="mlab">10</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:40%;width:9px"></i></div><span class="mlab">13</span></div>
+            <div class="barcol on"><div class="bars"><i class="bar exp" style="height:88%;width:9px"></i></div><span class="mlab">16</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:22%;width:9px"></i></div><span class="mlab">20</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:52%;width:9px"></i></div><span class="mlab">24</span></div>
+            <div class="barcol"><div class="bars"><i class="bar exp" style="height:35%;width:9px"></i></div><span class="mlab">28</span></div>
+          </div>
+        </div>
+
+        <!-- 결제수단별 -->
+        <div class="card">
+          <div class="card-head"><h3>결제수단별 지출</h3><span class="sub">6월</span></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm">하나카드 (Navy 본인)</span><span class="fig">₩1,842,000 · 47%</span></div><div class="meter"><i style="width:47%"></i></div></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm">신한카드 (KT본인)</span><span class="fig">₩906,200 · 23%</span></div><div class="meter"><i style="width:23%"></i></div></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm">삼성카드 (T)</span><span class="fig">₩708,800 · 18%</span></div><div class="meter"><i style="width:18%"></i></div></div>
+          <div class="meter-row"><div class="meter-top"><span class="nm">하나은행 47307 (계좌)</span><span class="fig">₩483,000 · 12%</span></div><div class="meter"><i style="width:12%"></i></div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
