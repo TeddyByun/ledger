@@ -1,0 +1,463 @@
+<title>카드 명세서 적재 · 조회 플로우</title>
+<style>
+  :root {
+    --paper:#F1F4F2; --surface:#FFFFFF; --surface-2:#F7F9F8;
+    --ink:#16201C; --ink-2:#465852; --muted:#7C8A83; --line:#D9E1DC;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#DDEDE9;
+    --expense:#BE3B2A; --income:#245FA0; --exclude:#8A968F; --warn:#9A6A12;
+    --shadow:0 1px 2px rgba(20,40,32,.05), 0 8px 24px -12px rgba(20,40,32,.14);
+    --maxw:1080px;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0E1512; --surface:#16201C; --surface-2:#131C18;
+      --ink:#E7ECE9; --ink-2:#A7B4AE; --muted:#788681; --line:#26332D;
+      --accent:#5FC9BC; --accent-ink:#8FDDD3; --accent-soft:#16302B;
+      --expense:#E8715F; --income:#77ABE2; --exclude:#8C978F; --warn:#DDB25E;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#F1F4F2; --surface:#FFFFFF; --surface-2:#F7F9F8;
+    --ink:#16201C; --ink-2:#465852; --muted:#7C8A83; --line:#D9E1DC;
+    --accent:#0F766E; --accent-ink:#0B5A54; --accent-soft:#DDEDE9;
+    --expense:#BE3B2A; --income:#245FA0; --exclude:#8A968F; --warn:#9A6A12;
+    --shadow:0 1px 2px rgba(20,40,32,.05), 0 8px 24px -12px rgba(20,40,32,.14);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0E1512; --surface:#16201C; --surface-2:#131C18;
+    --ink:#E7ECE9; --ink-2:#A7B4AE; --muted:#788681; --line:#26332D;
+    --accent:#5FC9BC; --accent-ink:#8FDDD3; --accent-soft:#16302B;
+    --expense:#E8715F; --income:#77ABE2; --exclude:#8C978F; --warn:#DDB25E;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:var(--maxw); margin:0 auto; padding:0 24px; }
+  a { color:var(--accent-ink); text-decoration-color:var(--line); text-underline-offset:3px; }
+  a:focus-visible, .navlink:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
+
+  /* ── top bar ── */
+  .topbar { position:sticky; top:0; z-index:10; background:color-mix(in oklab, var(--paper) 88%, transparent);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  .topbar .wrap { display:flex; align-items:center; gap:18px; height:56px; }
+  .brand { font-family:var(--serif); font-weight:600; font-size:16px; letter-spacing:.2px; white-space:nowrap; }
+  .brand b { color:var(--accent-ink); }
+  .topnav { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+  .navlink { font-size:12.5px; color:var(--ink-2); text-decoration:none; padding:5px 9px; border-radius:7px; }
+  .navlink:hover { background:var(--accent-soft); color:var(--accent-ink); }
+  @media (max-width:720px){ .topnav{ display:none; } }
+
+  /* ── hero ── */
+  .hero { padding:64px 0 26px; }
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent-ink); margin:0 0 16px; }
+  h1 { font-family:var(--serif); font-weight:600; font-size:clamp(30px,5vw,46px); line-height:1.12;
+    letter-spacing:-.01em; margin:0 0 18px; text-wrap:balance; max-width:16ch; }
+  .lede { font-size:18px; color:var(--ink-2); max-width:60ch; margin:0; }
+  .lede b { color:var(--ink); font-weight:600; }
+
+  /* ── pipeline strip ── */
+  .pipe { margin:34px 0 8px; display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; }
+  .pipe-item { display:flex; align-items:center; gap:10px; }
+  .pstep { display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--ink);
+    background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:9px 13px;
+    box-shadow:var(--shadow); transition:transform .12s ease, border-color .12s ease; }
+  .pstep:hover { transform:translateY(-2px); border-color:var(--accent); }
+  .pstep .k { font-family:var(--mono); font-size:11px; color:var(--accent-ink); font-weight:600; }
+  .pstep .t { font-size:13.5px; font-weight:600; white-space:nowrap; }
+  .parrow { color:var(--muted); font-size:15px; align-self:center; }
+  @media (max-width:720px){ .parrow{ display:none; } .pipe-item{ width:100%; } .pstep{ width:100%; } }
+
+  /* ── sections ── */
+  section { padding:30px 0; }
+  .sec-head { display:flex; align-items:baseline; gap:14px; margin:0 0 8px; }
+  .sec-head h2 { font-family:var(--serif); font-weight:600; font-size:26px; margin:0; letter-spacing:-.01em; }
+  .sec-head .lbl { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  .sec-sub { color:var(--ink-2); max-width:66ch; margin:0 0 26px; }
+
+  /* ── rail / stations ── */
+  .rail { position:relative; padding-left:20px; }
+  .rail::before { content:""; position:absolute; left:19px; top:6px; bottom:6px; width:2px;
+    background:linear-gradient(var(--accent), color-mix(in oklab, var(--accent) 30%, transparent)); border-radius:2px; }
+  .station { position:relative; padding:0 0 22px 46px; }
+  .station:last-child { padding-bottom:0; }
+  .num { position:absolute; left:0; top:0; width:40px; height:40px; border-radius:50%;
+    background:var(--surface); border:2px solid var(--accent); color:var(--accent-ink);
+    display:grid; place-items:center; font-family:var(--serif); font-weight:600; font-size:17px;
+    box-shadow:var(--shadow); z-index:1; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:20px 22px; box-shadow:var(--shadow); }
+  .card h3 { font-size:17.5px; margin:0 0 4px; letter-spacing:-.01em; }
+  .card .why { font-size:13px; color:var(--muted); margin:0 0 14px; }
+  .card p { margin:10px 0; color:var(--ink-2); font-size:14.5px; }
+  .card p strong { color:var(--ink); font-weight:600; }
+
+  /* meta row: api + tables */
+  .meta { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px; }
+  .api { font-family:var(--mono); font-size:12px; font-weight:600; padding:4px 9px; border-radius:7px;
+    background:var(--accent-soft); color:var(--accent-ink); border:1px solid color-mix(in oklab,var(--accent) 25%, transparent); }
+  .api .verb { opacity:.65; margin-right:6px; }
+  .chip { font-family:var(--mono); font-size:11.5px; padding:4px 8px; border-radius:6px;
+    background:var(--surface-2); color:var(--ink-2); border:1px solid var(--line); }
+  .chip.t::before { content:"▦ "; color:var(--muted); }
+
+  .kv { font-size:13px; color:var(--ink-2); }
+  .kv b { color:var(--ink); }
+
+  /* status flow inline */
+  .statusflow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-family:var(--mono); font-size:11.5px; margin-top:6px; }
+  .st { padding:3px 8px; border-radius:20px; border:1px solid var(--line); background:var(--surface-2); color:var(--ink-2); }
+  .st.on { background:var(--accent-soft); color:var(--accent-ink); border-color:transparent; font-weight:600; }
+  .statusflow .arr { color:var(--muted); }
+
+  /* code + tables */
+  .scroll { overflow-x:auto; border-radius:10px; }
+  pre { margin:14px 0 4px; background:var(--surface-2); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; font-family:var(--mono); font-size:12.6px; line-height:1.7; color:var(--ink);
+    overflow-x:auto; }
+  pre .kw { color:var(--accent-ink); font-weight:600; }
+  pre .st2 { color:var(--income); }
+  pre .cm { color:var(--muted); font-style:italic; }
+  pre .nm { color:var(--expense); }
+
+  table { border-collapse:collapse; width:100%; font-size:13px; margin:14px 0 2px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+  td.num-col { font-variant-numeric:tabular-nums; text-align:right; }
+  tbody tr:last-child td { border-bottom:none; }
+  .tbl-wrap { background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); overflow-x:auto; }
+  .tbl-wrap table { margin:0; }
+  .tbl-cap { font-family:var(--mono); font-size:11px; color:var(--muted); padding:10px 12px 0; }
+
+  .amt-exp { color:var(--expense); font-weight:600; }
+  .amt-inc { color:var(--income); font-weight:600; }
+  .pill { font-size:11px; font-family:var(--mono); padding:2px 8px; border-radius:20px; display:inline-block; }
+  .pill.settled { background:var(--accent-soft); color:var(--accent-ink); }
+  .pill.pending { background:color-mix(in oklab,var(--warn) 18%, transparent); color:var(--warn); }
+  .pill.excl { background:color-mix(in oklab,var(--exclude) 20%, transparent); color:var(--exclude); }
+
+  /* lineage diagram */
+  .lineage { display:grid; gap:16px; margin:8px 0 6px; }
+  .flowgrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; align-items:stretch; }
+  @media (max-width:760px){ .flowgrid{ grid-template-columns:1fr; } }
+  .node { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); }
+  .node.stage-src { border-left:3px solid var(--muted); }
+  .node.stage-ledger { border-left:3px solid var(--accent); }
+  .node.stage-agg { border-left:3px solid var(--income); }
+  .node .tag { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .node h4 { font-family:var(--mono); font-size:13.5px; margin:4px 0 6px; color:var(--ink); }
+  .node ul { margin:6px 0 0; padding-left:16px; font-size:12.5px; color:var(--ink-2); }
+  .node li { margin:2px 0; }
+  .flowgrid .col { display:flex; flex-direction:column; gap:10px; }
+  .rel { font-family:var(--mono); font-size:11px; color:var(--accent-ink); text-align:center; padding:2px; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px){ .two{ grid-template-columns:1fr; } }
+
+  .legend { display:flex; flex-wrap:wrap; gap:16px; margin:6px 0 0; font-size:12.5px; color:var(--ink-2); }
+  .legend span { display:inline-flex; align-items:center; gap:7px; }
+  .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+
+  .callout { background:var(--accent-soft); border:1px solid color-mix(in oklab,var(--accent) 22%, transparent);
+    border-radius:12px; padding:14px 18px; margin:18px 0 0; font-size:13.5px; color:var(--ink); }
+  .callout b { color:var(--accent-ink); }
+
+  footer { border-top:1px solid var(--line); margin-top:36px; padding:26px 0 60px; color:var(--muted); font-size:13px; }
+  footer .docs { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  footer .docs code { font-family:var(--mono); font-size:11.5px; background:var(--surface-2); border:1px solid var(--line);
+    padding:3px 8px; border-radius:6px; color:var(--ink-2); }
+
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">가계부 · <b>Ledger</b> 파이프라인</div>
+    <nav class="topnav">
+      <a class="navlink" href="#flow">적재 플로우</a>
+      <a class="navlink" href="#query">조회 방식</a>
+      <a class="navlink" href="#lineage">데이터 계보</a>
+      <a class="navlink" href="#sql">예제 쿼리</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero">
+    <p class="eyebrow">End-to-End Flow · Card Statement</p>
+    <h1>카드 명세서 한 장이 조회 가능한 거래가 되기까지</h1>
+    <p class="lede">사용자가 <b>로그인</b>하고 카드 명세서를 <b>업로드</b>하면, 서버는 그것을 파싱·적재·자동분류하여
+      <b>가계부 거래(transaction)</b>로 만들고, 화면은 그 거래와 미리 계산된 월 집계를 <b>조회</b>한다.
+      아래는 그 여정을 실제 API·테이블·데이터로 따라간 것이다.</p>
+
+    <div class="pipe" aria-label="파이프라인 개요">
+      <div class="pipe-item"><a class="pstep" href="#s1"><span class="k">01</span><span class="t">로그인</span></a><span class="parrow">→</span></div>
+      <div class="pipe-item"><a class="pstep" href="#s2"><span class="k">02</span><span class="t">업로드</span></a><span class="parrow">→</span></div>
+      <div class="pipe-item"><a class="pstep" href="#s3"><span class="k">03</span><span class="t">파싱</span></a><span class="parrow">→</span></div>
+      <div class="pipe-item"><a class="pstep" href="#s4"><span class="k">04</span><span class="t">적재</span></a><span class="parrow">→</span></div>
+      <div class="pipe-item"><a class="pstep" href="#s5"><span class="k">05</span><span class="t">분류·대사</span></a><span class="parrow">→</span></div>
+      <div class="pipe-item"><a class="pstep" href="#s6"><span class="k">06</span><span class="t">집계·조회</span></a></div>
+    </div>
+  </div>
+
+  <!-- ══ FLOW ══ -->
+  <section id="flow">
+    <div class="sec-head"><h2>적재 플로우</h2><span class="lbl">업로드 → 거래 생성</span></div>
+    <p class="sec-sub">각 단계가 어떤 API를 호출하고 어떤 테이블에 무엇을 쓰는지. 잡 상태는
+      <span style="font-family:var(--mono);font-size:12px">queued → parsing → classifying → review → completed</span> 순으로 전이한다.</p>
+
+    <div class="rail">
+
+      <!-- 1 -->
+      <div class="station" id="s1">
+        <div class="num">1</div>
+        <div class="card">
+          <h3>로그인 · 가구 컨텍스트 확보</h3>
+          <p class="why">왜 먼저인가 — 모든 도메인 데이터가 <b>householdId</b>로 격리되므로, 요청 주체·가구가 정해져야 이후 모든 읽기·쓰기가 가능하다.</p>
+          <p>이메일·비밀번호로 로그인하면 <strong>Access 토큰(15분, 메모리)</strong>과 <strong>Refresh 토큰(30일, httpOnly 쿠키)</strong>을 받는다.
+             이후 모든 요청은 <span class="chip">Authorization: Bearer …</span> 와 활성 가구를 가리키는 <span class="chip">X-Household-Id</span> 를 함께 보낸다.</p>
+          <div class="meta">
+            <span class="api"><span class="verb">POST</span>/auth/login</span>
+            <span class="chip t">user</span><span class="chip t">membership</span><span class="chip t">refresh_token</span>
+          </div>
+          <p class="kv">응답: <b>{ accessToken, user, household:{ id, role } }</b> — 이후 서버는 요청마다 <b>{ userId, householdId, role }</b> 컨텍스트를 주입해 데이터를 자동 필터한다.</p>
+        </div>
+      </div>
+
+      <!-- 2 -->
+      <div class="station" id="s2">
+        <div class="num">2</div>
+        <div class="card">
+          <h3>명세서 업로드 → 적재 잡 생성</h3>
+          <p class="why">파싱은 무거우므로 즉시 처리하지 않고 <b>큐(BullMQ)</b>에 넣고 jobId만 돌려준다.</p>
+          <p>발급사(예: <strong>하나카드</strong>), 결제수단, 파일을 함께 전송한다. 서버는 파일을 스토리지에 저장하고 <span class="chip">import_job</span> 한 건을 만든 뒤 워커에 위임한다.</p>
+          <div class="meta">
+            <span class="api"><span class="verb">POST</span>/imports</span>
+            <span class="chip t">import_job</span>
+          </div>
+          <p class="kv">응답: <b>{ jobId }</b> · 화면은 <b>GET /imports/{jobId}</b> 를 폴링(또는 SSE)해 진행률을 본다.</p>
+          <div class="statusflow"><span class="st on">queued</span><span class="arr">→</span><span class="st">parsing</span><span class="arr">→</span><span class="st">classifying</span><span class="arr">→</span><span class="st">review</span><span class="arr">→</span><span class="st">completed</span></div>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <div class="station" id="s3">
+        <div class="num">3</div>
+        <div class="card">
+          <h3>파싱 · 정규화</h3>
+          <p class="why">카드사마다 컬럼이 다르다 — 발급사별 파서가 <b>공통 스키마</b>로 맞춘다.</p>
+          <p>명세서를 두 층으로 나눈다: <strong>헤더(요약)</strong> 1건과 <strong>이용상세내역</strong> N건.
+             핵심 금액 규칙은 <strong>가계부 금액 = 결제원금(principal) + 수수료(fee)</strong> — 할인이 반영된 실청구액이며, 할부는 그 달 <b>청구 회차 금액</b>만 잡는다.</p>
+          <div class="meta">
+            <span class="api"><span class="verb">worker</span>parse()</span>
+            <span class="chip">EUC-KR → UTF-8</span>
+          </div>
+          <p class="kv">예: <b>대성석유 주유소 · 이용 74,000 · 할인 −2,580 → 결제원금 71,420</b> (일시불이라 수수료 0).</p>
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <div class="station" id="s4">
+        <div class="num">4</div>
+        <div class="card">
+          <h3>원천 적재 (staging)</h3>
+          <p class="why">먼저 <b>무손실로</b> 저장한다 — 아직 가계부 거래가 아니라 "원본 보관"이다.</p>
+          <p>헤더는 <span class="chip t">card_statement</span> 에, 건별 내역은 <span class="chip t">card_transaction</span> 에 들어간다. 이 시점엔 <span class="chip">transaction_id = NULL</span>, <span class="chip">is_classified = 'N'</span>.</p>
+          <div class="tbl-wrap scroll" style="margin-top:12px">
+            <div class="tbl-cap">card_transaction — 적재 직후 (분류 전)</div>
+            <table>
+              <thead><tr><th>txn_date</th><th>merchant_name</th><th>usage</th><th>principal</th><th>fee</th><th>classified</th></tr></thead>
+              <tbody>
+                <tr><td>2026-03-01</td><td>대성석유(주)…주유소</td><td class="num-col">74,000</td><td class="num-col">71,420</td><td class="num-col">0</td><td><span class="pill pending">N</span></td></tr>
+                <tr><td>2026-03-16</td><td>365정형외과의원</td><td class="num-col">100,110</td><td class="num-col">100,110</td><td class="num-col">0</td><td><span class="pill pending">N</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 -->
+      <div class="station" id="s5">
+        <div class="num">5</div>
+        <div class="card">
+          <h3>자동분류 + 대사(reconciliation)</h3>
+          <p class="why">여기서 원천이 <b>가계부 거래</b>가 된다 — 규칙으로 분류하고, 중복 지출을 걷어낸다.</p>
+          <p><strong>자동분류</strong>: 가맹점명을 <span class="chip t">merchant_category_map</span> 패턴에 맞춰 분류코드를 부여한다(예: "주유소" → <b>09 차량</b>). 매칭되면
+             <span class="chip t">transaction</span> 을 만들고 원천에 <span class="chip">transaction_id</span> 로 연결(<span class="chip">is_classified='Y'</span>).</p>
+          <p><strong>미매칭</strong>은 <span class="pill pending">pending</span> 으로 남아 잡이 <span class="chip">review</span> 상태가 되고, 사용자가 검토 화면에서 확정한다.</p>
+          <p><strong>대사</strong>: 카드대금이 은행에서 빠져나간 출금(타사카드 결제)은 카드 건별 지출과 <b>중복</b>이므로 거래로 만들지 않고
+             <span class="pill excl">card_settlement</span> 로 제외한다. 본인 계좌 간 이체는 <span class="pill excl">self_transfer</span>.</p>
+          <div class="meta">
+            <span class="api"><span class="verb">PATCH</span>/imports/{jobId}/classify</span>
+            <span class="chip t">transaction</span><span class="chip t">merchant_category_map</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6 -->
+      <div class="station" id="s6">
+        <div class="num">6</div>
+        <div class="card">
+          <h3>월 집계 재계산 → 완료</h3>
+          <p class="why">대시보드를 빠르게 하려고, 조회 때 합산하지 않고 <b>미리 합산해 저장</b>한다.</p>
+          <p>영향받은 달(예: <b>2026-03</b>)의 <span class="chip t">monthly_summary</span>·<span class="chip t">monthly_category_stat</span>·<span class="chip t">monthly_payment_stat</span> 를 삭제 후 재삽입(rebuild)한다.
+             잡이 <span class="chip">completed</span> 가 되면 이제 <strong>조회 가능</strong>.</p>
+          <div class="callout"><b>집계 대상 규칙</b> — <span class="chip">amount IS NOT NULL AND status='settled'</span> 인 거래만 합산된다.
+            정보성 행(status='info')·자기이체·카드대금은 애초에 transaction에 연결되지 않아 자동으로 빠진다.</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══ QUERY ══ -->
+  <section id="query">
+    <div class="sec-head"><h2>조회는 어떻게 되는가</h2><span class="lbl">두 개의 경로</span></div>
+    <p class="sec-sub">화면이 데이터를 읽는 방식은 목적에 따라 둘로 갈린다. 하나는 개별 거래를 직접 훑고, 다른 하나는 5단계에서 미리 만들어 둔 집계를 즉시 읽는다.</p>
+
+    <div class="two">
+      <div class="card">
+        <h3 style="color:var(--accent-ink)">경로 A · 거래 목록</h3>
+        <p class="why">"3월에 쓴 내역을 보여줘" — 상세·필터·검색·페이지네이션</p>
+        <p><span class="chip t">transaction</span> 을 직접 조회하고 분류·결제수단·상대를 조인한다. 대량이므로 <strong>커서(keyset) 페이지네이션</strong>으로 무한스크롤한다.</p>
+        <div class="meta"><span class="api"><span class="verb">GET</span>/transactions</span></div>
+        <p class="kv"><b>?from &amp; to &amp; categoryCode &amp; paymentMethodId &amp; cursor</b></p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--income)">경로 B · 대시보드/통계</h3>
+        <p class="why">"이번 달 분류별 비중" — 즉시 뜨는 요약·차트</p>
+        <p>거래를 매번 합산하지 않고 <span class="chip t">monthly_category_stat</span> 등 <strong>집계 테이블</strong>을 그대로 읽는다. 그래서 데이터가 많아도 조회가 빠르다.</p>
+        <div class="meta"><span class="api"><span class="verb">GET</span>/stats/monthly</span></div>
+        <p class="kv"><b>?ym=2026-03</b> → 도넛·추세 차트 데이터</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ LINEAGE ══ -->
+  <section id="lineage">
+    <div class="sec-head"><h2>데이터 계보</h2><span class="lbl">원천 → 가계부 → 집계</span></div>
+    <p class="sec-sub">한 건의 카드 이용이 어느 테이블을 거쳐 어디로 조회되는지. 왼쪽은 무손실 원천, 가운데는 분류된 가계부 거래, 오른쪽은 대시보드용 집계다.</p>
+
+    <div class="flowgrid">
+      <div class="col">
+        <div class="node stage-src">
+          <div class="tag">원천 / Staging</div>
+          <h4>card_statement</h4>
+          <ul><li>명세서 헤더(월·합계·결제일)</li><li>카드·월별 1건</li></ul>
+        </div>
+        <div class="rel">│ 1 : N</div>
+        <div class="node stage-src">
+          <div class="tag">원천 / Staging</div>
+          <h4>card_transaction</h4>
+          <ul><li>건별 이용내역(무손실)</li><li>principal · fee · 할부</li></ul>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="rel">─ 자동분류 → 생성·연결 ─</div>
+        <div class="node stage-ledger">
+          <div class="tag">가계부 / Ledger</div>
+          <h4>transaction</h4>
+          <ul>
+            <li>amount = principal + fee</li>
+            <li>category_code (분류)</li>
+            <li>status = settled / pending / info</li>
+            <li>← 경로 A 가 읽는 곳</li>
+          </ul>
+        </div>
+        <div class="rel">↑ category · payment_method 조인</div>
+      </div>
+
+      <div class="col">
+        <div class="rel">─ 월 rebuild ─</div>
+        <div class="node stage-agg">
+          <div class="tag">집계 / Aggregate</div>
+          <h4>monthly_category_stat</h4>
+          <ul><li>ym · category_code</li><li>amount_total · ratio</li><li>← 경로 B 가 읽는 곳</li></ul>
+        </div>
+        <div class="rel">＋ monthly_summary · payment_stat</div>
+      </div>
+    </div>
+
+    <div class="legend" style="margin-top:22px">
+      <span><span class="sw" style="background:var(--income)"></span> 수입 (income)</span>
+      <span><span class="sw" style="background:var(--expense)"></span> 지출 (expense)</span>
+      <span><span class="sw" style="background:var(--exclude)"></span> 집계 제외 (self_transfer · card_settlement · info)</span>
+      <span><span class="sw" style="background:var(--accent)"></span> 강조 / 링크</span>
+    </div>
+  </section>
+
+  <!-- ══ SQL ══ -->
+  <section id="sql">
+    <div class="sec-head"><h2>실제로 어떤 쿼리가 도는가</h2><span class="lbl">경로 A · B 예시</span></div>
+    <p class="sec-sub">개념이 아니라 실제에 가깝게. 아래는 3월 지출을 조회하는 두 방식과 그 결과다. (가구 스코프 <span style="font-family:var(--mono);font-size:12px">household_id = 1</span> 는 서버가 자동 주입한다.)</p>
+
+    <h3 style="font-size:16px;margin:22px 0 0">경로 A — 거래 목록 (transaction 직접 조회)</h3>
+    <pre class="scroll"><span class="cm">-- GET /transactions?type=expense&amp;from=2026-03-01&amp;to=2026-03-31</span>
+<span class="kw">SELECT</span> t.transaction_date, c.name <span class="kw">AS</span> category, t.description,
+       t.amount, p.name <span class="kw">AS</span> payment, t.status
+<span class="kw">FROM</span> <span class="st2">"transaction"</span> t
+<span class="kw">JOIN</span> category c        <span class="kw">ON</span> t.category_code = c.code
+<span class="kw">JOIN</span> payment_method p  <span class="kw">ON</span> t.payment_method_id = p.id
+<span class="kw">WHERE</span> t.household_id = <span class="nm">1</span>
+  <span class="kw">AND</span> t.type = <span class="st2">'expense'</span>
+  <span class="kw">AND</span> t.status = <span class="st2">'settled'</span>
+  <span class="kw">AND</span> t.transaction_date <span class="kw">BETWEEN</span> <span class="st2">'2026-03-01'</span> <span class="kw">AND</span> <span class="st2">'2026-03-31'</span>
+<span class="kw">ORDER BY</span> t.transaction_date <span class="kw">DESC</span>, t.id <span class="kw">DESC</span>   <span class="cm">-- 커서 페이지네이션 키</span>
+<span class="kw">LIMIT</span> <span class="nm">50</span>;</pre>
+
+    <div class="tbl-wrap scroll">
+      <div class="tbl-cap">결과 — 화면의 거래 목록</div>
+      <table>
+        <thead><tr><th>날짜</th><th>분류</th><th>내용</th><th>금액</th><th>결제수단</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td>2026-03-16</td><td>건강 (07)</td><td>365정형외과의원</td><td class="num-col amt-exp">₩100,110</td><td>하나카드</td><td><span class="pill settled">settled</span></td></tr>
+          <tr><td>2026-03-01</td><td>차량 (09)</td><td>대성석유(주)…주유소</td><td class="num-col amt-exp">₩71,420</td><td>하나카드</td><td><span class="pill settled">settled</span></td></tr>
+          <tr><td>2026-03-20</td><td>생활 (0501)</td><td>GS25 군자점</td><td class="num-col amt-exp">₩230</td><td>하나카드</td><td><span class="pill pending">pending</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="kv" style="margin-top:10px">※ <b>pending</b> 행은 자동분류에 실패해 검토 대기 중 — 확정 전까지 집계(경로 B)에는 잡히지 않는다.</p>
+
+    <h3 style="font-size:16px;margin:30px 0 0">경로 B — 통계 (미리 집계된 테이블을 즉시 읽기)</h3>
+    <pre class="scroll"><span class="cm">-- GET /stats/monthly?ym=2026-03  → 합산 없이 바로 반환</span>
+<span class="kw">SELECT</span> category_code, amount_total, ratio
+<span class="kw">FROM</span> monthly_category_stat
+<span class="kw">WHERE</span> ym = <span class="st2">'2026-03'</span> <span class="kw">AND</span> household_id = <span class="nm">1</span>
+<span class="kw">ORDER BY</span> amount_total <span class="kw">DESC</span>;</pre>
+
+    <div class="tbl-wrap scroll">
+      <div class="tbl-cap">결과 — 대시보드 분류 도넛</div>
+      <table>
+        <thead><tr><th>분류</th><th>합계</th><th>비중</th></tr></thead>
+        <tbody>
+          <tr><td>건강 (07)</td><td class="num-col amt-exp">₩100,110</td><td class="num-col">55.9%</td></tr>
+          <tr><td>차량 (09)</td><td class="num-col amt-exp">₩71,420</td><td class="num-col">39.9%</td></tr>
+          <tr><td>생활 (05)</td><td class="num-col amt-exp">₩7,500</td><td class="num-col">4.2%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout" style="margin-top:22px">
+      <b>원천까지 되짚기</b> — 특정 거래가 궁금하면 <span class="chip">transaction.id</span> 에서
+      <span class="chip">card_transaction.transaction_id</span> 로 역추적해 원본 명세서 행(할인·할부·혜택까지)을 그대로 확인할 수 있다.
+      원천을 무손실로 남긴 4단계의 이유다.
+    </div>
+  </section>
+
+  <footer>
+    <div>이 페이지는 설계 문서 기반 설명용이며, 값은 <code>DATABASE.md</code>의 샘플을 사용했다.</div>
+    <div class="docs">
+      <code>AUTH_DESIGN.md</code><code>ARCHITECTURE.md §5</code><code>DATABASE.md §1.5·§7·§8</code>
+      <code>REVIEW_WORKFLOW_DESIGN.md</code><code>API_CONVENTIONS_DESIGN.md</code>
+    </div>
+  </footer>
+
+</main>
