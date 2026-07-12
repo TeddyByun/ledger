@@ -7,12 +7,14 @@ import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { ApiTags } from '@nestjs/swagger';
 import { PrismaService } from './prisma/prisma.service.js';
+import { Public } from './auth/decorators/public.decorator.js';
 
 /**
  * 헬스체크 — INFRA_OPS_DESIGN §4.3.
  * /health/live  : 프로세스 생존 (즉시 200)
  * /health/ready : 트래픽 수용 가능 (DB + Redis 확인)
  */
+@Public()
 @ApiTags('health')
 @Controller('health')
 export class HealthController {

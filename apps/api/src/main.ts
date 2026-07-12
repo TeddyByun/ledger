@@ -1,10 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Refresh 토큰 쿠키 파싱 (AUTH_DESIGN §2.3)
+  app.use(cookieParser());
 
   // 전역 입력 검증 (DTO + class-validator)
   app.useGlobalPipes(
@@ -18,7 +22,11 @@ async function bootstrap() {
 
   // API 버전 prefix
   app.setGlobalPrefix('api/v1');
-  app.enableCors();
+  // 쿠키(Refresh) 사용 → credentials 허용 + 오리진 화이트리스트
+  app.enableCors({
+    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+    credentials: true,
+  });
 
   // OpenAPI 문서 — 코드가 단일 진실원. /api/v1/docs 에서 UI, /docs-json 에서 스펙.
   const config = new DocumentBuilder()

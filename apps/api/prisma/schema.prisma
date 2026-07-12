@@ -60,19 +60,91 @@ enum ImportJobStatus {
   failed
 }
 
+enum MemberRole {
+  owner
+  member
+  viewer
+}
+
 // ─────────────────────────────────────────────
-// 계정 (인증)
+// 계정 · 가구 (인증/멀티테넌시) — AUTH_DESIGN §3
 // ─────────────────────────────────────────────
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  displayName  String?  @map("display_name")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  displayName  String?   @map("display_name")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  transactions Transaction[]
+  memberships         Membership[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  transactions        Transaction[]
 
   @@map("user")
+}
+
+model Household {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members          Membership[]
+  paymentMethods   PaymentMethod[]
+  counterparties   Counterparty[]
+  transactions     Transaction[]
+  bankTransactions BankTransaction[]
+  cardStatements   CardStatement[]
+  cardTransactions CardTransaction[]
+  importJobs       ImportJob[]
+
+  @@map("household")
+}
+
+model Membership {
+  id          Int        @id @default(autoincrement())
+  userId      Int        @map("user_id")
+  householdId Int        @map("household_id")
+  role        MemberRole @default(member)
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id])
+  household Household @relation(fields: [householdId], references: [id])
+
+  @@unique([userId, householdId])
+  @@index([householdId])
+  @@map("membership")
+}
+
+model RefreshToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  familyId  String    @map("family_id")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_token")
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("password_reset_token")
 }
 
 // ─────────────────────────────────────────────
@@ -80,6 +152,7 @@ model User {
 // ─────────────────────────────────────────────
 model PaymentMethod {
   id          Int        @id @default(autoincrement())
+  householdId Int?       @map("household_id") // Phase 1: nullable(expand) → Phase 2: NOT NULL
   name        String     @unique
   methodType  MethodType @map("method_type")
   issuer      String?
@@ -88,13 +161,15 @@ model PaymentMethod {
   owner       String?
   createdAt   DateTime   @default(now()) @map("created_at")
 
-  transactions     Transaction[]
-  bankTransactions BankTransaction[]
-  cardStatements   CardStatement[]   @relation("CardOfStatement")
-  settledStatements CardStatement[]  @relation("SettleAccount")
-  cardTransactions CardTransaction[]
+  household           Household?           @relation(fields: [householdId], references: [id])
+  transactions        Transaction[]
+  bankTransactions    BankTransaction[]
+  cardStatements      CardStatement[]      @relation("CardOfStatement")
+  settledStatements   CardStatement[]      @relation("SettleAccount")
+  cardTransactions    CardTransaction[]
   monthlyPaymentStats MonthlyPaymentStat[]
 
+  @@index([householdId])
   @@map("payment_method")
 }
 
@@ -119,13 +194,16 @@ model Category {
 }
 
 model Counterparty {
-  id   Int     @id @default(autoincrement())
-  name String  @unique
-  type String?
+  id          Int     @id @default(autoincrement())
+  householdId Int?    @map("household_id") // Phase 1: nullable(expand)
+  name        String  @unique
+  type        String?
 
+  household    Household?          @relation(fields: [householdId], references: [id])
   transactions Transaction[]
   monthlyStats MonthlySourceStat[]
 
+  @@index([householdId])
   @@map("counterparty")
 }
 
@@ -134,6 +212,7 @@ model Counterparty {
 // ─────────────────────────────────────────────
 model Transaction {
   id              Int               @id @default(autoincrement())
+  householdId     Int?              @map("household_id") // Phase 1: nullable(expand)
   type            TransactionType
   categoryCode    String            @map("category_code")
   counterpartyId  Int?              @map("counterparty_id")
@@ -148,14 +227,16 @@ model Transaction {
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
-  category      Category       @relation(fields: [categoryCode], references: [code])
-  counterparty  Counterparty?  @relation(fields: [counterpartyId], references: [id])
-  paymentMethod PaymentMethod  @relation(fields: [paymentMethodId], references: [id])
-  user          User?          @relation(fields: [userId], references: [id])
+  household     Household?    @relation(fields: [householdId], references: [id])
+  category      Category      @relation(fields: [categoryCode], references: [code])
+  counterparty  Counterparty? @relation(fields: [counterpartyId], references: [id])
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  user          User?         @relation(fields: [userId], references: [id])
 
   bankTransaction BankTransaction?
   cardTransaction CardTransaction?
 
+  @@index([householdId, transactionDate])
   @@index([transactionDate])
   @@index([type])
   @@index([categoryCode])
@@ -167,10 +248,10 @@ model Transaction {
 // 은행 거래내역 (원천 적재)
 // ─────────────────────────────────────────────
 model BankTxnType {
-  code      String           @id
+  code      String            @id
   name      String
   direction BankTxnDirection?
-  useYn     YesNo            @default(Y) @map("use_yn")
+  useYn     YesNo             @default(Y) @map("use_yn")
 
   bankTransactions BankTransaction[]
 
@@ -179,6 +260,7 @@ model BankTxnType {
 
 model BankTransaction {
   id              Int            @id @default(autoincrement())
+  householdId     Int?           @map("household_id") // Phase 1: nullable(expand)
   paymentMethodId Int            @map("payment_method_id")
   txnAt           DateTime       @map("txn_at")
   txnTypeCode     String?        @map("txn_type_code")
@@ -196,10 +278,12 @@ model BankTransaction {
   dedupHash       String?        @unique @map("dedup_hash")
   createdAt       DateTime       @default(now()) @map("created_at")
 
+  household     Household?    @relation(fields: [householdId], references: [id])
   paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
   txnType       BankTxnType?  @relation(fields: [txnTypeCode], references: [code])
   transaction   Transaction?  @relation(fields: [transactionId], references: [id])
 
+  @@index([householdId])
   @@index([paymentMethodId])
   @@index([txnAt])
   @@index([isClassified])
@@ -211,6 +295,7 @@ model BankTransaction {
 // ─────────────────────────────────────────────
 model CardStatement {
   id               Int       @id @default(autoincrement())
+  householdId      Int?      @map("household_id") // Phase 1: nullable(expand)
   paymentMethodId  Int       @map("payment_method_id")
   statementYm      String    @map("statement_ym") @db.Char(7)
   billingDate      DateTime? @map("billing_date") @db.Date
@@ -232,46 +317,51 @@ model CardStatement {
   createdDate      DateTime? @map("created_date") @db.Date
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  card          PaymentMethod  @relation("CardOfStatement", fields: [paymentMethodId], references: [id])
-  settleAccount PaymentMethod? @relation("SettleAccount", fields: [settleAccountId], references: [id])
+  household     Household?        @relation(fields: [householdId], references: [id])
+  card          PaymentMethod     @relation("CardOfStatement", fields: [paymentMethodId], references: [id])
+  settleAccount PaymentMethod?    @relation("SettleAccount", fields: [settleAccountId], references: [id])
   transactions  CardTransaction[]
 
   @@unique([paymentMethodId, statementYm])
+  @@index([householdId])
   @@map("card_statement")
 }
 
 model CardTransaction {
-  id                  Int       @id @default(autoincrement())
-  statementId         Int       @map("statement_id")
-  paymentMethodId     Int       @map("payment_method_id")
-  cardLabel           String?   @map("card_label")
-  txnDate             DateTime  @map("txn_date") @db.Date
-  merchantName        String    @map("merchant_name")
-  usageAmount         Decimal   @map("usage_amount") @db.Decimal(15, 2)
-  principal           Decimal   @db.Decimal(15, 2)
-  fee                 Decimal   @default(0) @db.Decimal(15, 2)
-  installmentPeriod   String?   @map("installment_period")
-  billingRound        String?   @map("billing_round")
-  installmentTotalAmt Decimal?  @map("installment_total_amt") @db.Decimal(15, 2)
-  benefitType         String?   @map("benefit_type")
-  benefitRate         Decimal?  @map("benefit_rate") @db.Decimal(5, 2)
-  benefitAmount       Decimal   @default(0) @map("benefit_amount") @db.Decimal(15, 2)
-  benefitNote         String?   @map("benefit_note")
+  id                  Int      @id @default(autoincrement())
+  householdId         Int?     @map("household_id") // Phase 1: nullable(expand)
+  statementId         Int      @map("statement_id")
+  paymentMethodId     Int      @map("payment_method_id")
+  cardLabel           String?  @map("card_label")
+  txnDate             DateTime @map("txn_date") @db.Date
+  merchantName        String   @map("merchant_name")
+  usageAmount         Decimal  @map("usage_amount") @db.Decimal(15, 2)
+  principal           Decimal  @db.Decimal(15, 2)
+  fee                 Decimal  @default(0) @db.Decimal(15, 2)
+  installmentPeriod   String?  @map("installment_period")
+  billingRound        String?  @map("billing_round")
+  installmentTotalAmt Decimal? @map("installment_total_amt") @db.Decimal(15, 2)
+  benefitType         String?  @map("benefit_type")
+  benefitRate         Decimal? @map("benefit_rate") @db.Decimal(5, 2)
+  benefitAmount       Decimal  @default(0) @map("benefit_amount") @db.Decimal(15, 2)
+  benefitNote         String?  @map("benefit_note")
   region              String?
-  saleType            String?   @map("sale_type")
-  isCanceled          YesNo     @default(N) @map("is_canceled")
-  balanceAfter        Decimal?  @map("balance_after") @db.Decimal(15, 2)
-  pointName           String?   @map("point_name")
-  point               Decimal   @default(0) @db.Decimal(15, 2)
-  transactionId       Int?      @unique @map("transaction_id")
-  isClassified        YesNo     @default(N) @map("is_classified")
-  dedupHash           String?   @unique @map("dedup_hash")
-  createdAt           DateTime  @default(now()) @map("created_at")
+  saleType            String?  @map("sale_type")
+  isCanceled          YesNo    @default(N) @map("is_canceled")
+  balanceAfter        Decimal? @map("balance_after") @db.Decimal(15, 2)
+  pointName           String?  @map("point_name")
+  point               Decimal  @default(0) @db.Decimal(15, 2)
+  transactionId       Int?     @unique @map("transaction_id")
+  isClassified        YesNo    @default(N) @map("is_classified")
+  dedupHash           String?  @unique @map("dedup_hash")
+  createdAt           DateTime @default(now()) @map("created_at")
 
+  household     Household?    @relation(fields: [householdId], references: [id])
   statement     CardStatement @relation(fields: [statementId], references: [id])
   paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
   transaction   Transaction?  @relation(fields: [transactionId], references: [id])
 
+  @@index([householdId])
   @@index([statementId])
   @@index([paymentMethodId])
   @@index([txnDate])
@@ -355,6 +445,7 @@ model MonthlyPaymentStat {
 // ─────────────────────────────────────────────
 model ImportJob {
   id              String          @id
+  householdId     Int?            @map("household_id") // Phase 1: nullable(expand)
   issuer          String
   status          ImportJobStatus @default(queued)
   fileKey         String          @map("file_key")
@@ -368,6 +459,9 @@ model ImportJob {
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
 
+  household Household? @relation(fields: [householdId], references: [id])
+
+  @@index([householdId])
   @@index([status])
   @@map("import_job")
 }
