@@ -26,3 +26,7 @@ pnpm-debug.log*
 
 # OS
 .DS_Store
+
+# 실수로 src 에 방출된 빌드 산출물 방지
+packages/shared/src/*.js
+packages/shared/src/*.js.map
