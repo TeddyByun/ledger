@@ -216,6 +216,6 @@ on: push(main) → build 이미지(api/worker/web 멀티스테이지 Docker)
 ## 6. 확정 필요 사항
 
 1. **배포 플랫폼**: Fly.io vs Render vs AWS(초기 관리형 권장, ARCHITECTURE 확정사항 2).
-2. **로컬 파일 저장**: 업로드 파일 로컬은 파일시스템 vs MinIO(S3 호환) — 운영 스토리지와 정합성.
+2. **파일 저장소** — ✅ **구글 드라이브 확정**. 업로드 명세서 파일은 가구 전용 Drive 폴더에 저장하고 `import_job`엔 Drive fileId만 기록. 구글 OAuth(refresh token 암호화 저장)는 앱 JWT 로그인과 별개 레이어(AUTH_DESIGN §11). dev/테스트는 로컬 파일시스템 폴백으로 `StorageService` 인터페이스 뒤에 추상화(Drive ↔ local 스왑).
 3. **메트릭 스택**: 자체 Prometheus/Grafana vs 플랫폼 기본(초기 후순위).
 4. **원격 캐시**: Turborepo 원격 캐시(Vercel) 사용 여부(팀 규모에 따라).

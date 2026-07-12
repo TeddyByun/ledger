@@ -12,7 +12,7 @@
 | 구분 | 완료 | 남음 |
 |------|------|------|
 | 기획/데이터 | 3 | 0 |
-| 백엔드 | 15 | 0 |
+| 백엔드 | 16 | 0 |
 | 프론트엔드 | 11 | 0 |
 | 공통(Cross-cutting) | 7 | 0 |
 | 인프라/운영 | 5 | 0 |
@@ -47,6 +47,7 @@
 - [x] 🟡 **테스트 전략** — 단위/통합/e2e, 테스트 DB, 파서 픽스처(실파일·EUC-KR) · [TEST_STRATEGY_DESIGN.md](TEST_STRATEGY_DESIGN.md)
 - [x] 🟢 **감사 로그** — 거래 수정·삭제·업로드 이력 · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §1
 - [x] 🟢 **데이터 내보내기** — CSV/Excel export · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §2
+- [x] 🔴 **구글 드라이브 연동(파일 저장 + 기존 시트 가져오기)** — Google OAuth(별도 레이어)·drive.file+Picker·StorageService·가구 폴더 · [GOOGLE_DRIVE_DESIGN.md](GOOGLE_DRIVE_DESIGN.md)
 
 ---
 
