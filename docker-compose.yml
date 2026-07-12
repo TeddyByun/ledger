@@ -1,0 +1,33 @@
+# 로컬 개발 인프라 (INFRA_OPS_DESIGN §1.1)
+# api/worker/web 는 호스트에서 `pnpm dev`(핫리로드), 의존물만 컨테이너로 띄운다.
+services:
+  postgres:
+    image: postgres:18
+    container_name: ledger-postgres
+    environment:
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+      POSTGRES_DB: ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ledger-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
