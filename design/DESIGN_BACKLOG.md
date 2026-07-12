@@ -12,8 +12,8 @@
 | 구분 | 완료 | 남음 |
 |------|------|------|
 | 기획/데이터 | 3 | 0 |
-| 백엔드 | 13 | 2 |
-| 프론트엔드 | 8 | 3 |
+| 백엔드 | 15 | 0 |
+| 프론트엔드 | 11 | 0 |
 | 공통(Cross-cutting) | 7 | 0 |
 | 인프라/운영 | 5 | 0 |
 
@@ -45,8 +45,8 @@
 - [x] 🟡 **API 규약 표준화** — 에러 포맷/코드, 정렬·필터 컨벤션, 커서 페이지네이션 · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §1·§2·§3
 - [x] 🟡 **잡 상태 통지 방식** — 폴링 vs SSE/WebSocket, 큐 재시도·DLQ · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4
 - [x] 🟡 **테스트 전략** — 단위/통합/e2e, 테스트 DB, 파서 픽스처(실파일·EUC-KR) · [TEST_STRATEGY_DESIGN.md](TEST_STRATEGY_DESIGN.md)
-- [ ] 🟢 **감사 로그** — 거래 수정·삭제·업로드 이력
-- [ ] 🟢 **데이터 내보내기** — CSV/Excel export
+- [x] 🟢 **감사 로그** — 거래 수정·삭제·업로드 이력 · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §1
+- [x] 🟢 **데이터 내보내기** — CSV/Excel export · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §2
 
 ---
 
@@ -60,9 +60,9 @@
 - [x] 🟡 **데이터 페칭 계층** — api-client·캐싱·낙관적 업데이트·무효화 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §8
 - [x] 🟡 **폼/검증** — 공유 zod + react-hook-form · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §9
 - [x] 🟡 **포맷팅/i18n** — 원화·날짜 로케일(ko-KR) · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §11
-- [ ] 🟡 **시각화 상세** — 차트별 데이터·인터랙션 정교화(Recharts)
-- [ ] 🟢 **상태 UX 상세** — 로딩/에러/빈/알림 컴포넌트 규격 (방향만 §12)
-- [ ] 🟢 **반응형·접근성 상세** — 브레이크포인트·a11y 체크리스트 (방향만 §10)
+- [x] 🟡 **시각화 상세** — 차트별 데이터·인터랙션 정교화(Recharts) · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §1
+- [x] 🟢 **상태 UX 상세** — 로딩/에러/빈/알림 컴포넌트 규격 · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §2
+- [x] 🟢 **반응형·접근성 상세** — 브레이크포인트·a11y 체크리스트 · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §3
 
 ---
 
