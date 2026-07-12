@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>메뉴 · 홈 · 가계부 Ledger</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  .hero-home{background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;border:none;
+    border-radius:var(--r-xl);padding:26px 28px;box-shadow:var(--shadow-lg);position:relative;overflow:hidden;}
+  .hero-home::after{content:"₩";position:absolute;right:-10px;bottom:-40px;font-family:var(--serif);
+    font-size:200px;opacity:.08;line-height:1;}
+  .hero-home .greet{font-size:13.5px;opacity:.85;}
+  .hero-home .big{font-family:var(--serif);font-weight:600;font-size:34px;margin:8px 0 2px;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  .hero-home .sub{font-size:13px;opacity:.9;}
+  .hero-home .mini{display:flex;gap:26px;margin-top:20px;}
+  .hero-home .mini div small{display:block;font-size:11px;opacity:.8;margin-bottom:3px;}
+  .hero-home .mini div b{font-size:16px;font-variant-numeric:tabular-nums;}
+  .quick{display:flex;gap:10px;flex-wrap:wrap;}
+  .quick .qa{flex:1;min-width:120px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px;
+    box-shadow:var(--shadow-sm);cursor:pointer;}
+  .quick .qa:hover{border-color:var(--brand);}
+  .quick .qa .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand-ink);}
+  .quick .qa b{font-size:13.5px;}
+  .quick .qa span{font-size:11.5px;color:var(--muted);}
+  .actlist{display:flex;flex-direction:column;}
+  .actlist .it{display:flex;align-items:center;gap:13px;padding:12px 4px;border-bottom:1px solid var(--line);}
+  .actlist .it:last-child{border-bottom:none;}
+  .actlist .av{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;font-size:15px;}
+  .actlist .txt{flex:1;min-width:0;}
+  .actlist .txt b{font-size:13.5px;} .actlist .txt span{display:block;font-size:11.5px;color:var(--muted);}
+  .actlist .amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;}
+  .menu-note{font-size:12px;color:var(--muted);margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">₩</div><div class="name">가계부<small>Ledger</small></div></div>
+
+    <div class="hh" role="button" tabindex="0">
+      <div class="av">우</div>
+      <div class="info"><b>우리집</b><span>구성원 2명 · owner</span></div>
+      <span class="caret" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 9 5 3 5-3M7 15l5 3 5-3"/></svg>
+      </span>
+    </div>
+
+    <div class="nav-label">개요</div>
+    <nav class="nav">
+      <a href="menu.html" class="active"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg></span>대시보드</a>
+    </nav>
+
+    <div class="nav-label">기록</div>
+    <nav class="nav">
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h10"/></svg></span>거래 내역</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>업로드·검토<span class="badge">3</span></a>
+      <a href="card.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg></span>카드 내역</a>
+      <a href="bank.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 12 4l9 6"/><path d="M5 10v8m5-8v8m4-8v8m5-8v8M3 20h18"/></svg></span>은행 내역</a>
+    </nav>
+
+    <div class="nav-label">분석</div>
+    <nav class="nav">
+      <a href="month.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4m8-4v4"/></svg></span>월 결산</a>
+      <a href="year.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8"/></svg></span>년 결산</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>예산</a>
+    </nav>
+
+    <div class="nav-label">설정</div>
+    <nav class="nav">
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.06-.33.1-.66.1-1z"/></svg></span>설정</a>
+    </nav>
+
+    <div class="side-foot">
+      <div class="userchip">
+        <div class="av">T</div>
+        <div class="info"><b>Teddy</b><span>teddy@example.com</span></div>
+        <span class="muted" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="main">
+    <header class="topbar">
+      <span class="crumb">개요 / <b>대시보드</b></span>
+      <div class="spacer"></div>
+      <div class="period">
+        <button aria-label="이전 달">‹</button>
+        <span class="cur">2026 · 6월</span>
+        <button aria-label="다음 달">›</button>
+      </div>
+      <button class="icon-btn" aria-label="알림"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+    </header>
+
+    <main class="page">
+      <div class="grid split-73" style="margin-bottom:16px">
+        <div class="hero-home">
+          <div class="greet">안녕하세요, Teddy 님 👋</div>
+          <div class="big">₩2,863,460</div>
+          <div class="sub">이번 달 순액 · 지난달보다 12% 더 아꼈어요</div>
+          <div class="mini">
+            <div><small>수입</small><b>₩7,182,000</b></div>
+            <div><small>지출</small><b>₩4,318,540</b></div>
+            <div><small>예산 소진</small><b>61%</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>빠른 작업</h3></div>
+          <div class="quick" style="flex-direction:column">
+            <div class="qa" style="flex-direction:row;align-items:center;width:100%">
+              <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></div>
+              <div><b>빠른 지출 입력</b><span>금액·분류만 3탭</span></div>
+            </div>
+            <div class="qa" style="flex-direction:row;align-items:center;width:100%">
+              <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></div>
+              <div><b>명세서 업로드</b><span>카드·은행 자동입력</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid cols-4" style="margin-bottom:16px">
+        <div class="stat accent-income"><div class="lbl"><span class="dot" style="background:var(--income)"></span>수입</div><div class="val income"><span class="w">₩</span>7,182,000</div><div class="delta up">▲ 2.1% <span class="muted">전월 대비</span></div></div>
+        <div class="stat accent-expense"><div class="lbl"><span class="dot" style="background:var(--expense)"></span>지출</div><div class="val expense"><span class="w">₩</span>4,318,540</div><div class="delta up">▼ 9.4% <span class="muted">전월 대비</span></div></div>
+        <div class="stat accent-net"><div class="lbl"><span class="dot" style="background:var(--brand)"></span>순액</div><div class="val net"><span class="w">₩</span>2,863,460</div><div class="delta up">▲ 12% <span class="muted">전월 대비</span></div></div>
+        <div class="stat"><div class="lbl">검토 대기</div><div class="val net">3<span class="w"> 건</span></div><div class="delta"><span class="muted">하나카드 4월 명세</span></div></div>
+      </div>
+
+      <div class="grid split-64">
+        <div class="card pad-0">
+          <div class="card-head" style="padding:20px 20px 0"><h3>최근 활동</h3><div class="r"><a class="link-more" href="#">전체 보기</a></div></div>
+          <div style="padding:4px 20px 12px">
+            <div class="actlist">
+              <div class="it"><div class="av" style="background:var(--expense-soft);color:var(--expense)">🩺</div><div class="txt"><b>365정형외과의원</b><span>건강 · 하나카드 · 오늘</span></div><div class="amt" style="color:var(--expense)">−₩100,110</div></div>
+              <div class="it"><div class="av" style="background:var(--income-soft);color:var(--income)">💼</div><div class="txt"><b>6월 급여</b><span>급여이체 · 하나은행62707 · 어제</span></div><div class="amt" style="color:var(--income)">+₩6,700,225</div></div>
+              <div class="it"><div class="av" style="background:var(--expense-soft);color:var(--expense)">⛽</div><div class="txt"><b>대성석유 주유소</b><span>차량 · 하나카드 · 6.01</span></div><div class="amt" style="color:var(--expense)">−₩71,420</div></div>
+              <div class="it"><div class="av" style="background:var(--exclude-soft);color:var(--exclude)">↔</div><div class="txt"><b>당행송금 (자기이체)</b><span>집계 제외 · self_transfer · 6.01</span></div><div class="amt muted">₩8,837,922</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>이 화면의 메뉴 구조</h3></div>
+          <p class="menu-note">데스크톱은 좌측 <b>사이드바</b>, 모바일은 하단 <b>탭바</b>로 전환됩니다(창을 좁혀보세요). 중앙 <b>＋</b>는 빠른 지출 입력.</p>
+          <div class="wrap-gap" style="margin-top:14px">
+            <span class="tag"><span class="cat-dot" style="background:var(--brand)"></span>대시보드</span>
+            <span class="tag">거래 내역</span><span class="tag">업로드·검토</span>
+            <span class="tag">카드 내역</span><span class="tag">은행 내역</span>
+            <span class="tag">월 결산</span><span class="tag">년 결산</span>
+            <span class="tag">예산</span><span class="tag">설정</span>
+          </div>
+          <div class="wrap-gap" style="margin-top:18px">
+            <a class="btn" href="month.html">월 결산 →</a>
+            <a class="btn" href="year.html">년 결산 →</a>
+            <a class="btn" href="card.html">카드 내역 →</a>
+            <a class="btn" href="bank.html">은행 내역 →</a>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 모바일 하단 탭 (창 좁히면 표시) -->
+    <nav class="bottom-tabs">
+      <a href="menu.html" class="active"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg>홈</a>
+      <a href="card.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>기록</a>
+      <a href="#" class="plus" aria-label="빠른 입력"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></a>
+      <a href="month.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8"/></svg>통계</a>
+      <a href="#"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.06-.33.1-.66.1-1z"/></svg>설정</a>
+    </nav>
+  </div>
+</div>
+</body>
+</html>

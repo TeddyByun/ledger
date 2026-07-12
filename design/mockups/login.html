@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · 가계부 Ledger</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  body{display:grid;grid-template-columns:1.05fr .95fr;min-height:100vh;}
+  /* ── 좌: 브랜드 패널 ── */
+  .brandside{position:relative;background:
+    radial-gradient(120% 100% at 0% 0%, color-mix(in oklab,var(--brand) 22%,var(--canvas)) 0%, var(--canvas) 55%);
+    padding:56px 60px;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--line);}
+  .brandside .logo{padding:0;margin-bottom:auto;}
+  .brandside .logo .mark{width:40px;height:40px;font-size:22px;border-radius:11px;}
+  .brandside .logo .name{font-size:22px;}
+  .lead{max-width:20ch;}
+  .lead h2{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,42px);line-height:1.14;
+    letter-spacing:-.02em;text-wrap:balance;}
+  .lead p{color:var(--ink-2);font-size:15.5px;margin:18px 0 0;max-width:34ch;line-height:1.6;}
+  /* 통계 요약 카드(장식) */
+  .receipt{margin-top:34px;background:var(--surface);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow-lg);padding:20px 22px;max-width:340px;}
+  .receipt .rh{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);
+    font-family:var(--mono);border-bottom:1px dashed var(--line-2);padding-bottom:12px;margin-bottom:12px;}
+  .receipt .line{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13.5px;}
+  .receipt .line .nm{display:flex;align-items:center;gap:9px;color:var(--ink-2);}
+  .receipt .line .amt{font-variant-numeric:tabular-nums;font-weight:600;}
+  .receipt .total{border-top:1px dashed var(--line-2);margin-top:8px;padding-top:12px;
+    display:flex;justify-content:space-between;align-items:baseline;}
+  .receipt .total .v{font-family:var(--serif);font-weight:600;font-size:24px;font-variant-numeric:tabular-nums;}
+  .brandside .foot{margin-top:34px;font-size:12px;color:var(--muted);font-family:var(--mono);}
+  /* ── 우: 폼 ── */
+  .formside{display:flex;align-items:center;justify-content:center;padding:48px;background:var(--surface);}
+  .formcard{width:100%;max-width:380px;}
+  .formcard h1{font-family:var(--serif);font-weight:600;font-size:30px;}
+  .formcard .hi{color:var(--ink-2);margin:8px 0 30px;font-size:14.5px;}
+  form{display:flex;flex-direction:column;gap:18px;}
+  .row-between{display:flex;justify-content:space-between;align-items:center;}
+  .row-between a{font-size:12.5px;font-weight:600;}
+  .with-icon{position:relative;}
+  .with-icon .ic{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--faint);}
+  .with-icon .input{padding-left:42px;}
+  .remember{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-2);cursor:pointer;}
+  .remember input{width:16px;height:16px;accent-color:var(--brand);}
+  .btn.primary.lg{justify-content:center;padding:13px;font-size:14.5px;border-radius:12px;}
+  .divider{display:flex;align-items:center;gap:12px;color:var(--faint);font-size:12px;margin:2px 0;}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  .social{display:flex;gap:10px;}
+  .social button{flex:1;justify-content:center;}
+  .signup{text-align:center;font-size:13.5px;color:var(--ink-2);margin-top:24px;}
+  .signup a{font-weight:700;}
+  @media (max-width:900px){
+    body{grid-template-columns:1fr;}
+    .brandside{display:none;}
+    .formside{padding:32px 20px;}
+  }
+</style>
+</head>
+<body data-screen="login">
+
+  <aside class="brandside">
+    <div class="logo">
+      <div class="mark">₩</div>
+      <div class="name">가계부<small>Ledger</small></div>
+    </div>
+
+    <div class="lead">
+      <h2>흩어진 명세서를 한 권의 장부로.</h2>
+      <p>카드·은행 명세서를 올리면 자동으로 분류·집계됩니다. 가족과 함께, 수입과 지출을 한눈에.</p>
+
+      <div class="receipt" aria-hidden="true">
+        <div class="rh"><span>2026년 6월 요약</span><span>우리집</span></div>
+        <div class="line"><span class="nm"><span class="cat-dot" style="background:var(--income)"></span>수입</span><span class="amt" style="color:var(--income)">₩7,182,000</span></div>
+        <div class="line"><span class="nm"><span class="cat-dot" style="background:var(--expense)"></span>지출</span><span class="amt" style="color:var(--expense)">₩4,318,540</span></div>
+        <div class="total"><span class="nm muted mono">순액 NET</span><span class="v" style="color:var(--good)">+₩2,863,460</span></div>
+      </div>
+    </div>
+
+    <div class="foot">SECURE · JWT 인증 · 데이터는 가구 단위로 격리됩니다</div>
+  </aside>
+
+  <main class="formside">
+    <div class="formcard">
+      <h1>다시 오셨네요</h1>
+      <p class="hi">계정으로 로그인하고 이번 달 가계부를 이어서 정리하세요.</p>
+
+      <form onsubmit="return false">
+        <div class="field">
+          <label for="email">이메일</label>
+          <div class="with-icon">
+            <span class="ic" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            </span>
+            <input class="input" id="email" type="email" value="teddy@example.com" placeholder="you@example.com" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="row-between">
+            <label for="pw">비밀번호</label>
+            <a href="#">비밀번호를 잊으셨나요?</a>
+          </div>
+          <div class="with-icon">
+            <span class="ic" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            </span>
+            <input class="input" id="pw" type="password" value="········" placeholder="비밀번호" autocomplete="current-password">
+          </div>
+        </div>
+
+        <label class="remember"><input type="checkbox" checked> 이 기기에서 로그인 유지</label>
+
+        <button class="btn primary lg" type="submit">로그인</button>
+
+        <div class="divider">또는</div>
+        <div class="social">
+          <button class="btn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12c0 5 3.7 9.1 8.4 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7C18.3 21.1 22 17 22 12c0-5.5-4.5-10-10-10z"/></svg>
+            카카오
+          </button>
+          <button class="btn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1H12v2.9h5.35c-.25 1.4-1.6 4.1-5.35 4.1-3.2 0-5.8-2.65-5.8-5.9s2.6-5.9 5.8-5.9c1.8 0 3 .77 3.7 1.43l2.5-2.4C16.9 3.4 14.7 2.5 12 2.5 6.9 2.5 2.8 6.6 2.8 11.7S6.9 20.9 12 20.9c5.9 0 9.8-4.15 9.8-9.99 0-.67-.07-1.18-.16-1.68z"/></svg>
+            Google
+          </button>
+        </div>
+      </form>
+
+      <p class="signup">아직 계정이 없으신가요? <a href="#">가입하기</a></p>
+    </div>
+  </main>
+
+</body>
+</html>

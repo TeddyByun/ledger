@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화면 시안 · 가계부 Ledger</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  body{background:var(--canvas);}
+  .shell{max-width:1080px;margin:0 auto;padding:56px 24px 80px;}
+  .head .logo{padding:0;margin-bottom:26px;}
+  .head .logo .mark{width:40px;height:40px;font-size:22px;border-radius:11px;}
+  .head .logo .name{font-size:22px;}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(30px,4.5vw,44px);letter-spacing:-.02em;
+    text-wrap:balance;max-width:20ch;}
+  .sub{color:var(--ink-2);font-size:16px;margin:16px 0 0;max-width:60ch;}
+  .meta-line{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;}
+  .grid-gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:40px;}
+  @media (max-width:820px){ .grid-gallery{grid-template-columns:1fr;} }
+  .shot{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+    box-shadow:var(--shadow);display:flex;flex-direction:column;transition:transform .14s ease,box-shadow .14s ease;}
+  .shot:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);}
+  .shot .frame{height:172px;background:var(--surface-2);border-bottom:1px solid var(--line);position:relative;overflow:hidden;}
+  .shot .frame .dots{position:absolute;top:12px;left:14px;display:flex;gap:6px;z-index:2;}
+  .shot .frame .dots i{width:9px;height:9px;border-radius:50%;background:var(--line-2);display:block;}
+  .shot .art{position:absolute;inset:26px 0 -30px 22px;border-radius:10px 0 0 0;border:1px solid var(--line);
+    border-right:none;border-bottom:none;background:var(--surface);box-shadow:var(--shadow);padding:14px;overflow:hidden;}
+  .shot .body{padding:18px 20px 20px;}
+  .shot .k{font-family:var(--mono);font-size:11px;color:var(--brand-ink);letter-spacing:.06em;}
+  .shot h3{font-size:17px;margin:7px 0 5px;}
+  .shot p{font-size:13px;color:var(--ink-2);margin:0;line-height:1.55;}
+  .shot .go{margin-top:14px;font-size:13px;font-weight:700;color:var(--brand-ink);display:inline-flex;align-items:center;gap:6px;}
+  /* mini mock decorations */
+  .m-row{height:9px;border-radius:3px;background:var(--surface-3);margin-bottom:8px;}
+  .m-row.s{width:60%;} .m-row.t{width:40%;background:var(--brand-soft);}
+  .m-tiles{display:flex;gap:8px;margin:10px 0;}
+  .m-tiles i{flex:1;height:34px;border-radius:6px;background:var(--surface-3);display:block;}
+  .m-tiles i.a{background:var(--income-soft);} .m-tiles i.b{background:var(--expense-soft);} .m-tiles i.c{background:var(--brand-soft);}
+  .m-bars{display:flex;align-items:flex-end;gap:5px;height:52px;margin-top:6px;}
+  .m-bars i{flex:1;border-radius:3px 3px 0 0;background:var(--income);display:block;}
+  .m-bars i.e{background:var(--expense);}
+  .m-donut{width:56px;height:56px;border-radius:50%;
+    background:conic-gradient(var(--c1) 0 31%,var(--c2) 31% 51%,var(--c3) 51% 65%,var(--c4) 65% 77%,var(--c8) 77% 100%);
+    -webkit-mask:radial-gradient(circle 17px at 50% 50%,transparent 98%,#000 100%);mask:radial-gradient(circle 17px at 50% 50%,transparent 98%,#000 100%);}
+  .m-login{display:flex;gap:10px;height:100%;}
+  .m-login .l{flex:1;background:linear-gradient(135deg,var(--brand),var(--brand-2));border-radius:6px;}
+  .m-login .r{flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center;}
+  .m-login .r i{height:11px;border-radius:4px;background:var(--surface-3);display:block;}
+  .m-login .r i.btn{background:var(--brand);}
+  .foot{margin-top:44px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:20px;}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="head">
+    <div class="logo"><div class="mark">₩</div><div class="name">가계부<small>Ledger · 화면 시안</small></div></div>
+    <h1>6개 화면 디자인 시안</h1>
+    <p class="sub">하나의 디자인 시스템(잉크-틸 · 종이 표면 · 수입=파랑/지출=빨강)으로 묶은 UI 시안입니다.
+      카드를 눌러 각 화면을 열어보세요. 창을 좁히면 모바일(하단 탭) 레이아웃으로 전환됩니다. 우측 상단 테마 토글로 다크모드도 확인하세요.</p>
+    <div class="meta-line">
+      <span class="tag">공유 스타일 <b class="mono">app.css</b></span>
+      <span class="tag">라이트 · 다크 대응</span>
+      <span class="tag">반응형 (데스크톱·모바일)</span>
+      <span class="tag">실데이터 기반 (DATABASE.md)</span>
+    </div>
+  </div>
+
+  <div class="grid-gallery">
+
+    <a class="shot" href="login.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art"><div class="m-login"><div class="l"></div><div class="r"><i></i><i></i><i class="btn"></i></div></div></div>
+      </div>
+      <div class="body"><div class="k">01 · AUTH</div><h3>로그인</h3>
+        <p>브랜드 패널 + 폼 분할. 이메일·비밀번호, 소셜 로그인, 요약 영수증 장식.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+    <a class="shot" href="menu.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art"><div class="m-row t"></div><div class="m-tiles"><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="m-row"></div><div class="m-row s"></div></div>
+      </div>
+      <div class="body"><div class="k">02 · HOME</div><h3>메뉴 · 대시보드</h3>
+        <p>사이드바 내비게이션 + 가구 전환 + 모바일 하단 탭. 홈 요약과 빠른 작업.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+    <a class="shot" href="year.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art"><div class="m-tiles"><i class="a"></i><i class="b"></i><i class="c"></i></div>
+          <div class="m-bars"><i style="height:70%"></i><i class="e" style="height:55%"></i><i style="height:74%"></i><i class="e" style="height:60%"></i><i style="height:78%"></i><i class="e" style="height:50%"></i><i style="height:80%"></i><i class="e" style="height:66%"></i></div></div>
+      </div>
+      <div class="body"><div class="k">03 · ANALYSIS</div><h3>년 결산 조회</h3>
+        <p>연 KPI, 12개월 수입/지출 추세, 분류별 연간 도넛, 월별 상세 표.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+    <a class="shot" href="month.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art" style="display:flex;gap:12px;align-items:center"><div class="m-donut"></div>
+          <div style="flex:1"><div class="m-row"></div><div class="m-row s"></div><div class="m-row t"></div><div class="m-row s"></div></div></div>
+      </div>
+      <div class="body"><div class="k">04 · ANALYSIS</div><h3>월 결산 조회</h3>
+        <p>월 KPI, 분류 도넛, 예산 소진율 미터, 일별 추세, 결제수단별 비중.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+    <a class="shot" href="card.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art"><div class="m-tiles"><i></i><i></i><i></i><i></i></div>
+          <div class="m-row"></div><div class="m-row"></div><div class="m-row s"></div><div class="m-row"></div></div>
+      </div>
+      <div class="body"><div class="k">05 · RECORD</div><h3>월별 카드 내역</h3>
+        <p>카드·월 선택, 명세서 요약, 건별 내역(분류·할부·확정/검토), 필터.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+    <a class="shot" href="bank.html">
+      <div class="frame"><div class="dots"><i></i><i></i><i></i></div>
+        <div class="art"><div class="m-tiles"><i class="a"></i><i class="b"></i><i class="c"></i><i></i></div>
+          <div class="m-row"></div><div class="m-row s"></div><div class="m-row"></div><div class="m-row t"></div></div>
+      </div>
+      <div class="body"><div class="k">06 · RECORD</div><h3>월별 은행 입출금 내역</h3>
+        <p>계좌·월 선택, 입출금 요약, 잔액 추적 원장, 자기이체·카드대금 제외 표시.</p>
+        <span class="go">열기 →</span></div>
+    </a>
+
+  </div>
+
+  <div class="foot">디자인 시안 · 실제 구현은 Next.js + Tailwind + shadcn/ui 예정 (FRONTEND_DESIGN.md · FRONTEND_UI_SPEC.md 참조)</div>
+</div>
+</body>
+</html>

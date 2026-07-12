@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>월별 은행 입출금 내역 · 가계부 Ledger</title>
+<link rel="stylesheet" href="app.css">
+<style>
+  .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .search{position:relative;flex:1;min-width:200px;}
+  .search .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--faint);}
+  .search input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--line);border-radius:10px;
+    background:var(--surface);color:var(--ink);font-size:13px;box-shadow:var(--shadow-sm);}
+  .bal{font-variant-numeric:tabular-nums;color:var(--ink-2);text-align:right;white-space:nowrap;}
+  .tin{color:var(--income);} .tout{color:var(--expense);}
+  .legend-inline{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2);margin:2px 0 16px;}
+  .legend-inline span{display:inline-flex;align-items:center;gap:6px;}
+  .legend-inline .sw{width:10px;height:10px;border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">₩</div><div class="name">가계부<small>Ledger</small></div></div>
+    <div class="hh" role="button" tabindex="0"><div class="av">우</div><div class="info"><b>우리집</b><span>구성원 2명 · owner</span></div><span class="caret"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 9 5 3 5-3M7 15l5 3 5-3"/></svg></span></div>
+    <div class="nav-label">개요</div>
+    <nav class="nav"><a href="menu.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg></span>대시보드</a></nav>
+    <div class="nav-label">기록</div>
+    <nav class="nav">
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h10"/></svg></span>거래 내역</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></span>업로드·검토<span class="badge">3</span></a>
+      <a href="card.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg></span>카드 내역</a>
+      <a href="bank.html" class="active"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 12 4l9 6"/><path d="M5 10v8m5-8v8m4-8v8m5-8v8M3 20h18"/></svg></span>은행 내역</a>
+    </nav>
+    <div class="nav-label">분석</div>
+    <nav class="nav">
+      <a href="month.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4m8-4v4"/></svg></span>월 결산</a>
+      <a href="year.html"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10m5 10V4m5 16v-7m5 7V8"/></svg></span>년 결산</a>
+      <a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>예산</a>
+    </nav>
+    <div class="nav-label">설정</div>
+    <nav class="nav"><a href="#"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.6h4l.3-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.06-.33.1-.66.1-1z"/></svg></span>설정</a></nav>
+    <div class="side-foot"><div class="userchip"><div class="av">T</div><div class="info"><b>Teddy</b><span>teddy@example.com</span></div></div></div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <span class="crumb">기록 / <b>은행 내역</b></span>
+      <div class="spacer"></div>
+      <select class="select-sm" aria-label="계좌 선택">
+        <option>하나은행 · 47307 (급여/생활)</option>
+        <option>하나은행 · 62707 (투자/이체)</option>
+      </select>
+      <div class="period"><button aria-label="이전 달">‹</button><span class="cur">2026 · 6월</span><button aria-label="다음 달">›</button></div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <div class="titles"><h1>하나은행 47307 · 6월</h1><p>569-910201-47307 · 조회기간 2026-06-01 ~ 06-30</p></div>
+        <div class="actions"><button class="btn ghost"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 12-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>내보내기</button></div>
+      </div>
+
+      <!-- 요약 -->
+      <div class="grid cols-4" style="margin-bottom:16px">
+        <div class="stat accent-income"><div class="lbl"><span class="dot" style="background:var(--income)"></span>입금 합계</div><div class="val income"><span class="w">₩</span>6,708,025</div><div class="delta"><span class="muted">2건</span></div></div>
+        <div class="stat accent-expense"><div class="lbl"><span class="dot" style="background:var(--expense)"></span>출금 합계</div><div class="val expense"><span class="w">₩</span>5,231,060</div><div class="delta"><span class="muted">7건</span></div></div>
+        <div class="stat accent-net"><div class="lbl"><span class="dot" style="background:var(--brand)"></span>순증감</div><div class="val net"><span class="w">₩</span>1,476,965</div><div class="delta up">▲ 입금 우위</div></div>
+        <div class="stat"><div class="lbl">월말 잔액</div><div class="val net"><span class="w">₩</span>2,230,594</div><div class="delta"><span class="muted">06-30 기준</span></div></div>
+      </div>
+
+      <div class="legend-inline">
+        <span><span class="sw" style="background:var(--income)"></span>입금</span>
+        <span><span class="sw" style="background:var(--expense)"></span>출금(지출)</span>
+        <span><span class="sw" style="background:var(--exclude)"></span>집계 제외 — 자기이체 · 카드대금</span>
+      </div>
+
+      <!-- 필터 -->
+      <div class="filters">
+        <div class="search"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span><input placeholder="적요 검색"></div>
+        <select class="select-sm"><option>전체 구분</option><option>급여이체</option><option>CMS</option><option>대출이자</option><option>타행송금</option></select>
+        <select class="select-sm"><option>전체</option><option>입금만</option><option>출금만</option><option>집계제외</option></select>
+      </div>
+
+      <!-- 원장 -->
+      <div class="card pad-0">
+        <div class="scroll">
+          <table class="table">
+            <thead><tr><th>거래일시</th><th>구분</th><th>적요</th><th class="r">출금</th><th class="r">입금</th><th class="r">잔액</th><th>분류</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="date">06.25 09:12</td>
+                <td><span class="pill income">급여이체</span></td>
+                <td><div class="desc">6월 급여</div><div class="sub">VNTG</div></td>
+                <td class="bal">—</td><td class="money inc">+6,700,225</td><td class="bal">8,340,819</td>
+                <td><span class="tag"><span class="cat-dot" style="background:var(--income)"></span>수입·급여</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.13 00:30</td>
+                <td><span class="pill excl">타사카드</span></td>
+                <td><div class="desc">신한카드 결제</div><div class="sub">카드대금 · 카드 건별과 중복</div></td>
+                <td class="bal tout">906,200</td><td class="bal">—</td><td class="bal">1,640,594</td>
+                <td><span class="pill excl">card_settlement</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.13 00:20</td>
+                <td><span class="pill excl">하나카드</span></td>
+                <td><div class="desc">하나카드 결제</div><div class="sub">카드대금 · 카드 건별과 중복</div></td>
+                <td class="bal tout">1,298,219</td><td class="bal">—</td><td class="bal">2,546,794</td>
+                <td><span class="pill excl">card_settlement</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.11 14:02</td>
+                <td><span class="pill plain">CMS</span></td>
+                <td><div class="desc">METLIFE03190</div><div class="sub">보험료 자동이체</div></td>
+                <td class="money exp">109,440</td><td class="bal">—</td><td class="bal">3,845,013</td>
+                <td><span class="tag"><span class="cat-dot" style="background:var(--c5)"></span>보험</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.10 09:00</td>
+                <td><span class="pill plain">대출이자</span></td>
+                <td><div class="desc">주택금융공사</div><div class="sub">원금+이자</div></td>
+                <td class="money exp">472,800</td><td class="bal">—</td><td class="bal">3,954,453</td>
+                <td><span class="tag"><span class="cat-dot" style="background:var(--c4)"></span>대출</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.05 11:33</td>
+                <td><span class="pill excl">당행송금</span></td>
+                <td><div class="desc">62707로 이체 (본인)</div><div class="sub">자기 계좌 간 이동</div></td>
+                <td class="bal tout">1,500,000</td><td class="bal">—</td><td class="bal">4,427,253</td>
+                <td><span class="pill excl">self_transfer</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.03 18:44</td>
+                <td><span class="pill plain">현금</span></td>
+                <td><div class="desc">CD 출금</div><div class="sub">모바일뱅킹</div></td>
+                <td class="money exp">200,000</td><td class="bal">—</td><td class="bal">5,927,253</td>
+                <td><span class="tag"><span class="cat-dot" style="background:var(--c1)"></span>생활·ATM</span></td>
+              </tr>
+              <tr>
+                <td class="date">06.01 00:00</td>
+                <td><span class="pill income">예금이자</span></td>
+                <td><div class="desc">예금이자</div><div class="sub">소득세 0 · 지방소득세 0</div></td>
+                <td class="bal">—</td><td class="money inc">+7,800</td><td class="bal">6,127,253</td>
+                <td><span class="tag"><span class="cat-dot" style="background:var(--income)"></span>수입·이자</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tfoot"><span>표시 8건 / 전체 9건 · <span style="color:var(--exclude)">집계 제외 3건</span></span><span>가계부 반영 순액 <b>₩1,476,965</b></span></div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
