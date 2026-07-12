@@ -1,0 +1,24 @@
+{
+  "name": "ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "가계부 서비스 — 풀스택 TypeScript 모노레포 (web + api, 추후 mobile)",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @ledger/api prisma:generate",
+    "db:migrate": "pnpm --filter @ledger/api prisma:migrate",
+    "db:seed": "pnpm --filter @ledger/api prisma:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}
