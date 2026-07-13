@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 *)",
       "Bash(pnpm exec *)",
-      "Bash(pnpm --filter @ledger/api build)"
+      "Bash(pnpm --filter @ledger/api build)",
+      "Bash(pnpm install *)"
     ]
   }
 }
