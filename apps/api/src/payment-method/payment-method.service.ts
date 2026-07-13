@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MethodType } from '@ledger/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { requireTenant } from '../common/tenant/tenant-context.js';
 import {
   CreatePaymentMethodDto,
   UpdatePaymentMethodDto,
@@ -24,7 +25,9 @@ export class PaymentMethodService {
   }
 
   create(dto: CreatePaymentMethodDto) {
-    return this.prisma.paymentMethod.create({ data: dto });
+    return this.prisma.paymentMethod.create({
+      data: { ...dto, householdId: requireTenant().householdId },
+    });
   }
 
   async update(id: number, dto: UpdatePaymentMethodDto) {

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from './storage/storage.service.js';
 import { IMPORT_QUEUE, type ImportJobPayload } from './pipeline/import.queue.js';
 import { ImportPipelineService } from './pipeline/import-pipeline.service.js';
+import { requireTenant } from '../common/tenant/tenant-context.js';
 import type { CreateImportDto } from './dto/import.dto.js';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class IngestionService {
     const job = await this.prisma.importJob.create({
       data: {
         id: jobId,
+        householdId: requireTenant().householdId,
         issuer: dto.issuer,
         fileKey,
         originalName: file.originalname,
