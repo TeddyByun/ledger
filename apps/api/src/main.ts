@@ -3,12 +3,16 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Refresh 토큰 쿠키 파싱 (AUTH_DESIGN §2.3)
   app.use(cookieParser());
+
+  // 표준 에러 봉투 (API_CONVENTIONS §2)
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // 전역 입력 검증 (DTO + class-validator)
   app.useGlobalPipes(

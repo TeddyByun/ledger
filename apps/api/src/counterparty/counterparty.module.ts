@@ -4,6 +4,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { requireTenant } from '../common/tenant/tenant-context.js';
 
 class CreateCounterpartyDto {
   @IsString()
@@ -26,11 +27,14 @@ export class CounterpartyService {
   }
 
   async create(dto: CreateCounterpartyDto) {
-    const exists = await this.prisma.counterparty.findUnique({
+    // findFirst: name 은 가구 내에서만 유일(복합 unique). 테넌트 스코프가 householdId 를 주입.
+    const exists = await this.prisma.counterparty.findFirst({
       where: { name: dto.name },
     });
     if (exists) throw new ConflictException(`counterparty '${dto.name}' exists`);
-    return this.prisma.counterparty.create({ data: dto });
+    return this.prisma.counterparty.create({
+      data: { ...dto, householdId: requireTenant().householdId },
+    });
   }
 }
 

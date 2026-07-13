@@ -1,30 +1,74 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { PaginatedDto } from '../common/dto/pagination.dto.js';
+import { requireTenant } from '../common/tenant/tenant-context.js';
 import {
   CreateTransactionDto,
   TransactionQueryDto,
   UpdateTransactionDto,
 } from './dto/transaction.dto.js';
 
+interface Cursor {
+  d: Date;
+  id: number;
+}
+
 @Injectable()
 export class TransactionService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * 거래 목록 — 커서(keyset) 페이지네이션 (API_CONVENTIONS §3.1).
+   * 정렬키 (transactionDate desc, id desc) 로 안정 페이징.
+   */
   async findMany(query: TransactionQueryDto) {
     const where = await this.buildWhere(query);
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.transaction.findMany({
-        where,
-        include: { category: true, counterparty: true, paymentMethod: true },
-        orderBy: [{ transactionDate: 'desc' }, { id: 'desc' }],
-        skip: query.skip,
-        take: query.pageSize,
-      }),
-      this.prisma.transaction.count({ where }),
-    ]);
-    return new PaginatedDto(items, total, query.page, query.pageSize);
+    const limit = query.limit ?? 50;
+    const cursor = this.decodeCursor(query.cursor);
+
+    const finalWhere: Prisma.TransactionWhereInput = cursor
+      ? {
+          AND: [
+            where,
+            {
+              OR: [
+                { transactionDate: { lt: cursor.d } },
+                { transactionDate: cursor.d, id: { lt: cursor.id } },
+              ],
+            },
+          ],
+        }
+      : where;
+
+    const rows = await this.prisma.transaction.findMany({
+      where: finalWhere,
+      include: { category: true, counterparty: true, paymentMethod: true },
+      orderBy: [{ transactionDate: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasNext = rows.length > limit;
+    const items = hasNext ? rows.slice(0, limit) : rows;
+    const last = items[items.length - 1];
+    const nextCursor =
+      hasNext && last ? this.encodeCursor(last.transactionDate, last.id) : null;
+
+    return { items, page: { nextCursor, hasNext } };
+  }
+
+  private encodeCursor(date: Date, id: number): string {
+    const d = date.toISOString().slice(0, 10);
+    return Buffer.from(JSON.stringify({ d, id })).toString('base64url');
+  }
+
+  private decodeCursor(c?: string): Cursor | undefined {
+    if (!c) return undefined;
+    try {
+      const parsed = JSON.parse(Buffer.from(c, 'base64url').toString('utf8'));
+      return { d: new Date(`${parsed.d}T00:00:00.000Z`), id: Number(parsed.id) };
+    } catch {
+      return undefined;
+    }
   }
 
   async findOne(id: number) {
@@ -37,7 +81,9 @@ export class TransactionService {
   }
 
   create(dto: CreateTransactionDto) {
-    return this.prisma.transaction.create({ data: this.toData(dto) });
+    return this.prisma.transaction.create({
+      data: { ...this.toData(dto), householdId: requireTenant().householdId },
+    });
   }
 
   async update(id: number, dto: UpdateTransactionDto) {

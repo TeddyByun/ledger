@@ -12,9 +12,10 @@ import {
   IsPositive,
   IsString,
   Matches,
+  Max,
+  Min,
 } from 'class-validator';
 import { TransactionStatus, TransactionType } from '@ledger/shared';
-import { PaginationQueryDto } from '../../common/dto/pagination.dto.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -72,8 +73,8 @@ export class CreateTransactionDto {
 
 export class UpdateTransactionDto extends PartialType(CreateTransactionDto) {}
 
-/** 목록 검색/필터 쿼리 */
-export class TransactionQueryDto extends PaginationQueryDto {
+/** 목록 검색/필터 쿼리 — 커서(keyset) 페이지네이션 (API_CONVENTIONS §3.1) */
+export class TransactionQueryDto {
   @ApiPropertyOptional({ enum: TransactionType })
   @IsEnum(TransactionType)
   @IsOptional()
@@ -104,4 +105,17 @@ export class TransactionQueryDto extends PaginationQueryDto {
   @IsString()
   @IsOptional()
   q?: string;
+
+  @ApiPropertyOptional({ description: '다음 페이지 커서(불투명 토큰)' })
+  @IsString()
+  @IsOptional()
+  cursor?: string;
+
+  @ApiPropertyOptional({ default: 50, minimum: 1, maximum: 100 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  limit: number = 50;
 }

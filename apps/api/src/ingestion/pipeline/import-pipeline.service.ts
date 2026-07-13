@@ -50,13 +50,19 @@ export class ImportPipelineService {
 
       if (result.kind === 'bank') {
         if (!job.paymentMethodId) throw new Error('bank import requires paymentMethodId');
-        const r = await this.ingestBank(job.paymentMethodId, result.rows, jobId, months);
+        const r = await this.ingestBank(
+          job.householdId,
+          job.paymentMethodId,
+          result.rows,
+          jobId,
+          months,
+        );
         parsed = result.rows.length;
         classified = r.classified;
         pending = r.pending;
       } else {
         if (!job.paymentMethodId) throw new Error('card import requires paymentMethodId (card)');
-        const r = await this.ingestCard(job.paymentMethodId, result.statement, months);
+        const r = await this.ingestCard(job.householdId, job.paymentMethodId, result.statement, months);
         parsed = result.statement.rows.length;
         classified = r.classified;
         pending = r.pending;
@@ -85,6 +91,7 @@ export class ImportPipelineService {
 
   // ── 은행 ─────────────────────────────────────────────
   private async ingestBank(
+    householdId: number,
     paymentMethodId: number,
     rows: NormalizedBankRow[],
     importBatch: string,
@@ -98,6 +105,7 @@ export class ImportPipelineService {
         where: { dedupHash: r.dedupHash },
         update: {},
         create: {
+          householdId,
           paymentMethodId,
           txnAt: r.txnAt,
           txnTypeCode: code,
@@ -143,6 +151,7 @@ export class ImportPipelineService {
       months.add(ym);
       const tx = await this.prisma.transaction.create({
         data: {
+          householdId,
           type: isExpense ? 'expense' : 'income',
           categoryCode,
           paymentMethodId,
@@ -164,6 +173,7 @@ export class ImportPipelineService {
 
   // ── 카드 ─────────────────────────────────────────────
   private async ingestCard(
+    householdId: number,
     paymentMethodId: number,
     statement: { statementYm: string; billingDate: Date | null; totalAmount: number; totalCount: number; rows: NormalizedCardRow[] },
     months: Set<string>,
@@ -174,6 +184,7 @@ export class ImportPipelineService {
       },
       update: { totalAmount: statement.totalAmount, totalCount: statement.totalCount },
       create: {
+        householdId,
         paymentMethodId,
         statementYm: statement.statementYm,
         billingDate: statement.billingDate,
@@ -193,6 +204,7 @@ export class ImportPipelineService {
 
       const ct = await this.prisma.cardTransaction.create({
         data: {
+          householdId,
           statementId: stmt.id,
           paymentMethodId,
           cardLabel: r.cardLabel,
@@ -231,6 +243,7 @@ export class ImportPipelineService {
 
       const tx = await this.prisma.transaction.create({
         data: {
+          householdId,
           type: 'expense',
           categoryCode,
           paymentMethodId,
