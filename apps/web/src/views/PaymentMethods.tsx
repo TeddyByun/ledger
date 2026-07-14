@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import type { PaymentMethod } from '@/lib/types';
 
-export default function PaymentMethodsPage() {
+export function PaymentMethods() {
   const [items, setItems] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { ApiError } from '@/lib/api';
 
-export default function LoginPage() {
-  const { session, loading, login, signup } = useAuth();
-  const router = useRouter();
+export function Login() {
+  const { login, signup } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,10 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!loading && session) router.replace('/');
-  }, [loading, session, router]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -27,7 +21,7 @@ export default function LoginPage() {
     try {
       if (mode === 'login') await login(email, password);
       else await signup({ email, password, displayName, householdName });
-      router.replace('/');
+      // 성공 시 AuthProvider 의 session 이 세팅되어 상위에서 Shell 로 전환됨
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -36,7 +30,6 @@ export default function LoginPage() {
             : err.message
           : '문제가 발생했습니다.',
       );
-    } finally {
       setBusy(false);
     }
   };

@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { won } from '@/lib/format';
 import type { Transaction, CursorPage } from '@/lib/types';
+import type { View } from '@/components/Shell';
 
-export default function DashboardPage() {
+export function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
   const { session } = useAuth();
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [pmCount, setPmCount] = useState<number | null>(null);
@@ -46,9 +46,9 @@ export default function DashboardPage() {
             <p>{session?.household.name}의 가계부 요약</p>
           </div>
           <div className="actions">
-            <Link className="btn primary" href="/transactions">
+            <button className="btn primary" onClick={() => onNavigate('transactions')}>
               + 거래 입력
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -86,9 +86,9 @@ export default function DashboardPage() {
           <div className="card-head" style={{ padding: '18px 20px 0' }}>
             <h3>최근 거래</h3>
             <div className="r">
-              <Link className="btn ghost sm" href="/transactions">
+              <button className="btn ghost sm" onClick={() => onNavigate('transactions')}>
                 전체 보기
-              </Link>
+              </button>
             </div>
           </div>
           {loading ? (
@@ -101,9 +101,13 @@ export default function DashboardPage() {
             <div className="empty">
               <h3>아직 거래가 없어요</h3>
               <p>결제수단을 만들고 첫 거래를 입력해보세요.</p>
-              <Link className="btn primary" href="/transactions" style={{ marginTop: 12 }}>
+              <button
+                className="btn primary"
+                onClick={() => onNavigate('transactions')}
+                style={{ marginTop: 12 }}
+              >
                 거래 입력하기
-              </Link>
+              </button>
             </div>
           ) : (
             <div style={{ padding: '4px 20px 12px' }}>
@@ -121,7 +125,8 @@ export default function DashboardPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <b style={{ fontSize: 13.5 }}>{t.description ?? '(내용 없음)'}</b>
                     <div className="muted" style={{ fontSize: 11.5 }}>
-                      {t.category?.name} · {t.paymentMethod?.name} · {t.transactionDate.slice(0, 10)}
+                      {t.category?.name} · {t.paymentMethod?.name} ·{' '}
+                      {t.transactionDate.slice(0, 10)}
                     </div>
                   </div>
                   <div className={`money ${t.type === 'income' ? 'inc' : 'exp'}`}>
