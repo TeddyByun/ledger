@@ -1,5 +1,28 @@
-const BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000/api/v1';
+/**
+ * API 베이스 주소 결정 (브라우저 런타임).
+ * 1) NEXT_PUBLIC_API_BASE 가 있으면 그대로 사용.
+ * 2) code-server 프록시(.../absproxy/3000 또는 .../proxy/3000) 아래면 같은 베이스에서
+ *    :4000 API 프록시 경로를 유도 → .../proxy/4000/api/v1
+ * 3) 그 외(로컬 직접 실행)는 localhost:4000.
+ */
+let _base: string | null = null;
+function getBase(): string {
+  if (_base) return _base;
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    _base = process.env.NEXT_PUBLIC_API_BASE;
+    return _base;
+  }
+  if (typeof window !== 'undefined') {
+    const { origin, pathname } = window.location;
+    const m = pathname.match(/^(.*)\/(?:abs)?proxy\/3000(?:\/|$)/);
+    if (m) {
+      _base = origin + m[1] + '/proxy/4000/api/v1';
+      return _base;
+    }
+  }
+  _base = 'http://localhost:4000/api/v1';
+  return _base;
+}
 
 let accessToken: string | null = null;
 export const setAccessToken = (t: string | null) => {
@@ -27,7 +50,7 @@ async function request<T>(
   opts: RequestInit = {},
   retry = true,
 ): Promise<T> {
-  const res = await fetch(BASE + path, {
+  const res = await fetch(getBase() + path, {
     ...opts,
     credentials: 'include',
     headers: {
@@ -63,7 +86,7 @@ async function request<T>(
 /** Refresh 쿠키로 세션 복원. 성공 시 access 토큰 저장 + 세션 반환. */
 async function tryRefresh(): Promise<Session | null> {
   try {
-    const res = await fetch(BASE + '/auth/refresh', {
+    const res = await fetch(getBase() + '/auth/refresh', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },

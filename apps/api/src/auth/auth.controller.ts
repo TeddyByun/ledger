@@ -74,7 +74,7 @@ export class AuthController {
     @Body() body: { refreshToken?: string },
   ) {
     await this.auth.logout(this.readRefresh(req, body));
-    res.clearCookie(REFRESH_COOKIE, { path: '/api/v1/auth' });
+    res.clearCookie(REFRESH_COOKIE, { path: '/' });
     return { ok: true };
   }
 
@@ -102,7 +102,7 @@ export class AuthController {
       httpOnly: true,
       secure: isProd,
       sameSite: 'strict',
-      path: '/api/v1/auth',
+      path: '/',
       maxAge: this.tokens.refreshTtlMs(),
       expires: session.refresh.expiresAt,
     });

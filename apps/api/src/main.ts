@@ -26,9 +26,9 @@ async function bootstrap() {
 
   // API 버전 prefix
   app.setGlobalPrefix('api/v1');
-  // 쿠키(Refresh) 사용 → credentials 허용 + 오리진 화이트리스트
+  // 쿠키(Refresh) 사용 → credentials 허용. dev 는 요청 오리진 반영(프록시/로컬 모두 대응).
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+    origin: true,
     credentials: true,
   });
 
