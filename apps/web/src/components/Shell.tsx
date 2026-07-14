@@ -1,0 +1,23 @@
+'use client';
+
+import { useState } from 'react';
+import { Sidebar } from '@/components/Sidebar';
+import { Dashboard } from '@/views/Dashboard';
+import { Transactions } from '@/views/Transactions';
+import { PaymentMethods } from '@/views/PaymentMethods';
+
+export type View = 'dashboard' | 'transactions' | 'payment-methods';
+
+export function Shell() {
+  const [view, setView] = useState<View>('dashboard');
+  return (
+    <div className="app">
+      <Sidebar view={view} onNavigate={setView} />
+      <div className="main">
+        {view === 'dashboard' && <Dashboard onNavigate={setView} />}
+        {view === 'transactions' && <Transactions />}
+        {view === 'payment-methods' && <PaymentMethods />}
+      </div>
+    </div>
+  );
+}

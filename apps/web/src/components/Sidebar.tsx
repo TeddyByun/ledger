@@ -1,17 +1,21 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import type { View } from '@/components/Shell';
 
-const NAV = [
-  { href: '/', label: '대시보드', group: '개요' },
-  { href: '/transactions', label: '거래 내역', group: '기록' },
-  { href: '/payment-methods', label: '결제수단', group: '설정' },
+const NAV: { view: View; label: string; group: string }[] = [
+  { view: 'dashboard', label: '대시보드', group: '개요' },
+  { view: 'transactions', label: '거래 내역', group: '기록' },
+  { view: 'payment-methods', label: '결제수단', group: '설정' },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
+export function Sidebar({
+  view,
+  onNavigate,
+}: {
+  view: View;
+  onNavigate: (v: View) => void;
+}) {
   const { session, logout } = useAuth();
   const hh = session?.household;
   const user = session?.user;
@@ -37,14 +41,16 @@ export function Sidebar() {
       {NAV.map((item) => {
         const showLabel = item.group !== lastGroup;
         lastGroup = item.group;
-        const active = pathname === item.href;
         return (
-          <div key={item.href}>
+          <div key={item.view}>
             {showLabel && <div className="nav-label">{item.group}</div>}
             <nav className="nav">
-              <Link href={item.href} className={active ? 'active' : ''}>
+              <a
+                className={view === item.view ? 'active' : ''}
+                onClick={() => onNavigate(item.view)}
+              >
                 {item.label}
-              </Link>
+              </a>
             </nav>
           </div>
         );

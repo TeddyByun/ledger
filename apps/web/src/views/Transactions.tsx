@@ -10,7 +10,7 @@ import type {
   Category,
 } from '@/lib/types';
 
-export default function TransactionsPage() {
+export function Transactions() {
   const [items, setItems] = useState<Transaction[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasNext, setHasNext] = useState(false);
@@ -203,7 +203,6 @@ function NewTransaction({
           ? err.details.map((d) => d.message).join(', ')
           : (err as Error).message,
       );
-    } finally {
       setBusy(false);
     }
   };
