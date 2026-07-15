@@ -1,0 +1,218 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { api, ApiError } from '@/lib/api';
+import type { PaymentMethod, ImportJob } from '@/lib/types';
+
+const ISSUERS = [
+  { value: 'hana_bank', label: '하나은행', kind: 'bank' as const },
+  { value: 'hana_card', label: '하나카드', kind: 'card' as const },
+  { value: 'hyundai_card', label: '현대카드', kind: 'card' as const },
+  { value: 'shinhan_card', label: '신한카드', kind: 'card' as const },
+  { value: 'samsung_card', label: '삼성카드', kind: 'card' as const },
+];
+
+const STATUS_LABEL: Record<ImportJob['status'], string> = {
+  queued: '대기 중',
+  parsing: '파싱 중',
+  classifying: '분류 중',
+  review: '검토 대기',
+  completed: '완료',
+  failed: '실패',
+};
+
+export function Imports() {
+  const [issuer, setIssuer] = useState('hana_bank');
+  const [pms, setPms] = useState<PaymentMethod[]>([]);
+  const [paymentMethodId, setPaymentMethodId] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [job, setJob] = useState<ImportJob | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const kind = ISSUERS.find((i) => i.value === issuer)?.kind ?? 'bank';
+  const options = pms.filter((p) => p.methodType === kind);
+
+  useEffect(() => {
+    api.get<PaymentMethod[]>('/payment-methods').then(setPms).catch(() => {});
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
+  // 발급사 유형이 바뀌면 결제수단 선택 초기화
+  useEffect(() => {
+    setPaymentMethodId('');
+  }, [issuer]);
+
+  const poll = (jobId: string) => {
+    api
+      .get<ImportJob>(`/imports/${jobId}`)
+      .then((j) => {
+        setJob(j);
+        if (j.status !== 'completed' && j.status !== 'review' && j.status !== 'failed') {
+          timer.current = setTimeout(() => poll(jobId), 1500);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!file) return setError('파일을 선택하세요.');
+    if (!paymentMethodId) return setError(kind === 'bank' ? '계좌를 선택하세요.' : '카드를 선택하세요.');
+    setBusy(true);
+    setJob(null);
+    try {
+      const form = new FormData();
+      form.append('issuer', issuer);
+      form.append('paymentMethodId', paymentMethodId);
+      form.append('file', file);
+      const created = await api.upload<ImportJob>('/imports', form);
+      poll(created.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : '업로드에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const done = job && (job.status === 'completed' || job.status === 'review');
+
+  return (
+    <>
+      <header className="topbar">
+        <span className="crumb">
+          기록 / <b>명세서 업로드</b>
+        </span>
+      </header>
+      <main className="page">
+        <div className="page-head">
+          <div className="titles">
+            <h1>명세서 업로드</h1>
+            <p>카드·은행 명세서(엑셀)를 올리면 자동으로 분류·적재됩니다.</p>
+          </div>
+        </div>
+
+        {error && <div className="error-banner">{error}</div>}
+
+        <div className="grid cols-2">
+          <div className="card" style={{ alignSelf: 'start' }}>
+            <div className="card-head">
+              <h3>새 업로드</h3>
+            </div>
+            <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div className="field">
+                <label htmlFor="issuer">발급사</label>
+                <select
+                  id="issuer"
+                  className="select"
+                  value={issuer}
+                  onChange={(e) => setIssuer(e.target.value)}
+                >
+                  {ISSUERS.map((i) => (
+                    <option key={i.value} value={i.value}>
+                      {i.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="pm">{kind === 'bank' ? '계좌' : '카드'}</label>
+                <select
+                  id="pm"
+                  className="select"
+                  value={paymentMethodId}
+                  onChange={(e) => setPaymentMethodId(e.target.value)}
+                  required
+                >
+                  <option value="">선택…</option>
+                  {options.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {p.cardNo ? ` (${p.cardNo})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {options.length === 0 && (
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    먼저 “결제수단” 화면에서 {kind === 'bank' ? '계좌' : '카드'}를 등록하세요.
+                  </span>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="file">명세서 파일 (.xlsx)</label>
+                <input
+                  id="file"
+                  className="input"
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  style={{ padding: 9 }}
+                />
+              </div>
+              <button
+                className="btn primary"
+                type="submit"
+                disabled={busy}
+                style={{ justifyContent: 'center', padding: 11 }}
+              >
+                {busy ? '업로드 중…' : '업로드'}
+              </button>
+            </form>
+          </div>
+
+          <div className="card" style={{ alignSelf: 'start' }}>
+            <div className="card-head">
+              <h3>진행 상태</h3>
+              {job && (
+                <div className="r">
+                  <span className={`pill ${job.status === 'failed' ? 'expense' : done ? 'settled' : 'pending'}`}>
+                    {STATUS_LABEL[job.status]}
+                  </span>
+                </div>
+              )}
+            </div>
+            {!job ? (
+              <div className="empty">
+                <p>업로드하면 여기에 진행 상태가 표시됩니다.</p>
+              </div>
+            ) : job.status === 'failed' ? (
+              <div className="error-banner">적재 실패: {job.error ?? '알 수 없는 오류'}</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="grid cols-3">
+                  <Stat label="파싱" value={job.parsedRows} />
+                  <Stat label="자동분류" value={job.classifiedRows} />
+                  <Stat label="검토 대기" value={job.pendingRows} />
+                </div>
+                {done && (
+                  <div className="callout" style={{ fontSize: 13 }}>
+                    적재 완료 —{' '}
+                    <b>{job.classifiedRows}건 자동분류</b>
+                    {job.pendingRows > 0 && `, ${job.pendingRows}건은 검토가 필요합니다`}. “거래
+                    내역”에서 확인하세요.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="stat" style={{ padding: '14px 16px' }}>
+      <div className="lbl">{label}</div>
+      <div className="val" style={{ fontSize: 24 }}>
+        {value}
+        <span className="w"> 건</span>
+      </div>
+    </div>
+  );
+}

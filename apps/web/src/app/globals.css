@@ -158,5 +158,9 @@ table.tbl { width:100%; border-collapse:collapse; font-size:13px; }
 @keyframes sk { 0%{opacity:.6} 50%{opacity:1} 100%{opacity:.6} }
 @media (prefers-reduced-motion:reduce){ *{ animation:none !important; } }
 
+.callout { background:var(--brand-soft); border:1px solid color-mix(in oklab,var(--brand) 22%,transparent);
+  border-radius:10px; padding:12px 14px; color:var(--ink); }
+.callout b { color:var(--brand-ink); }
+
 /* center layout (login) */
 .center-screen { min-height:100vh; display:grid; place-items:center; padding:24px; }

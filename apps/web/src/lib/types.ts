@@ -3,6 +3,16 @@ export interface CursorPage<T> {
   page: { nextCursor: string | null; hasNext: boolean };
 }
 
+export interface ImportJob {
+  id: string;
+  issuer: string;
+  status: 'queued' | 'parsing' | 'classifying' | 'review' | 'completed' | 'failed';
+  parsedRows: number;
+  classifiedRows: number;
+  pendingRows: number;
+  error: string | null;
+}
+
 export interface PaymentMethod {
   id: number;
   name: string;

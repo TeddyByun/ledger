@@ -129,6 +129,29 @@ export const api = {
     accessToken = data.accessToken;
     return { user: data.user, household: data.household };
   },
+  /** 파일 업로드(multipart). content-type 은 브라우저가 boundary 로 자동 설정. */
+  async upload<T>(path: string, form: FormData): Promise<T> {
+    const send = () =>
+      fetch(getBase() + path, {
+        method: 'POST',
+        body: form,
+        credentials: 'include',
+        headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+      });
+    let res = await send();
+    if (res.status === 401 && (await tryRefresh())) res = await send();
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const err = body?.error ?? {};
+      throw new ApiError(
+        res.status,
+        err.code ?? 'ERROR',
+        err.message ?? '업로드에 실패했습니다.',
+        err.details,
+      );
+    }
+    return body as T;
+  },
   restore: tryRefresh,
   async logout() {
     try {
