@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { ImportJob } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { tenantStorage } from '../../common/tenant/tenant-context.js';
 import { StatisticsService } from '../../statistics/statistics.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { ParserRegistry } from '../parsers/parser.registry.js';
@@ -34,6 +36,14 @@ export class ImportPipelineService {
   async process(jobId: string): Promise<void> {
     const job = await this.prisma.importJob.findUnique({ where: { id: jobId } });
     if (!job) return;
+    // 워커에서도 가구 스코프를 적용 — 대사/조회가 다른 가구 데이터를 건드리지 않도록.
+    await tenantStorage.run(
+      { userId: 0, householdId: job.householdId, role: 'owner' },
+      () => this.runJob(job, jobId),
+    );
+  }
+
+  private async runJob(job: ImportJob, jobId: string): Promise<void> {
     try {
       await this.setStatus(jobId, 'parsing');
       const buffer = await this.storage.load(job.fileKey);
