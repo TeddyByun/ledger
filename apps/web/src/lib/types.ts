@@ -30,6 +30,8 @@ export interface HouseholdMember {
   isSelf: boolean;
   color: string | null;
   sortOrder: number;
+  email: string | null;
+  role: 'owner' | 'member' | 'viewer';
 }
 
 export interface HouseholdInfo {

@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEmail,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -46,6 +48,24 @@ export class CreateMemberDto {
   @Type(() => Number)
   @IsInt()
   sortOrder?: number;
+
+  // ── 로그인(선택) — 값을 넣으면 앱에 로그인 가능한 구성원이 됨 ──
+  @ApiPropertyOptional({ example: 'mom@example.com', description: '로그인 이메일(선택)' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ description: '로그인 비밀번호(선택, 8자 이상)' })
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(72)
+  password?: string;
+
+  @ApiPropertyOptional({ enum: ['owner', 'member', 'viewer'], description: '앱 권한(로그인 구성원)' })
+  @IsOptional()
+  @IsIn(['owner', 'member', 'viewer'])
+  role?: 'owner' | 'member' | 'viewer';
 }
 
 export class UpdateMemberDto extends PartialType(CreateMemberDto) {}

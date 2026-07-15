@@ -22,8 +22,19 @@ interface MemberForm {
   relation: string;
   isSelf: boolean;
   color: string;
+  email: string;
+  password: string;
+  role: 'owner' | 'member' | 'viewer';
 }
-const EMPTY: MemberForm = { name: '', relation: 'spouse', isSelf: false, color: COLORS[1]! };
+const EMPTY: MemberForm = {
+  name: '',
+  relation: 'spouse',
+  isSelf: false,
+  color: COLORS[1]!,
+  email: '',
+  password: '',
+  role: 'member',
+};
 
 export function Family() {
   const { session } = useAuth();
@@ -64,12 +75,16 @@ export function Family() {
     setError(null);
     setBusy(true);
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         name: form.name,
         relation: form.relation,
         isSelf: form.isSelf,
         color: form.color,
       };
+      // 로그인 정보(선택) — 입력한 경우에만 전송
+      if (form.email) body.email = form.email;
+      if (form.email) body.role = form.role;
+      if (form.password) body.password = form.password;
       if (editing) await api.patch(`/household/members/${form.id}`, body);
       else await api.post('/household/members', body);
       setForm(EMPTY);
@@ -88,6 +103,9 @@ export function Family() {
       relation: m.relation ?? 'other',
       isSelf: m.isSelf,
       color: m.color ?? COLORS[0]!,
+      email: m.email ?? '',
+      password: '',
+      role: m.role ?? 'member',
     });
 
   const remove = async (m: HouseholdMember) => {
@@ -209,8 +227,14 @@ export function Family() {
                           본인
                         </span>
                       )}
+                      {m.email && (
+                        <span className="pill plain" style={{ marginLeft: 6 }}>
+                          로그인 · {m.role === 'owner' ? '소유자' : m.role === 'viewer' ? '뷰어' : '구성원'}
+                        </span>
+                      )}
                       <div className="muted" style={{ fontSize: 11.5 }}>
                         {relLabel(m.relation)}
+                        {m.email ? ` · ${m.email}` : ''}
                       </div>
                     </div>
                     <button className="btn ghost sm" onClick={() => edit(m)}>
@@ -296,6 +320,66 @@ export function Family() {
                 />
                 이 구성원을 <b>본인(대표)</b>으로 지정
               </label>
+
+              {/* 로그인 정보(선택) — 앱에 로그인하는 구성원만 */}
+              <div
+                style={{
+                  borderTop: '1px dashed var(--line-2)',
+                  paddingTop: 14,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                }}
+              >
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>
+                  로그인 정보 <span className="muted">(선택 — 앱에 로그인하는 구성원만)</span>
+                </div>
+                <div className="field">
+                  <label>이메일</label>
+                  <input
+                    className="input"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="mom@example.com"
+                  />
+                </div>
+                <div className="row">
+                  <div className="field">
+                    <label>
+                      비밀번호 {editing && <span className="muted">(변경 시에만)</span>}
+                    </label>
+                    <input
+                      className="input"
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      placeholder="8자 이상"
+                      minLength={8}
+                    />
+                  </div>
+                  <div className="field">
+                    <label>권한</label>
+                    <select
+                      className="select"
+                      value={form.role}
+                      onChange={(e) =>
+                        setForm({ ...form, role: e.target.value as MemberForm['role'] })
+                      }
+                    >
+                      <option value="owner">소유자</option>
+                      <option value="member">구성원</option>
+                      <option value="viewer">뷰어</option>
+                    </select>
+                  </div>
+                </div>
+                {!editing && (
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    앱을 안 쓰는 가족(자녀 등)은 로그인 정보를 비워두세요.
+                  </span>
+                )}
+              </div>
+
               <button
                 className="btn primary"
                 type="submit"

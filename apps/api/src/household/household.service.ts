@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import * as argon2 from 'argon2';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import {
@@ -44,15 +50,46 @@ export class HouseholdService {
   async createMember(dto: CreateMemberDto) {
     // isSelf=true 로 새로 지정하면 기존 대표 해제(대표는 1명)
     if (dto.isSelf) await this.clearSelf();
-    return this.prisma.householdMember.create({
-      data: { ...dto, householdId: requireTenant().householdId },
-    });
+    const { password, ...rest } = dto;
+    try {
+      return await this.prisma.householdMember.create({
+        data: {
+          ...rest,
+          householdId: requireTenant().householdId,
+          ...(password !== undefined && {
+            passwordHash: await argon2.hash(password),
+          }),
+        },
+      });
+    } catch (e) {
+      throw this.mapError(e);
+    }
   }
 
   async updateMember(id: number, dto: UpdateMemberDto) {
     await this.findMember(id);
     if (dto.isSelf) await this.clearSelf();
-    return this.prisma.householdMember.update({ where: { id }, data: dto });
+    const { password, ...rest } = dto;
+    try {
+      return await this.prisma.householdMember.update({
+        where: { id },
+        data: {
+          ...rest,
+          ...(password !== undefined && {
+            passwordHash: await argon2.hash(password),
+          }),
+        },
+      });
+    } catch (e) {
+      throw this.mapError(e);
+    }
+  }
+
+  private mapError(e: unknown): unknown {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      return new ConflictException('EMAIL_TAKEN');
+    }
+    return e;
   }
 
   async removeMember(id: number) {
