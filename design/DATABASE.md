@@ -779,6 +779,11 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
 
 ### 7.2 카드 명세서 자동 입력 흐름
 - **적재 단위**: 업로드 1회 = `card_statement` 1건 + `card_transaction` N건. 명세서 합계(`total_amount`)와 건별 `principal` 합이 일치하는지 검증.
+- **사용월 ↔ 청구월 분리 (확정)**: 명세서 제목(예: 2026년 4월)은 **청구월**(카드값 빠지는 달)이고, 실제 이용일은 **사용월**(예: 3월)이다. 둘을 분리해 저장·조회한다.
+  - `card_statement.statement_ym` = **청구월**(명세서 기준월, 헤더의 `YYYY년 MM월` 결제일에서 추출), `billing_date` = 결제일(예: 2026-04-13).
+  - `card_transaction.txn_date` = **이용일**(원본 보존).
+  - 가계부 거래 생성 시: **`transaction.transaction_date` = 이용일(사용월 축)**, **`transaction.settled_date` = 결제일(청구월 축)**.
+  - **월 집계 기본 축 = 사용월**(`transaction_date`, "언제 썼나"). 청구월 뷰는 `settled_date`로 토글 가능(둘 다 저장).
 - **카드 라우팅(번호 매핑)**: 파서가 각 행의 카드 구분(`card_label`)에서 식별번호(뒤 4자리)를 뽑아 `card_transaction.card_no`에 저장하고, **가구에 등록된 카드 목록(`payment_method.card_no`)과 매칭**해 그 행의 `payment_method_id`를 정한다. 한 명세서에 본인·가족 카드가 섞여도 번호로 각각 라우팅. **미등록 번호**면 "새 카드 등록" 제안 후 보류(pending). (카드 목록은 물리 카드별 1행, 카드번호는 마스킹 저장 — §3.1)
 - **자동 분류**: `merchant_category_map`을 `priority` 순으로 적용해 `category_code` 부여 → 매칭 시 `transaction` 자동 생성·연결. 미매칭은 `is_classified='N'`으로 남겨 수기 처리 후 규칙 보강.
 - **금액 기준 (확정)**: 가계부 지출 금액 = `principal + fee`(할인 반영 실청구 원금 + 할부 이자). 일시불은 `fee=0`이라 `principal`과 동일, 할부는 이자까지 포함(1.8 확정 정책). `usage_amount`/`benefit_amount`는 분석·혜택 통계용으로 보존.

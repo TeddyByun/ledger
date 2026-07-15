@@ -35,3 +35,8 @@ packages/shared/src/*.js.map
 apps/api/test/fixtures/statements/**/*.xlsx
 apps/api/test/fixtures/statements/**/*.xls
 apps/api/test/fixtures/statements/**/*.csv
+
+# 파서 개발용 임시 미리보기 스크립트
+apps/api/_preview.ts
+apps/api/_dump.mjs
+apps/api/_merchants.mjs

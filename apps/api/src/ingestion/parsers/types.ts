@@ -15,6 +15,7 @@ export interface NormalizedBankRow {
 /** 정규화된 카드 이용내역 (→ card_transaction) */
 export interface NormalizedCardRow {
   cardLabel: string | null;
+  cardNo: string | null; // 라벨에서 추출한 카드 식별번호(뒤 4자리) — 카드 목록 매핑 키
   txnDate: Date;
   merchantName: string;
   usageAmount: number;
