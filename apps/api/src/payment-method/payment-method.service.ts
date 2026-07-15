@@ -7,6 +7,17 @@ import {
   UpdatePaymentMethodDto,
 } from './dto/payment-method.dto.js';
 
+/**
+ * 카드번호 마스킹 — 전체 번호를 받아 뒤 4자리만 남기고 저장(금융정보 at-rest 보호).
+ * 예: '5699-1020-1234-7322' → '•••• •••• •••• 7322'
+ */
+export function maskCardNo(input?: string | null): string | undefined {
+  if (!input) return undefined;
+  const digits = input.replace(/\D/g, '');
+  if (digits.length < 4) return undefined;
+  return `•••• •••• •••• ${digits.slice(-4)}`;
+}
+
 @Injectable()
 export class PaymentMethodService {
   constructor(private readonly prisma: PrismaService) {}
@@ -26,13 +37,20 @@ export class PaymentMethodService {
 
   create(dto: CreatePaymentMethodDto) {
     return this.prisma.paymentMethod.create({
-      data: { ...dto, householdId: requireTenant().householdId },
+      data: {
+        ...dto,
+        cardNo: maskCardNo(dto.cardNo),
+        householdId: requireTenant().householdId,
+      },
     });
   }
 
   async update(id: number, dto: UpdatePaymentMethodDto) {
     await this.findOne(id);
-    return this.prisma.paymentMethod.update({ where: { id }, data: dto });
+    return this.prisma.paymentMethod.update({
+      where: { id },
+      data: { ...dto, ...(dto.cardNo !== undefined && { cardNo: maskCardNo(dto.cardNo) }) },
+    });
   }
 
   async remove(id: number) {

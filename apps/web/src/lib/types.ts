@@ -9,6 +9,7 @@ export interface PaymentMethod {
   methodType: 'bank' | 'card';
   issuer: string | null;
   identifier: string | null;
+  cardNo: string | null;
   owner: string | null;
 }
 

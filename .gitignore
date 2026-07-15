@@ -30,3 +30,8 @@ pnpm-debug.log*
 # 실수로 src 에 방출된 빌드 산출물 방지
 packages/shared/src/*.js
 packages/shared/src/*.js.map
+
+# 실제 명세서 파일(개인 금융정보) — 커밋 금지, README/구조만 유지
+apps/api/test/fixtures/statements/**/*.xlsx
+apps/api/test/fixtures/statements/**/*.xls
+apps/api/test/fixtures/statements/**/*.csv
