@@ -24,19 +24,20 @@ async function readXlsx(buffer: Buffer): Promise<string[][]> {
   const wb = new ExcelJS.Workbook();
   // exceljs 는 Node Buffer 를 받는다.
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
-  const ws = wb.worksheets[0];
-  if (!ws) return [];
   const rows: string[][] = [];
-  ws.eachRow({ includeEmpty: false }, (row) => {
-    const cells: string[] = [];
-    // values[0] 은 비어있음(1-base)
-    const values = row.values as unknown[];
-    for (let i = 1; i < values.length; i++) {
-      const v = values[i];
-      cells.push(cellToString(v));
-    }
-    rows.push(cells);
-  });
+  // 여러 시트(예: 삼성카드 일시불/할부)를 순서대로 이어붙인다. 단일 시트는 그대로.
+  for (const ws of wb.worksheets) {
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      const cells: string[] = [];
+      // values[0] 은 비어있음(1-base)
+      const values = row.values as unknown[];
+      for (let i = 1; i < values.length; i++) {
+        const v = values[i];
+        cells.push(cellToString(v));
+      }
+      rows.push(cells);
+    });
+  }
   return rows;
 }
 

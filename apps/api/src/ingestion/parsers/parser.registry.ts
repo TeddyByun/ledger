@@ -4,6 +4,7 @@ import { GenericBankParser } from './bank.parser.js';
 import { GenericCardParser } from './card.parser.js';
 import { HanaCardParser } from './hana-card.parser.js';
 import { HyundaiCardParser } from './hyundai-card.parser.js';
+import { SamsungCardParser } from './samsung-card.parser.js';
 import type { StatementParser } from './types.js';
 
 /**
@@ -18,7 +19,7 @@ export class ParserRegistry {
     [Issuer.HANA_CARD, new HanaCardParser()],
     [Issuer.HYUNDAI_CARD, new HyundaiCardParser()],
     [Issuer.SHINHAN_CARD, new GenericCardParser(Issuer.SHINHAN_CARD)],
-    [Issuer.SAMSUNG_CARD, new GenericCardParser(Issuer.SAMSUNG_CARD)],
+    [Issuer.SAMSUNG_CARD, new SamsungCardParser()],
   ]);
 
   get(issuer: Issuer): StatementParser {
