@@ -41,8 +41,14 @@ export interface NormalizedCardStatement {
   rows: NormalizedCardRow[];
 }
 
+/** 은행 명세서 헤더에서 뽑은 계좌 식별 정보 */
+export interface NormalizedBankAccount {
+  accountNo: string | null; // 예: 569-910201-47307
+  identifier: string | null; // 예: 47307 (뒤 세그먼트)
+}
+
 export type ParseResult =
-  | { kind: 'bank'; rows: NormalizedBankRow[] }
+  | { kind: 'bank'; account: NormalizedBankAccount; rows: NormalizedBankRow[] }
   | { kind: 'card'; statement: NormalizedCardStatement };
 
 export interface ParseContext {
