@@ -23,6 +23,12 @@ export interface PaymentMethod {
   owner: string | null;
 }
 
+export interface DetectedCard {
+  cardNo: string;
+  sampleLabel: string | null;
+  txnCount: number;
+}
+
 export interface Category {
   code: string;
   name: string;

@@ -29,6 +29,12 @@ export class PaymentMethodController {
     return this.service.findAll(methodType);
   }
 
+  @Get('detected-cards')
+  @ApiOperation({ summary: '명세서에서 감지된 미등록 카드번호 (등록 추천)' })
+  detectedCards() {
+    return this.service.detectedUnregisteredCards();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
