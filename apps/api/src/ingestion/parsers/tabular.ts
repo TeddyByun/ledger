@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
 /** 표 형태 파일(xlsx/xls/csv)을 셀 문자열 2차원 배열로 읽는다. */
 export async function readTabular(
@@ -21,8 +22,16 @@ function readCsv(buffer: Buffer): string[][] {
 }
 
 async function readXlsx(buffer: Buffer): Promise<string[][]> {
+  try {
+    return await readXlsxExcelJS(buffer);
+  } catch {
+    // 일부 카드사(예: 신한) 파일은 메타데이터 누락으로 exceljs 가 실패 → SheetJS 폴백
+    return readXlsxSheetJS(buffer);
+  }
+}
+
+async function readXlsxExcelJS(buffer: Buffer): Promise<string[][]> {
   const wb = new ExcelJS.Workbook();
-  // exceljs 는 Node Buffer 를 받는다.
   await wb.xlsx.load(buffer as unknown as ArrayBuffer);
   const rows: string[][] = [];
   // 여러 시트(예: 삼성카드 일시불/할부)를 순서대로 이어붙인다. 단일 시트는 그대로.
@@ -32,11 +41,28 @@ async function readXlsx(buffer: Buffer): Promise<string[][]> {
       // values[0] 은 비어있음(1-base)
       const values = row.values as unknown[];
       for (let i = 1; i < values.length; i++) {
-        const v = values[i];
-        cells.push(cellToString(v));
+        cells.push(cellToString(values[i]));
       }
       rows.push(cells);
     });
+  }
+  return rows;
+}
+
+/** SheetJS 폴백 리더 — exceljs 가 못 여는 파일 처리. 전 시트 concat. */
+function readXlsxSheetJS(buffer: Buffer): string[][] {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  const rows: string[][] = [];
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+      header: 1,
+      raw: false, // 셀 서식대로 문자열화(날짜/숫자)
+      defval: '',
+      blankrows: false,
+    });
+    for (const r of aoa) rows.push(r.map((c) => String(c ?? '').trim()));
   }
   return rows;
 }

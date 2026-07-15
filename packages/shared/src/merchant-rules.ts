@@ -20,7 +20,7 @@ const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priorit
   // ── 교통 ──
   { patterns: ['하이패스', '고속도로', '도로공사', '휴게소', '모바일이즐', '이즐'], categoryCode: '0803', priority: 10 },
   { patterns: ['카카오T', '택시', '티머니', '캐시비', '이동의즐거움', '타다'], categoryCode: '0801', priority: 14 },
-  { patterns: ['고속버스', '운송사업조합', '지하철', '코레일', 'SRT', '철도', '시외버스'], categoryCode: '0802', priority: 16 },
+  { patterns: ['고속버스', '시외버스', '마을버스', '버스', '운송사업조합', '지하철', '코레일', 'SRT', '철도', '경기버스'], categoryCode: '0802', priority: 16 },
   // ── 건강 ──
   { patterns: ['약국'], categoryCode: '0702', priority: 14 },
   { patterns: ['의원', '병원', '정형외과', '보건소', '치과', '한의원', '내과', '이비인후과', '클리닉'], categoryCode: '0701', priority: 16 },
