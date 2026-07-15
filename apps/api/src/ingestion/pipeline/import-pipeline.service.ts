@@ -11,10 +11,10 @@ import { Issuer } from '@ledger/shared';
 
 /** 은행 거래구분/적요 기반 카테고리 힌트 (DATABASE.md §7.1) */
 const BANK_TYPE_HINT: Record<string, string> = {
-  대출이자: '01',
+  대출이자: '0101',
   보험료: '03',
-  정기적금: '02',
-  청약종합: '02',
+  정기적금: '0202',
+  청약종합: '0202',
 };
 
 @Injectable()
