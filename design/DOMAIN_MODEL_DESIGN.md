@@ -23,7 +23,7 @@ household_member   budget            recurring_rule
           monthly_category_stat ◀───rebuild(§8)
 ```
 
-- **household_member ≠ Membership**: `Membership`(AUTH_DESIGN §3)은 *앱 사용자*의 가구 접근권(owner/member/viewer). 여기 `household_member`는 *지출 명의*(본인/선영/채민/채성)로 **앱 계정이 없어도 존재**한다. 앱 사용자이기도 하면 `linked_user_id`로 연결.
+- **⚠️ 설계 변경(2026-07, 확정): `User`/`Membership` → `household_member` 로 통합.** "가족 구성원"이 곧 사람이며, **로그인 필드(email·password_hash·role)를 nullable 로** 갖는다. 값이 있으면 앱 로그인 가능한 사용자, 없으면 추적 전용 가족(자녀 등). 별도 `User`/`Membership` 테이블은 제거. (단일 가구/로그인 가정 — 다가구 로그인은 범위 밖.) 인증(refresh_token·password_reset_token)·거래 명의(`transaction.member_id`)는 모두 `household_member` 를 참조.
 - 카드 명세의 `card_label`(본인/가족253 — DATABASE.md §1.7)이 곧 member 귀속 힌트다.
 
 ---

@@ -238,6 +238,7 @@ AuthModule
 2. **인증 방식 (D1)** — ✅ **자체 JWT(Access+Refresh) 확정**. 외부 IdP(Clerk/Auth0) 미채택.
 3. **플랫폼 순서** — ✅ **웹 First → 이후 모바일(RN) 앱**. 타입·검증·api-client는 `packages/`로 공유.
 4. **로그인 방식** — 이메일+비밀번호(argon2id) 자체 인증. **구글 로그인(소셜)과 구글 드라이브 연동은 별개** — §11 참고.
+5. **계정 모델 통합 (2026-07 확정)** — `User`/`Membership` 을 **`household_member` 하나로 통합**. 가족 구성원 = 사람이고, 로그인 필드(email·password_hash·role)는 **nullable**(있으면 앱 사용자, 없으면 추적 전용 가족). refresh_token·password_reset_token·transaction.member_id 모두 `household_member` 참조. 다가구 로그인은 범위 밖(1인 1가구 가정). → 이 문서의 User/Membership 관련 스키마(§3)는 통합 모델로 대체됨.
 
 ## 확정 필요 사항 (잔여)
 1. 이메일 발송 수단(재설정/초대) — 별도 메일 서비스 필요 여부 (초기 후순위 가능)
