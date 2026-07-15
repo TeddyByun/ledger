@@ -35,6 +35,44 @@ export class PaymentMethodService {
     return pm;
   }
 
+  /**
+   * 업로드한 명세서(card_transaction)에서 감지된 카드번호 중, 아직 등록되지 않은 것.
+   * 카드 등록 화면에서 "이 카드 등록" 추천에 사용.
+   */
+  async detectedUnregisteredCards() {
+    const cards = await this.prisma.paymentMethod.findMany({
+      where: { methodType: 'card' },
+      select: { cardNo: true },
+    });
+    const registered = cards
+      .map((c) => (c.cardNo ?? '').replace(/\D/g, ''))
+      .filter(Boolean);
+
+    const distinct = await this.prisma.cardTransaction.findMany({
+      where: { cardNo: { not: null } },
+      select: { cardNo: true, cardLabel: true },
+      distinct: ['cardNo'],
+      orderBy: { cardNo: 'asc' },
+    });
+    const counts = await this.prisma.cardTransaction.groupBy({
+      by: ['cardNo'],
+      where: { cardNo: { not: null } },
+      _count: { _all: true },
+    });
+    const countMap = new Map(counts.map((c) => [c.cardNo, c._count._all]));
+
+    return distinct
+      .filter((d) => {
+        const n = d.cardNo!;
+        return !registered.some((r) => r.endsWith(n) || n.endsWith(r));
+      })
+      .map((d) => ({
+        cardNo: d.cardNo,
+        sampleLabel: d.cardLabel,
+        txnCount: countMap.get(d.cardNo) ?? 0,
+      }));
+  }
+
   create(dto: CreatePaymentMethodDto) {
     return this.prisma.paymentMethod.create({
       data: {

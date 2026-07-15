@@ -5,9 +5,15 @@ import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/views/Dashboard';
 import { Transactions } from '@/views/Transactions';
 import { PaymentMethods } from '@/views/PaymentMethods';
+import { Cards } from '@/views/Cards';
 import { Imports } from '@/views/Imports';
 
-export type View = 'dashboard' | 'transactions' | 'imports' | 'payment-methods';
+export type View =
+  | 'dashboard'
+  | 'transactions'
+  | 'imports'
+  | 'cards'
+  | 'payment-methods';
 
 export function Shell() {
   const [view, setView] = useState<View>('dashboard');
@@ -18,6 +24,7 @@ export function Shell() {
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
         {view === 'transactions' && <Transactions />}
         {view === 'imports' && <Imports />}
+        {view === 'cards' && <Cards />}
         {view === 'payment-methods' && <PaymentMethods />}
       </div>
     </div>
