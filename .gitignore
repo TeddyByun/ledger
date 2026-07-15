@@ -40,3 +40,7 @@ apps/api/test/fixtures/statements/**/*.csv
 apps/api/_preview.ts
 apps/api/_dump.mjs
 apps/api/_merchants.mjs
+
+# 업로드 원본 저장(개인 금융정보) — 커밋 금지
+apps/api/uploads/
+uploads/
