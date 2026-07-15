@@ -1,10 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { Issuer } from '@ledger/shared';
 import { GenericBankParser } from './bank.parser.js';
-import { GenericCardParser } from './card.parser.js';
 import { HanaCardParser } from './hana-card.parser.js';
 import { HyundaiCardParser } from './hyundai-card.parser.js';
 import { SamsungCardParser } from './samsung-card.parser.js';
+import { ShinhanCardParser } from './shinhan-card.parser.js';
 import type { StatementParser } from './types.js';
 
 /**
@@ -18,7 +18,7 @@ export class ParserRegistry {
     [Issuer.HANA_BANK, new GenericBankParser(Issuer.HANA_BANK)],
     [Issuer.HANA_CARD, new HanaCardParser()],
     [Issuer.HYUNDAI_CARD, new HyundaiCardParser()],
-    [Issuer.SHINHAN_CARD, new GenericCardParser(Issuer.SHINHAN_CARD)],
+    [Issuer.SHINHAN_CARD, new ShinhanCardParser()],
     [Issuer.SAMSUNG_CARD, new SamsungCardParser()],
   ]);
 
