@@ -92,6 +92,7 @@ model Household {
   createdAt DateTime @default(now()) @map("created_at")
 
   members          Membership[]
+  householdMembers HouseholdMember[]
   paymentMethods   PaymentMethod[]
   counterparties   Counterparty[]
   transactions     Transaction[]
@@ -101,6 +102,24 @@ model Household {
   importJobs       ImportJob[]
 
   @@map("household")
+}
+
+/// 가족 구성원 — 지출 명의(본인/배우자/자녀 등). 앱 계정(Membership)과 별개. DOMAIN_MODEL §1
+model HouseholdMember {
+  id          Int      @id @default(autoincrement())
+  householdId Int      @map("household_id")
+  name        String
+  relation    String? // self / spouse / child / parent (자유표기)
+  isSelf      Boolean  @default(false) @map("is_self")
+  color       String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  useYn       String   @default("Y") @map("use_yn") @db.Char(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  household Household @relation(fields: [householdId], references: [id])
+
+  @@index([householdId])
+  @@map("household_member")
 }
 
 model Membership {

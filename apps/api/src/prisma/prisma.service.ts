@@ -8,6 +8,7 @@ import { getTenant } from '../common/tenant/tenant-context.js';
  * (monthly_* 집계는 Phase 4 에서 스코프 예정)
  */
 const SCOPED_MODELS = new Set<string>([
+  'HouseholdMember',
   'PaymentMethod',
   'Counterparty',
   'Transaction',
