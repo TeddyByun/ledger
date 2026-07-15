@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { Issuer } from '@ledger/shared';
 import { GenericBankParser } from './bank.parser.js';
 import { GenericCardParser } from './card.parser.js';
+import { HanaCardParser } from './hana-card.parser.js';
 import type { StatementParser } from './types.js';
 
 /**
@@ -13,7 +14,7 @@ import type { StatementParser } from './types.js';
 export class ParserRegistry {
   private readonly parsers = new Map<Issuer, StatementParser>([
     [Issuer.HANA_BANK, new GenericBankParser(Issuer.HANA_BANK)],
-    [Issuer.HANA_CARD, new GenericCardParser(Issuer.HANA_CARD)],
+    [Issuer.HANA_CARD, new HanaCardParser()],
     [Issuer.HYUNDAI_CARD, new GenericCardParser(Issuer.HYUNDAI_CARD)],
     [Issuer.SHINHAN_CARD, new GenericCardParser(Issuer.SHINHAN_CARD)],
     [Issuer.SAMSUNG_CARD, new GenericCardParser(Issuer.SAMSUNG_CARD)],

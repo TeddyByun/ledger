@@ -208,6 +208,7 @@ export class ImportPipelineService {
           statementId: stmt.id,
           paymentMethodId,
           cardLabel: r.cardLabel,
+          cardNo: r.cardNo,
           txnDate: r.txnDate,
           merchantName: r.merchantName,
           usageAmount: r.usageAmount,

@@ -56,6 +56,7 @@ export class GenericCardParser implements StatementParser {
 
         out.push({
           cardLabel: (cell(row, columns, 'cardLabel') ?? '').trim() || null,
+          cardNo: null, // 발급사별 전용 파서에서 라벨/번호 추출(제네릭은 미추출)
           txnDate,
           merchantName: merchant,
           usageAmount,
