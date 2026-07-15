@@ -6,6 +6,7 @@ import { validateEnv } from './config/env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { HealthController } from './health.controller.js';
 import { AuthModule } from './auth/auth.module.js';
+import { HouseholdModule } from './household/household.module.js';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from './auth/guards/roles.guard.js';
 import { TenantInterceptor } from './auth/tenant.interceptor.js';
@@ -33,6 +34,7 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     }),
     PrismaModule,
     AuthModule,
+    HouseholdModule,
     CategoryModule,
     PaymentMethodModule,
     CounterpartyModule,

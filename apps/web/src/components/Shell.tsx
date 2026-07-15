@@ -6,6 +6,7 @@ import { Dashboard } from '@/views/Dashboard';
 import { Transactions } from '@/views/Transactions';
 import { PaymentMethods } from '@/views/PaymentMethods';
 import { Cards } from '@/views/Cards';
+import { Family } from '@/views/Family';
 import { Imports } from '@/views/Imports';
 
 export type View =
@@ -13,6 +14,7 @@ export type View =
   | 'transactions'
   | 'imports'
   | 'cards'
+  | 'family'
   | 'payment-methods';
 
 export function Shell() {
@@ -25,6 +27,7 @@ export function Shell() {
         {view === 'transactions' && <Transactions />}
         {view === 'imports' && <Imports />}
         {view === 'cards' && <Cards />}
+        {view === 'family' && <Family />}
         {view === 'payment-methods' && <PaymentMethods />}
       </div>
     </div>

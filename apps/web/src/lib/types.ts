@@ -23,6 +23,22 @@ export interface PaymentMethod {
   owner: string | null;
 }
 
+export interface HouseholdMember {
+  id: number;
+  name: string;
+  relation: string | null;
+  isSelf: boolean;
+  color: string | null;
+  sortOrder: number;
+}
+
+export interface HouseholdInfo {
+  id: number;
+  name: string;
+  role: string;
+  members: HouseholdMember[];
+}
+
 export interface DetectedCard {
   cardNo: string;
   sampleLabel: string | null;
