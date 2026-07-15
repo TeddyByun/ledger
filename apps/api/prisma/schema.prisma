@@ -69,29 +69,12 @@ enum MemberRole {
 // ─────────────────────────────────────────────
 // 계정 · 가구 (인증/멀티테넌시) — AUTH_DESIGN §3
 // ─────────────────────────────────────────────
-model User {
-  id           Int       @id @default(autoincrement())
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  displayName  String?   @map("display_name")
-  isActive     Boolean   @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-
-  memberships         Membership[]
-  refreshTokens       RefreshToken[]
-  passwordResetTokens PasswordResetToken[]
-  transactions        Transaction[]
-
-  @@map("user")
-}
 
 model Household {
   id        Int      @id @default(autoincrement())
   name      String
   createdAt DateTime @default(now()) @map("created_at")
 
-  members          Membership[]
   householdMembers HouseholdMember[]
   paymentMethods   PaymentMethod[]
   counterparties   Counterparty[]
@@ -104,42 +87,39 @@ model Household {
   @@map("household")
 }
 
-/// 가족 구성원 — 지출 명의(본인/배우자/자녀 등). 앱 계정(Membership)과 별개. DOMAIN_MODEL §1
+/// 가족 구성원 = 사람. 지출 명의(본인/배우자/자녀) + 선택적 로그인(email/passwordHash 있으면 앱 사용자).
+/// User/Membership 을 통합. DOMAIN_MODEL §1
 model HouseholdMember {
-  id          Int      @id @default(autoincrement())
-  householdId Int      @map("household_id")
+  id          Int     @id @default(autoincrement())
+  householdId Int     @map("household_id")
   name        String
   relation    String? // self / spouse / child / parent (자유표기)
-  isSelf      Boolean  @default(false) @map("is_self")
+  isSelf      Boolean @default(false) @map("is_self")
   color       String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  useYn       String   @default("Y") @map("use_yn") @db.Char(1)
-  createdAt   DateTime @default(now()) @map("created_at")
+  sortOrder   Int     @default(0) @map("sort_order")
+  useYn       String  @default("Y") @map("use_yn") @db.Char(1)
 
-  household Household @relation(fields: [householdId], references: [id])
+  // 로그인(선택) — 값이 있으면 앱에 로그인 가능한 사용자
+  email        String?    @unique
+  passwordHash String?    @map("password_hash")
+  role         MemberRole @default(member)
+  isActive     Boolean    @default(true) @map("is_active")
+  lastLoginAt  DateTime?  @map("last_login_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  household           Household            @relation(fields: [householdId], references: [id])
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  transactions        Transaction[]
 
   @@index([householdId])
   @@map("household_member")
 }
 
-model Membership {
-  id          Int        @id @default(autoincrement())
-  userId      Int        @map("user_id")
-  householdId Int        @map("household_id")
-  role        MemberRole @default(member)
-  createdAt   DateTime   @default(now()) @map("created_at")
-
-  user      User      @relation(fields: [userId], references: [id])
-  household Household @relation(fields: [householdId], references: [id])
-
-  @@unique([userId, householdId])
-  @@index([householdId])
-  @@map("membership")
-}
-
 model RefreshToken {
   id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
+  memberId  Int       @map("member_id")
   tokenHash String    @unique @map("token_hash")
   familyId  String    @map("family_id")
   expiresAt DateTime  @map("expires_at")
@@ -147,21 +127,21 @@ model RefreshToken {
   userAgent String?   @map("user_agent")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  member HouseholdMember @relation(fields: [memberId], references: [id])
 
-  @@index([userId])
+  @@index([memberId])
   @@map("refresh_token")
 }
 
 model PasswordResetToken {
   id        Int       @id @default(autoincrement())
-  userId    Int       @map("user_id")
+  memberId  Int       @map("member_id")
   tokenHash String    @unique @map("token_hash")
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  member HouseholdMember @relation(fields: [memberId], references: [id])
 
   @@map("password_reset_token")
 }
@@ -243,15 +223,15 @@ model Transaction {
   settledDate     DateTime?         @map("settled_date") @db.Date
   status          TransactionStatus @default(settled)
   memo            String?
-  userId          Int?              @map("user_id")
+  memberId        Int?              @map("member_id") // 지출 명의(가족 구성원)
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
 
-  household     Household     @relation(fields: [householdId], references: [id])
-  category      Category      @relation(fields: [categoryCode], references: [code])
-  counterparty  Counterparty? @relation(fields: [counterpartyId], references: [id])
-  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
-  user          User?         @relation(fields: [userId], references: [id])
+  household     Household        @relation(fields: [householdId], references: [id])
+  category      Category         @relation(fields: [categoryCode], references: [code])
+  counterparty  Counterparty?    @relation(fields: [counterpartyId], references: [id])
+  paymentMethod PaymentMethod    @relation(fields: [paymentMethodId], references: [id])
+  member        HouseholdMember? @relation(fields: [memberId], references: [id])
 
   bankTransaction BankTransaction?
   cardTransaction CardTransaction?

@@ -48,7 +48,7 @@ export class TokenService {
 
   /** 새 Refresh 토큰 발급(+DB 저장). familyId 미지정 시 새 회전 체인 시작. */
   async issueRefresh(
-    userId: number,
+    memberId: number,
     familyId?: string,
     userAgent?: string,
   ): Promise<{ token: string; expiresAt: Date }> {
@@ -59,7 +59,7 @@ export class TokenService {
     const expiresAt = new Date(Date.now() + ttl);
     await this.prisma.refreshToken.create({
       data: {
-        userId,
+        memberId,
         tokenHash: this.hash(token),
         familyId: familyId ?? randomUUID(),
         expiresAt,
@@ -73,7 +73,7 @@ export class TokenService {
   async rotate(
     token: string,
     userAgent?: string,
-  ): Promise<{ userId: number; token: string; expiresAt: Date }> {
+  ): Promise<{ memberId: number; token: string; expiresAt: Date }> {
     const rec = await this.prisma.refreshToken.findUnique({
       where: { tokenHash: this.hash(token) },
     });
@@ -95,8 +95,8 @@ export class TokenService {
       where: { id: rec.id },
       data: { revokedAt: new Date() },
     });
-    const next = await this.issueRefresh(rec.userId, rec.familyId, userAgent);
-    return { userId: rec.userId, ...next };
+    const next = await this.issueRefresh(rec.memberId, rec.familyId, userAgent);
+    return { memberId: rec.memberId, ...next };
   }
 
   /** 로그아웃: 제출된 Refresh 폐기. */
