@@ -213,11 +213,14 @@ category ──────┘
 | method_type | VARCHAR(10) | NOT NULL | 'bank' / 'card' |
 | issuer | VARCHAR(50) | NULL | 은행/카드사 (예: 하나은행, 삼성카드, 현대카드) |
 | identifier | VARCHAR(50) | NULL | 계좌 식별번호 또는 카드 별칭 (예: 47307, T, M본인) |
+| card_no | VARCHAR(25) | NULL | **카드 식별번호(카드만)** — 전체 번호 입력, **마스킹 저장**(뒤 4자리만 노출). 명세서 라벨과 매핑 키 |
 | account_no | VARCHAR(30) | NULL | 전체 계좌번호 (예: 569-910201-47307) |
-| owner | VARCHAR(30) | NULL | 명의자 (예: 본인, 선영) |
+| owner | VARCHAR(30) | NULL | 명의자 (예: 본인, 가족) |
 | created_at | DATETIME | DEFAULT now | 생성 시각 |
 
-> 예: `신한카드KT본인` → name='신한카드KT본인', method_type='card', issuer='신한카드', owner='본인'
+> **카드 목록 = 물리 카드(번호)별 1행.** 한 명세서에 본인·가족 카드가 섞여 있으면 각 카드를 따로 등록한다.
+> `card_no`는 전체 번호를 받아 뒤 4자리만 남기고 마스킹(`•••• •••• •••• 7322`) 저장 — 금융정보 at-rest 보호(ARCHITECTURE §10).
+> 예: `하나카드 Navy 본인` → method_type='card', issuer='하나카드', card_no='•••• •••• •••• 7322', owner='본인'
 > 예: 계좌 `569-910201-47307` → name='하나은행47307', method_type='bank', issuer='하나은행', identifier='47307', account_no='569-910201-47307'
 
 ### 3.2 `category` — 분류 코드 (Parent-Child 코드 관리)
@@ -376,8 +379,9 @@ category ──────┘
 |------|------|------|------|
 | id | INTEGER | PK, AUTO | 카드 이용내역 ID |
 | statement_id | INTEGER | FK → card_statement.id, NOT NULL | 소속 명세서 |
-| payment_method_id | INTEGER | FK → payment_method.id, NOT NULL | 카드 |
-| card_label | VARCHAR(50) | NULL | 카드 구분 헤더 (예: #tag1카드 Navy 본인 7322) |
+| payment_method_id | INTEGER | FK → payment_method.id, NOT NULL | 매핑된 카드 (card_no 로 라우팅) |
+| card_label | VARCHAR(50) | NULL | 카드 구분 헤더 원문 (예: #tag1카드 Navy 본인 7322) |
+| card_no | VARCHAR(25) | NULL | **라벨에서 추출한 카드 식별번호(뒤 4자리)** — `payment_method.card_no` 와 매칭해 카드 라우팅 |
 | txn_date | DATE | NOT NULL | 거래일자 |
 | merchant_name | VARCHAR(100) | NOT NULL | 가맹점명 |
 | usage_amount | DECIMAL(15,2) | NOT NULL | 이용금액 |
@@ -750,6 +754,7 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
 
 ### 7.2 카드 명세서 자동 입력 흐름
 - **적재 단위**: 업로드 1회 = `card_statement` 1건 + `card_transaction` N건. 명세서 합계(`total_amount`)와 건별 `principal` 합이 일치하는지 검증.
+- **카드 라우팅(번호 매핑)**: 파서가 각 행의 카드 구분(`card_label`)에서 식별번호(뒤 4자리)를 뽑아 `card_transaction.card_no`에 저장하고, **가구에 등록된 카드 목록(`payment_method.card_no`)과 매칭**해 그 행의 `payment_method_id`를 정한다. 한 명세서에 본인·가족 카드가 섞여도 번호로 각각 라우팅. **미등록 번호**면 "새 카드 등록" 제안 후 보류(pending). (카드 목록은 물리 카드별 1행, 카드번호는 마스킹 저장 — §3.1)
 - **자동 분류**: `merchant_category_map`을 `priority` 순으로 적용해 `category_code` 부여 → 매칭 시 `transaction` 자동 생성·연결. 미매칭은 `is_classified='N'`으로 남겨 수기 처리 후 규칙 보강.
 - **금액 기준 (확정)**: 가계부 지출 금액 = `principal + fee`(할인 반영 실청구 원금 + 할부 이자). 일시불은 `fee=0`이라 `principal`과 동일, 할부는 이자까지 포함(1.8 확정 정책). `usage_amount`/`benefit_amount`는 분석·혜택 통계용으로 보존.
 - **카드대금 출금 제외 (확정)**: 은행 명세의 `타사카드`/`하나카드` 구분 출금(= 카드대금 결제)은 **카드 건별 지출과 중복**이므로 **지출 집계에서 제외**한다. 해당 `bank_transaction` 행은 `transaction`에 연결하지 않고(`transaction_id=NULL`), `exclude_reason='card_settlement'`로 표시해 실지출은 오직 `card_transaction`(카드 건별)으로만 잡는다. **자동 식별**: `card_statement.settle_account_id` + `billing_date` + `total_amount`로 은행 명세의 카드대금 출금 행과 매칭(예: 신한카드 명세 결제계좌 `하나은행47307` → 은행 `타사카드(신한카드)` 출금 제외).

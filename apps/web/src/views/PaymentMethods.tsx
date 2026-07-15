@@ -12,6 +12,8 @@ export function PaymentMethods() {
   const [name, setName] = useState('');
   const [methodType, setMethodType] = useState<'card' | 'bank'>('card');
   const [issuer, setIssuer] = useState('');
+  const [cardNo, setCardNo] = useState('');
+  const [owner, setOwner] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = () =>
@@ -34,9 +36,13 @@ export function PaymentMethods() {
         name,
         methodType,
         issuer: issuer || undefined,
+        cardNo: methodType === 'card' ? cardNo || undefined : undefined,
+        owner: owner || undefined,
       });
       setName('');
       setIssuer('');
+      setCardNo('');
+      setOwner('');
       await load();
     } catch (err) {
       setError(
@@ -49,18 +55,20 @@ export function PaymentMethods() {
     }
   };
 
+  const isCard = methodType === 'card';
+
   return (
     <>
       <header className="topbar">
         <span className="crumb">
-          설정 / <b>결제수단</b>
+          설정 / <b>결제수단 · 카드 목록</b>
         </span>
       </header>
       <main className="page">
         <div className="page-head">
           <div className="titles">
             <h1>결제수단</h1>
-            <p>카드와 은행 계좌를 등록합니다.</p>
+            <p>카드는 카드번호·명의를 등록하면 명세서 거래가 자동으로 매핑됩니다.</p>
           </div>
         </div>
 
@@ -92,7 +100,8 @@ export function PaymentMethods() {
                     <tr>
                       <th>이름</th>
                       <th>유형</th>
-                      <th>발급사</th>
+                      <th>카드번호</th>
+                      <th>명의</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -100,13 +109,19 @@ export function PaymentMethods() {
                       <tr key={pm.id}>
                         <td>
                           <b>{pm.name}</b>
+                          <div className="muted" style={{ fontSize: 11.5 }}>
+                            {pm.issuer ?? ''}
+                          </div>
                         </td>
                         <td>
                           <span className="pill plain">
                             {pm.methodType === 'card' ? '카드' : '계좌'}
                           </span>
                         </td>
-                        <td className="muted">{pm.issuer ?? '—'}</td>
+                        <td className="mono" style={{ fontSize: 12 }}>
+                          {pm.cardNo ?? '—'}
+                        </td>
+                        <td className="muted">{pm.owner ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -121,17 +136,6 @@ export function PaymentMethods() {
             </div>
             <form onSubmit={add} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="field">
-                <label htmlFor="pm-name">이름</label>
-                <input
-                  id="pm-name"
-                  className="input"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="하나카드47307"
-                  required
-                />
-              </div>
-              <div className="field">
                 <label htmlFor="pm-type">유형</label>
                 <select
                   id="pm-type"
@@ -144,13 +148,50 @@ export function PaymentMethods() {
                 </select>
               </div>
               <div className="field">
+                <label htmlFor="pm-name">이름</label>
+                <input
+                  id="pm-name"
+                  className="input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={isCard ? '하나카드 Navy 본인' : '하나은행47307'}
+                  required
+                />
+              </div>
+              <div className="field">
                 <label htmlFor="pm-issuer">발급사 (선택)</label>
                 <input
                   id="pm-issuer"
                   className="input"
                   value={issuer}
                   onChange={(e) => setIssuer(e.target.value)}
-                  placeholder="하나카드 / 하나은행"
+                  placeholder={isCard ? '하나카드' : '하나은행'}
+                />
+              </div>
+              {isCard && (
+                <div className="field">
+                  <label htmlFor="pm-cardno">카드번호</label>
+                  <input
+                    id="pm-cardno"
+                    className="input"
+                    value={cardNo}
+                    onChange={(e) => setCardNo(e.target.value)}
+                    placeholder="5699-1020-1234-7322"
+                    inputMode="numeric"
+                  />
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    뒤 4자리만 남기고 마스킹되어 저장됩니다.
+                  </span>
+                </div>
+              )}
+              <div className="field">
+                <label htmlFor="pm-owner">명의 (선택)</label>
+                <input
+                  id="pm-owner"
+                  className="input"
+                  value={owner}
+                  onChange={(e) => setOwner(e.target.value)}
+                  placeholder="본인 / 가족"
                 />
               </div>
               <button

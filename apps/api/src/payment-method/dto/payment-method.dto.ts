@@ -21,12 +21,20 @@ export class CreatePaymentMethodDto {
   @IsOptional()
   identifier?: string;
 
+  @ApiPropertyOptional({
+    example: '5699-1020-1234-7322',
+    description: '카드번호(카드만). 서버에서 뒤 4자리만 남기고 마스킹 저장',
+  })
+  @IsString()
+  @IsOptional()
+  cardNo?: string;
+
   @ApiPropertyOptional({ example: '569-910201-47307' })
   @IsString()
   @IsOptional()
   accountNo?: string;
 
-  @ApiPropertyOptional({ example: '본인' })
+  @ApiPropertyOptional({ example: '본인', description: '명의(본인/가족)' })
   @IsString()
   @IsOptional()
   owner?: string;

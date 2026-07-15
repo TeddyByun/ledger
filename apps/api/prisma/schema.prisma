@@ -157,6 +157,7 @@ model PaymentMethod {
   methodType  MethodType @map("method_type")
   issuer      String?
   identifier  String?
+  cardNo      String?    @map("card_no") // 카드 식별번호(마스킹 저장, 뒤 4자리 노출). 은행은 null
   accountNo   String?    @map("account_no")
   owner       String?
   createdAt   DateTime   @default(now()) @map("created_at")
@@ -333,6 +334,7 @@ model CardTransaction {
   statementId         Int      @map("statement_id")
   paymentMethodId     Int      @map("payment_method_id")
   cardLabel           String?  @map("card_label")
+  cardNo              String?  @map("card_no") // 라벨에서 추출한 카드 식별번호 — 카드 목록과 매핑 키
   txnDate             DateTime @map("txn_date") @db.Date
   merchantName        String   @map("merchant_name")
   usageAmount         Decimal  @map("usage_amount") @db.Decimal(15, 2)
