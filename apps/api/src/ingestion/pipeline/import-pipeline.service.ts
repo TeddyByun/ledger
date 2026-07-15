@@ -11,6 +11,11 @@ import { readTabular } from '../parsers/tabular.js';
 import type { NormalizedBankRow, NormalizedCardRow } from '../parsers/types.js';
 import { Issuer } from '@ledger/shared';
 
+/** 발급사 → 은행 표기(자동 생성 계좌 이름·issuer 용) */
+const ISSUER_BANK_LABEL: Record<string, string> = {
+  hana_bank: '하나은행',
+};
+
 /** 은행 거래구분/적요 기반 카테고리 힌트 (DATABASE.md §7.1) */
 const BANK_TYPE_HINT: Record<string, string> = {
   대출이자: '0101',
@@ -59,10 +64,17 @@ export class ImportPipelineService {
       let pending = 0;
 
       if (result.kind === 'bank') {
-        if (!job.paymentMethodId) throw new Error('bank import requires paymentMethodId');
+        // 계좌는 파일 헤더에서 자동 인식(없으면 업로드 시 지정한 것 사용)
+        const pmId =
+          job.paymentMethodId ??
+          (await this.resolveBankAccount(
+            job.householdId,
+            job.issuer,
+            result.account,
+          ));
         const r = await this.ingestBank(
           job.householdId,
-          job.paymentMethodId,
+          pmId,
           result.rows,
           jobId,
           months,
@@ -96,6 +108,48 @@ export class ImportPipelineService {
         where: { id: jobId },
         data: { status: 'failed', error: (e as Error).message },
       });
+    }
+  }
+
+  /** 파일에서 인식한 계좌를 등록 계좌와 매칭(없으면 자동 생성). */
+  private async resolveBankAccount(
+    householdId: number,
+    issuer: string,
+    account: { accountNo: string | null; identifier: string | null },
+  ): Promise<number> {
+    if (!account.accountNo && !account.identifier) {
+      throw new Error('계좌를 파일에서 인식하지 못했습니다. 업로드 시 계좌를 선택하세요.');
+    }
+    const or: Array<Record<string, string>> = [];
+    if (account.accountNo) or.push({ accountNo: account.accountNo });
+    if (account.identifier) or.push({ identifier: account.identifier });
+    const found = await this.prisma.paymentMethod.findFirst({
+      where: { methodType: 'bank', OR: or },
+    });
+    if (found) return found.id;
+
+    // 미등록 → 자동 생성
+    const label = ISSUER_BANK_LABEL[issuer] ?? '은행';
+    const name = `${label}${account.identifier ?? account.accountNo}`;
+    try {
+      const created = await this.prisma.paymentMethod.create({
+        data: {
+          householdId,
+          methodType: 'bank',
+          name,
+          issuer: label,
+          accountNo: account.accountNo,
+          identifier: account.identifier,
+        },
+      });
+      return created.id;
+    } catch {
+      // 이름 충돌 등 → 이름으로 재조회
+      const byName = await this.prisma.paymentMethod.findFirst({
+        where: { methodType: 'bank', name },
+      });
+      if (byName) return byName.id;
+      throw new Error('계좌 자동 등록에 실패했습니다.');
     }
   }
 

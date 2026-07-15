@@ -24,8 +24,9 @@ export class GenericBankParser implements StatementParser {
   constructor(public readonly issuer: Issuer) {}
 
   parse(rows: string[][], _ctx: ParseContext): ParseResult {
+    const account = this.extractAccount(rows);
     const { headerIndex, columns } = locateHeader(rows, BANK_ALIASES);
-    if (headerIndex < 0) return { kind: 'bank', rows: [] };
+    if (headerIndex < 0) return { kind: 'bank', account, rows: [] };
 
     const out: NormalizedBankRow[] = [];
     for (let i = headerIndex + 1; i < rows.length; i++) {
@@ -59,6 +60,23 @@ export class GenericBankParser implements StatementParser {
         ]),
       });
     }
-    return { kind: 'bank', rows: out };
+    return { kind: 'bank', account, rows: out };
+  }
+
+  /** 헤더의 계좌번호(예: 569-910201-47307) 추출. 뒤 세그먼트를 식별자로. */
+  private extractAccount(rows: string[][]): {
+    accountNo: string | null;
+    identifier: string | null;
+  } {
+    for (const row of rows) {
+      for (const c of row) {
+        const m = c?.match(/(\d{3,}-\d{5,}-\d{4,})/);
+        if (m) {
+          const accountNo = m[1]!;
+          return { accountNo, identifier: accountNo.split('-').pop() ?? null };
+        }
+      }
+    }
+    return { accountNo: null, identifier: null };
   }
 }
