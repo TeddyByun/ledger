@@ -71,6 +71,21 @@ export class ImportPipelineService {
       let classified = 0;
       let pending = 0;
 
+      // 파싱 결과가 비면 발급사↔파일 불일치일 가능성이 큼 → 명확한 안내
+      const rowCount =
+        result.kind === 'bank'
+          ? result.rows.length
+          : result.statement.rows.length;
+      if (rowCount === 0) {
+        const label =
+          ISSUER_BANK_LABEL[job.issuer] ??
+          ISSUER_CARD_LABEL[job.issuer] ??
+          job.issuer;
+        throw new Error(
+          `파일에서 거래 내역을 찾지 못했습니다. 선택한 발급사(${label})가 업로드한 파일과 맞는지 확인하세요.`,
+        );
+      }
+
       if (result.kind === 'bank') {
         // 계좌는 파일 헤더에서 자동 인식(없으면 업로드 시 지정한 것 사용)
         const pmId =
