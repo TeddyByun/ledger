@@ -14,6 +14,7 @@ import { CategoryModule } from './category/category.module.js';
 import { PaymentMethodModule } from './payment-method/payment-method.module.js';
 import { CounterpartyModule } from './counterparty/counterparty.module.js';
 import { TransactionModule } from './transaction/transaction.module.js';
+import { StatementTxnModule } from './statement-txn/statement-txn.module.js';
 import { StatisticsModule } from './statistics/statistics.module.js';
 import { IngestionModule } from './ingestion/ingestion.module.js';
 
@@ -39,6 +40,7 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     PaymentMethodModule,
     CounterpartyModule,
     TransactionModule,
+    StatementTxnModule,
     StatisticsModule,
     IngestionModule,
   ],

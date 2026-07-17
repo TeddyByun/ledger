@@ -46,7 +46,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
             <p>{session?.household.name}의 가계부 요약</p>
           </div>
           <div className="actions">
-            <button className="btn primary" onClick={() => onNavigate('transactions')}>
+            <button className="btn primary" onClick={() => onNavigate('bank-transactions')}>
               + 거래 입력
             </button>
           </div>
@@ -86,7 +86,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
           <div className="card-head" style={{ padding: '18px 20px 0' }}>
             <h3>최근 거래</h3>
             <div className="r">
-              <button className="btn ghost sm" onClick={() => onNavigate('transactions')}>
+              <button className="btn ghost sm" onClick={() => onNavigate('bank-transactions')}>
                 전체 보기
               </button>
             </div>
@@ -103,7 +103,7 @@ export function Dashboard({ onNavigate }: { onNavigate: (v: View) => void }) {
               <p>결제수단을 만들고 첫 거래를 입력해보세요.</p>
               <button
                 className="btn primary"
-                onClick={() => onNavigate('transactions')}
+                onClick={() => onNavigate('bank-transactions')}
                 style={{ marginTop: 12 }}
               >
                 거래 입력하기

@@ -67,3 +67,36 @@ export interface Transaction {
   paymentMethod?: { name: string } | null;
   counterparty?: { name: string } | null;
 }
+
+/** 은행 원천 거래 (bank_transaction) */
+export interface BankTxn {
+  id: number;
+  txnAt: string;
+  txnTypeRaw: string | null;
+  description: string | null;
+  withdrawal: string;
+  deposit: string;
+  balance: string | null;
+  branch: string | null;
+  excludeReason: string | null;
+  account: { id: number; name: string } | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+}
+
+/** 카드 원천 거래 (card_transaction) */
+export interface CardTxn {
+  id: number;
+  txnDate: string;
+  merchantName: string;
+  usageAmount: string;
+  principal: string;
+  fee: string;
+  installmentPeriod: string | null;
+  isCanceled: 'Y' | 'N';
+  cardLabel: string | null;
+  cardNo: string | null;
+  card: { id: number; name: string; cardNo: string | null } | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+}
