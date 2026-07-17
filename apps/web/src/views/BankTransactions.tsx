@@ -28,6 +28,35 @@ export function BankTransactions() {
   const [draft, setDraft] = useState<Filters>(EMPTY);
   const [applied, setApplied] = useState<Filters>(EMPTY);
 
+  // 건별 인라인 편집
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editDesc, setEditDesc] = useState('');
+  const [editCat, setEditCat] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = (b: BankTxn) => {
+    setEditId(b.id);
+    setEditDesc(b.description ?? '');
+    setEditCat(b.categoryCode ?? '');
+  };
+  const cancelEdit = () => setEditId(null);
+  const saveEdit = async (b: BankTxn) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.patch<BankTxn>(`/bank-transactions/${b.id}`, {
+        description: editDesc,
+        categoryCode: editCat,
+      });
+      setItems((prev) => prev.map((x) => (x.id === b.id ? updated : x)));
+      setEditId(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const load = useCallback(
     async (reset: boolean, f: Filters, cur: string | null) => {
       const params = new URLSearchParams({ limit: '30' });
@@ -177,18 +206,19 @@ export function BankTransactions() {
                 <th style={{ textAlign: 'right' }}>출금</th>
                 <th style={{ textAlign: 'right' }}>입금</th>
                 <th style={{ textAlign: 'right' }}>거래 후 잔액</th>
+                <th style={{ textAlign: 'center' }}>관리</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 24 }}>
+                  <td colSpan={9} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="empty">
                       <h3>거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 은행 명세서를 올리세요.</p>
@@ -199,6 +229,10 @@ export function BankTransactions() {
                 items.map((b) => {
                   const w = Number(b.withdrawal);
                   const d = Number(b.deposit);
+                  const isEditing = editId === b.id;
+                  // 방향(출금=지출, 입금=수입)에 맞는 분류만 선택지로
+                  const rowType = w > 0 ? 'expense' : 'income';
+                  const editCatOptions = catOptions.filter((c) => c.type === rowType);
                   return (
                     <tr key={b.id}>
                       <td className="date">{b.txnAt.slice(0, 10)}</td>
@@ -207,19 +241,45 @@ export function BankTransactions() {
                         {b.txnTypeRaw ?? '—'}
                       </td>
                       <td>
-                        <b>{b.description ?? '(내용 없음)'}</b>
-                        {b.excludeReason && (
-                          <span className="pill plain" style={{ marginLeft: 6 }}>
-                            {b.excludeReason === 'card_settlement'
-                              ? '카드대금'
-                              : b.excludeReason === 'self_transfer'
-                                ? '자기이체'
-                                : '제외'}
-                          </span>
+                        {isEditing ? (
+                          <input
+                            className="input"
+                            value={editDesc}
+                            onChange={(e) => setEditDesc(e.target.value)}
+                            style={{ minWidth: 160 }}
+                          />
+                        ) : (
+                          <>
+                            <b>{b.description ?? '(내용 없음)'}</b>
+                            {b.excludeReason && (
+                              <span className="pill plain" style={{ marginLeft: 6 }}>
+                                {b.excludeReason === 'card_settlement'
+                                  ? '카드대금'
+                                  : b.excludeReason === 'self_transfer'
+                                    ? '자기이체'
+                                    : '제외'}
+                              </span>
+                            )}
+                          </>
                         )}
                       </td>
                       <td>
-                        {b.categoryName ? (
+                        {isEditing ? (
+                          <select
+                            className="select"
+                            value={editCat}
+                            onChange={(e) => setEditCat(e.target.value)}
+                            style={{ minWidth: 140 }}
+                          >
+                            <option value="">미분류</option>
+                            {editCatOptions.map((c) => (
+                              <option key={c.code} value={c.code}>
+                                {c.depth === 2 ? '　└ ' : ''}
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : b.categoryName ? (
                           <span className="tag">{b.categoryName}</span>
                         ) : (
                           <span className="muted">—</span>
@@ -233,6 +293,31 @@ export function BankTransactions() {
                       </td>
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
                         {b.balance != null ? `₩${won(Number(b.balance))}` : '—'}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {isEditing ? (
+                          <>
+                            <button
+                              className="btn primary sm"
+                              onClick={() => saveEdit(b)}
+                              disabled={saving}
+                            >
+                              {saving ? '저장…' : '저장'}
+                            </button>
+                            <button
+                              className="btn ghost sm"
+                              onClick={cancelEdit}
+                              disabled={saving}
+                              style={{ marginLeft: 4 }}
+                            >
+                              취소
+                            </button>
+                          </>
+                        ) : (
+                          <button className="btn ghost sm" onClick={() => startEdit(b)}>
+                            수정
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
