@@ -49,6 +49,18 @@ export class StatementTxnController {
     return this.service.findCardSummary(query);
   }
 
+  @Post('card-transactions/bulk-classify')
+  @ApiOperation({ summary: '카드 거래 분류 일괄 변경' })
+  cardBulkClassify(@Body() dto: BulkClassifyDto) {
+    return this.service.bulkClassifyCard(dto.ids, dto.categoryCode);
+  }
+
+  @Post('card-transactions/bulk-delete')
+  @ApiOperation({ summary: '카드 거래 일괄 삭제' })
+  cardBulkDelete(@Body() dto: BulkIdsDto) {
+    return this.service.bulkDeleteCard(dto.ids);
+  }
+
   @Patch('bank-transactions/:id')
   @ApiOperation({ summary: '은행 거래 건별 수정 (적요·분류)' })
   updateBank(
