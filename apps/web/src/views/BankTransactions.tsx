@@ -22,6 +22,15 @@ const EMPTY: Filters = {
   q: '',
 };
 
+/** 기본 조회 시작일 = 3개월 전 1일 (YYYY-MM-DD) */
+function defaultFrom(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 3, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+/** 기본 필터 — 조회 시작일만 3개월 전 1일로 채움 */
+const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFrom() });
+
 interface AutoResult {
   excludedTransfer: number;
   excludedCard: number;
@@ -42,8 +51,8 @@ export function BankTransactions() {
   const [types, setTypes] = useState<string[]>([]);
 
   // 입력 중 필터 vs 실제 적용된 필터 분리 (검색 버튼/Enter 시 적용)
-  const [draft, setDraft] = useState<Filters>(EMPTY);
-  const [applied, setApplied] = useState<Filters>(EMPTY);
+  const [draft, setDraft] = useState<Filters>(withDefaults);
+  const [applied, setApplied] = useState<Filters>(withDefaults);
 
   // 건별 인라인 편집
   const [editId, setEditId] = useState<number | null>(null);
@@ -130,8 +139,8 @@ export function BankTransactions() {
 
   const search = () => setApplied(draft);
   const reset = () => {
-    setDraft(EMPTY);
-    setApplied(EMPTY);
+    setDraft(withDefaults());
+    setApplied(withDefaults());
   };
 
   const catOptions = [...cats].sort((a, b) => a.code.localeCompare(b.code));

@@ -14,6 +14,15 @@ interface Filters {
 }
 const EMPTY: Filters = { paymentMethodId: '', from: '', to: '', categoryCode: '', q: '' };
 
+/** 기본 조회 시작일 = 3개월 전 1일 (YYYY-MM-DD) */
+function defaultFrom(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 3, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+/** 기본 필터 — 조회 시작일만 3개월 전 1일로 채움 */
+const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFrom() });
+
 export function CardTransactions() {
   const [items, setItems] = useState<CardTxn[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -24,8 +33,8 @@ export function CardTransactions() {
   const [cards, setCards] = useState<PaymentMethod[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
 
-  const [draft, setDraft] = useState<Filters>(EMPTY);
-  const [applied, setApplied] = useState<Filters>(EMPTY);
+  const [draft, setDraft] = useState<Filters>(withDefaults);
+  const [applied, setApplied] = useState<Filters>(withDefaults);
 
   const load = useCallback(
     async (reset: boolean, f: Filters, cur: string | null) => {
@@ -62,8 +71,8 @@ export function CardTransactions() {
 
   const search = () => setApplied(draft);
   const reset = () => {
-    setDraft(EMPTY);
-    setApplied(EMPTY);
+    setDraft(withDefaults());
+    setApplied(withDefaults());
   };
 
   const catOptions = [...cats]
