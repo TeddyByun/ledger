@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
+import { ClassifierService } from '../ingestion/classification/classifier.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
 import { UpdateBankTxnDto } from './dto/update-bank-txn.dto.js';
@@ -27,6 +28,7 @@ export class StatementTxnService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stats: StatisticsService,
+    private readonly classifier: ClassifierService,
   ) {}
 
   // ── 은행 원천 거래 (bank_transaction) ───────────────────
@@ -183,6 +185,120 @@ export class StatementTxnService {
     return this.findBankOne(id);
   }
 
+  /**
+   * 은행 미분류 거래 일괄 자동 분류.
+   *  1) 제외(분류 불필요): 당행송금 → transfer, 카드대금(구분에 '카드') → card_settlement
+   *  2) 이력 학습: 과거 이미 분류된 동일 내용(방향별)의 가장 최근 분류를 그대로 적용
+   *  3) 규칙 보완: 가맹점 규칙(merchant_category_map)으로 마지막 시도
+   */
+  async autoClassifyBank() {
+    const hid = requireTenant().householdId;
+
+    // 1) 제외 처리 — 분류가 필요 없는 이체/카드대금
+    const excTransfer = await this.prisma.bankTransaction.updateMany({
+      where: {
+        transactionId: null,
+        excludeReason: null,
+        txnType: { name: '당행송금' },
+      },
+      data: { excludeReason: 'transfer', isClassified: 'Y' },
+    });
+    const excCard = await this.prisma.bankTransaction.updateMany({
+      where: {
+        withdrawal: { gt: 0 },
+        transactionId: null,
+        excludeReason: null,
+        txnType: { name: { contains: '카드' } },
+      },
+      data: { excludeReason: 'card_settlement', isClassified: 'Y' },
+    });
+
+    // 2) 이력 맵 구성 — 방향(출금/입금)별 정규화 내용 → 최신 분류코드
+    const history = await this.prisma.bankTransaction.findMany({
+      where: { transactionId: { not: null }, description: { not: null } },
+      select: {
+        description: true,
+        withdrawal: true,
+        transaction: { select: { categoryCode: true } },
+      },
+      orderBy: { txnAt: 'desc' },
+    });
+    const exactMap = new Map<string, string>();
+    const fuzzyMap = new Map<string, string>();
+    for (const h of history) {
+      const code = h.transaction?.categoryCode;
+      if (!code) continue;
+      const dir = Number(h.withdrawal) > 0 ? 'out' : 'in';
+      const norm = normKey(h.description);
+      if (!norm) continue;
+      const ek = `${dir}:${norm}`;
+      if (!exactMap.has(ek)) exactMap.set(ek, code);
+      const fk = `${dir}:${fuzzyKey(h.description)}`;
+      if (!fuzzyMap.has(fk)) fuzzyMap.set(fk, code);
+    }
+
+    // 3) 미분류 행 처리
+    const pending = await this.prisma.bankTransaction.findMany({
+      where: { transactionId: null, excludeReason: null },
+    });
+    const months = new Set<string>();
+    let byHistory = 0;
+    let byRule = 0;
+    for (const b of pending) {
+      const isExpense = Number(b.withdrawal) > 0;
+      const amount = isExpense ? Number(b.withdrawal) : Number(b.deposit);
+      if (amount <= 0) continue;
+      const dir = isExpense ? 'out' : 'in';
+      const norm = normKey(b.description);
+
+      let code: string | null = null;
+      let source: 'history' | 'rule' | null = null;
+      if (norm) {
+        code =
+          exactMap.get(`${dir}:${norm}`) ??
+          fuzzyMap.get(`${dir}:${fuzzyKey(b.description)}`) ??
+          null;
+        if (code) source = 'history';
+      }
+      if (!code) {
+        code = await this.classifier.classify(b.description ?? '');
+        if (code) source = 'rule';
+      }
+      if (!code) continue;
+
+      const day = startOfDay(b.txnAt);
+      const tx = await this.prisma.transaction.create({
+        data: {
+          householdId: hid,
+          type: isExpense ? 'expense' : 'income',
+          categoryCode: code,
+          paymentMethodId: b.paymentMethodId,
+          description: b.description,
+          amount,
+          transactionDate: day,
+          settledDate: day,
+          status: 'settled',
+        },
+      });
+      await this.prisma.bankTransaction.update({
+        where: { id: b.id },
+        data: { transactionId: tx.id, isClassified: 'Y' },
+      });
+      months.add(b.txnAt.toISOString().slice(0, 7));
+      if (source === 'history') byHistory++;
+      else byRule++;
+    }
+
+    for (const ym of months) await this.stats.rebuild(ym);
+    return {
+      excludedTransfer: excTransfer.count,
+      excludedCard: excCard.count,
+      classifiedByHistory: byHistory,
+      classifiedByRule: byRule,
+      remaining: pending.length - byHistory - byRule,
+    };
+  }
+
   // ── 카드 원천 거래 (card_transaction) ───────────────────
   async findCard(query: StatementTxnQueryDto) {
     const limit = query.limit ?? 50;
@@ -311,4 +427,14 @@ export class StatementTxnService {
 
 function startOfDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/** 내용 정규화 — 공백 제거(대소문자 유지). 이력 매칭 키. */
+function normKey(s: string | null): string {
+  return (s ?? '').replace(/\s/g, '');
+}
+
+/** 느슨한 매칭 키 — 끝의 숫자(월/식별번호)를 떼어 반복 항목(예: METLIFE06193/05192) 그룹화. */
+function fuzzyKey(s: string | null): string {
+  return normKey(s).replace(/\d+$/, '');
 }

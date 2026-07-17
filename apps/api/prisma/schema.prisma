@@ -32,6 +32,7 @@ enum TransactionStatus {
 enum ExcludeReason {
   card_settlement
   self_transfer
+  transfer
 }
 
 enum MatchType {

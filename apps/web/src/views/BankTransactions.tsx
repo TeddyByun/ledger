@@ -14,6 +14,14 @@ interface Filters {
 }
 const EMPTY: Filters = { paymentMethodId: '', from: '', to: '', categoryCode: '', q: '' };
 
+interface AutoResult {
+  excludedTransfer: number;
+  excludedCard: number;
+  classifiedByHistory: number;
+  classifiedByRule: number;
+  remaining: number;
+}
+
 export function BankTransactions() {
   const [items, setItems] = useState<BankTxn[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -33,6 +41,24 @@ export function BankTransactions() {
   const [editDesc, setEditDesc] = useState('');
   const [editCat, setEditCat] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // 일괄 자동 분류
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoResult, setAutoResult] = useState<AutoResult | null>(null);
+  const runAuto = async () => {
+    setAutoBusy(true);
+    setAutoResult(null);
+    setError(null);
+    try {
+      const r = await api.post<AutoResult>('/bank-transactions/auto-classify');
+      setAutoResult(r);
+      await load(true, applied, null); // 목록 새로고침
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAutoBusy(false);
+    }
+  };
 
   const startEdit = (b: BankTxn) => {
     setEditId(b.id);
@@ -112,7 +138,24 @@ export function BankTransactions() {
             <h1>은행 거래 내역</h1>
             <p>계좌 입출금 내역 · 거래 후 잔액. 조건으로 검색하세요.</p>
           </div>
+          <div className="actions">
+            <button className="btn primary" onClick={runAuto} disabled={autoBusy}>
+              {autoBusy ? '자동 분류 중…' : '자동 분류'}
+            </button>
+          </div>
         </div>
+
+        {autoResult && (
+          <div className="callout" style={{ marginBottom: 16, fontSize: 13 }}>
+            자동 분류 완료 —{' '}
+            <b>이력 {autoResult.classifiedByHistory}건</b> · 규칙{' '}
+            {autoResult.classifiedByRule}건 분류, 이체 제외{' '}
+            {autoResult.excludedTransfer}건
+            {autoResult.excludedCard > 0 && `, 카드대금 제외 ${autoResult.excludedCard}건`}
+            . 남은 미분류 <b>{autoResult.remaining}건</b>은 아래에서 “수정”으로 분류하면
+            다음 자동 분류 때 같은 내용에 적용됩니다.
+          </div>
+        )}
 
         {/* 조건 검색 */}
         <div className="card" style={{ marginBottom: 16 }}>
@@ -257,7 +300,9 @@ export function BankTransactions() {
                                   ? '카드대금'
                                   : b.excludeReason === 'self_transfer'
                                     ? '자기이체'
-                                    : '제외'}
+                                    : b.excludeReason === 'transfer'
+                                      ? '이체'
+                                      : '제외'}
                               </span>
                             )}
                           </>
