@@ -31,6 +31,24 @@ function defaultFrom(): string {
 /** 기본 필터 — 조회 시작일만 3개월 전 1일로 채움 */
 const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFrom() });
 
+interface BankSummary {
+  count: number;
+  withdrawal: number;
+  deposit: number;
+}
+
+/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
+function filterParams(f: Filters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  if (f.txnType) p.set('txnType', f.txnType);
+  if (f.categoryCode) p.set('categoryCode', f.categoryCode);
+  if (f.q) p.set('q', f.q);
+  return p;
+}
+
 interface AutoResult {
   excludedTransfer: number;
   excludedCard: number;
@@ -53,6 +71,8 @@ export function BankTransactions() {
   // 입력 중 필터 vs 실제 적용된 필터 분리 (검색 버튼/Enter 시 적용)
   const [draft, setDraft] = useState<Filters>(withDefaults);
   const [applied, setApplied] = useState<Filters>(withDefaults);
+  // 조회 조건 전체에 대한 합계(출금·입금·건수)
+  const [summary, setSummary] = useState<BankSummary | null>(null);
 
   // 건별 인라인 편집
   const [editId, setEditId] = useState<number | null>(null);
@@ -99,6 +119,11 @@ export function BankTransactions() {
       await api.post('/bank-transactions/bulk-delete', { ids: [...selected] });
       clearSel();
       await load(true, applied, null);
+      // 삭제로 건수·합계가 바뀌므로 합계 재조회
+      api
+        .get<BankSummary>(`/bank-transactions/summary?${filterParams(applied)}`)
+        .then(setSummary)
+        .catch(() => {});
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -149,13 +174,8 @@ export function BankTransactions() {
 
   const load = useCallback(
     async (reset: boolean, f: Filters, cur: string | null) => {
-      const params = new URLSearchParams({ limit: '30' });
-      if (f.paymentMethodId) params.set('paymentMethodId', f.paymentMethodId);
-      if (f.from) params.set('from', f.from);
-      if (f.to) params.set('to', f.to);
-      if (f.txnType) params.set('txnType', f.txnType);
-      if (f.categoryCode) params.set('categoryCode', f.categoryCode);
-      if (f.q) params.set('q', f.q);
+      const params = filterParams(f);
+      params.set('limit', '30');
       if (!reset && cur) params.set('cursor', cur);
       const res = await api.get<CursorPage<BankTxn>>(`/bank-transactions?${params}`);
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
@@ -174,14 +194,19 @@ export function BankTransactions() {
     api.get<string[]>('/bank-transactions/types').then(setTypes).catch(() => {});
   }, []);
 
-  // applied 가 바뀌면 처음부터 다시 로드 + 선택 초기화
+  // applied 가 바뀌면 처음부터 다시 로드 + 선택 초기화 + 합계 갱신
   useEffect(() => {
     setLoading(true);
     setError(null);
     setSelected(new Set());
+    setSummary(null);
     load(true, applied, null)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    api
+      .get<BankSummary>(`/bank-transactions/summary?${filterParams(applied)}`)
+      .then(setSummary)
+      .catch(() => setSummary(null));
   }, [applied, load]);
 
   const search = () => setApplied(draft);
@@ -518,6 +543,22 @@ export function BankTransactions() {
                 })
               )}
             </tbody>
+            {summary && summary.count > 0 && (
+              <tfoot>
+                <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
+                  <td colSpan={6} style={{ textAlign: 'right' }}>
+                    합계 ({summary.count.toLocaleString()}건)
+                  </td>
+                  <td className="money exp">
+                    {summary.withdrawal > 0 ? `−₩${won(summary.withdrawal)}` : ''}
+                  </td>
+                  <td className="money inc">
+                    {summary.deposit > 0 ? `+₩${won(summary.deposit)}` : ''}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            )}
           </table>
           <div className="tfoot">
             <span>{items.length}건 표시</span>

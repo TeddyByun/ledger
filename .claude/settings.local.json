@@ -7,7 +7,9 @@
       "Bash(pnpm install *)",
       "Bash(cd /home/coder/ledger/apps/web/src/app *)",
       "Bash(pnpm --filter @ledger/web build)",
-      "Bash(pkill -f \"next-server\")"
+      "Bash(pkill -f \"next-server\")",
+      "Bash(pkill -f \"dist/main.js\")",
+      "Bash(kill 343381)"
     ]
   }
 }
