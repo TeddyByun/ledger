@@ -33,25 +33,32 @@ function installmentRound(c: CardTxn): string {
   return `${round}회차`;
 }
 
-/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
+/** 년월(YYYY-MM) → 그 달 마지막 날짜(YYYY-MM-DD) */
+function monthEnd(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const day = new Date(y!, m!, 0).getDate();
+  return `${ym}-${String(day).padStart(2, '0')}`;
+}
+
+/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용. 기간은 년월 → 일자 변환 */
 function filterParams(f: Filters): URLSearchParams {
   const p = new URLSearchParams();
   if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
-  if (f.from) p.set('from', f.from);
-  if (f.to) p.set('to', f.to);
+  if (f.from) p.set('from', `${f.from}-01`);
+  if (f.to) p.set('to', monthEnd(f.to));
   if (f.categoryCode) p.set('categoryCode', f.categoryCode);
   if (f.q) p.set('q', f.q);
   return p;
 }
 
-/** 기본 조회 시작일 = 3개월 전 1일 (YYYY-MM-DD) */
-function defaultFrom(): string {
+/** 기본 조회 시작월 = 3개월 전 (YYYY-MM) */
+function defaultFromMonth(): string {
   const d = new Date();
   d.setMonth(d.getMonth() - 3, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-/** 기본 필터 — 조회 시작일만 3개월 전 1일로 채움 */
-const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFrom() });
+/** 기본 필터 — 조회 시작월만 3개월 전으로 채움 */
+const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFromMonth() });
 
 export function CardTransactions() {
   const [items, setItems] = useState<CardTxn[]>([]);
@@ -152,18 +159,18 @@ export function CardTransactions() {
               </select>
             </div>
             <div className="field">
-              <label>기간</label>
+              <label>기간 (년월)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
                   className="input"
-                  type="date"
+                  type="month"
                   value={draft.from}
                   onChange={(e) => setDraft({ ...draft, from: e.target.value })}
                 />
                 <span className="muted">~</span>
                 <input
                   className="input"
-                  type="date"
+                  type="month"
                   value={draft.to}
                   onChange={(e) => setDraft({ ...draft, to: e.target.value })}
                 />
@@ -218,19 +225,20 @@ export function CardTransactions() {
                 <th>할부</th>
                 <th>할부회차</th>
                 <th style={{ textAlign: 'right' }}>이용금액</th>
+                <th style={{ textAlign: 'right' }}>할인금액</th>
                 <th style={{ textAlign: 'right' }}>결제금액</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: 24 }}>
+                  <td colSpan={9} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="empty">
                       <h3>카드 거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 카드 명세서를 올리세요.</p>
@@ -240,6 +248,7 @@ export function CardTransactions() {
               ) : (
                 items.map((c) => {
                   const pay = Number(c.principal) + Number(c.fee);
+                  const discount = Number(c.usageAmount) - pay; // 할인 = 이용금액 − 결제금액
                   return (
                     <tr key={c.id} style={c.isCanceled === 'Y' ? { opacity: 0.55 } : undefined}>
                       <td className="date">{String(c.txnDate).slice(0, 10)}</td>
@@ -267,6 +276,9 @@ export function CardTransactions() {
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
                         ₩{won(Number(c.usageAmount))}
                       </td>
+                      <td className="money" style={{ color: discount > 0 ? 'var(--income)' : 'var(--muted)' }}>
+                        {discount > 0 ? `−₩${won(discount)}` : '—'}
+                      </td>
                       <td className="money exp">−₩{won(pay)}</td>
                     </tr>
                   );
@@ -281,6 +293,11 @@ export function CardTransactions() {
                   </td>
                   <td className="money" style={{ color: 'var(--ink-2)' }}>
                     ₩{won(summary.usageAmount)}
+                  </td>
+                  <td className="money" style={{ color: 'var(--income)' }}>
+                    {summary.usageAmount - summary.payAmount > 0
+                      ? `−₩${won(summary.usageAmount - summary.payAmount)}`
+                      : '—'}
                   </td>
                   <td className="money exp">−₩{won(summary.payAmount)}</td>
                 </tr>
