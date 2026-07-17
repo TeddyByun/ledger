@@ -165,10 +165,14 @@ export class ImportPipelineService {
     // 1) 스테이징 적재 (dedup)
     for (const r of rows) {
       const { code, org } = this.matchBankType(r.txnTypeRaw, types);
-      await this.prisma.bankTransaction.upsert({
+      // dedup은 가구 내에서만(같은 명세서를 다른 가구가 올려도 충돌 없음).
+      const exists = await this.prisma.bankTransaction.findFirst({
         where: { dedupHash: r.dedupHash },
-        update: {},
-        create: {
+        select: { id: true },
+      });
+      if (exists) continue;
+      await this.prisma.bankTransaction.create({
+        data: {
           householdId,
           paymentMethodId,
           txnAt: r.txnAt,
@@ -260,9 +264,10 @@ export class ImportPipelineService {
     let classified = 0;
     let pending = 0;
     for (const r of statement.rows) {
-      // dedup
-      const exists = await this.prisma.cardTransaction.findUnique({
+      // dedup은 가구 내에서만
+      const exists = await this.prisma.cardTransaction.findFirst({
         where: { dedupHash: r.dedupHash },
+        select: { id: true },
       });
       if (exists) continue;
 
