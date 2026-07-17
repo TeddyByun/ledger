@@ -16,6 +16,14 @@ const ISSUER_BANK_LABEL: Record<string, string> = {
   hana_bank: '하나은행',
 };
 
+/** 발급사 → 카드 표기(자동 생성 카드 이름·issuer 용) */
+const ISSUER_CARD_LABEL: Record<string, string> = {
+  hana_card: '하나카드',
+  hyundai_card: '현대카드',
+  shinhan_card: '신한카드',
+  samsung_card: '삼성카드',
+};
+
 /** 은행 거래구분/적요 기반 카테고리 힌트 (DATABASE.md §7.1) */
 const BANK_TYPE_HINT: Record<string, string> = {
   대출이자: '0101',
@@ -83,11 +91,56 @@ export class ImportPipelineService {
         classified = r.classified;
         pending = r.pending;
       } else {
-        if (!job.paymentMethodId) throw new Error('card import requires paymentMethodId (card)');
-        const r = await this.ingestCard(job.householdId, job.paymentMethodId, result.statement, months);
-        parsed = result.statement.rows.length;
-        classified = r.classified;
-        pending = r.pending;
+        const s = result.statement;
+        const meta = { statementYm: s.statementYm, billingDate: s.billingDate };
+        parsed = s.rows.length;
+        if (job.paymentMethodId) {
+          // 업로드 시 카드를 직접 지정 → 전체 행을 해당 카드로
+          const r = await this.ingestCard(
+            job.householdId,
+            job.paymentMethodId,
+            { ...meta, totalAmount: s.totalAmount, totalCount: s.totalCount },
+            s.rows,
+            months,
+          );
+          classified = r.classified;
+          pending = r.pending;
+        } else {
+          // 카드 미지정 → 파일의 카드번호별로 그룹화해 자동 매칭/등록
+          const groups = new Map<string, NormalizedCardRow[]>();
+          for (const row of s.rows) {
+            const key = (row.cardNo ?? '').replace(/\D/g, '');
+            const g = groups.get(key);
+            if (g) g.push(row);
+            else groups.set(key, [row]);
+          }
+          if (groups.size === 1 && groups.has('')) {
+            throw new Error(
+              '카드를 파일에서 인식하지 못했습니다. 업로드 시 카드를 선택하세요.',
+            );
+          }
+          for (const [cardNo, rows] of groups) {
+            const pmId = await this.resolveCardAccount(
+              job.householdId,
+              job.issuer,
+              cardNo,
+              rows[0]?.cardLabel ?? null,
+            );
+            const r = await this.ingestCard(
+              job.householdId,
+              pmId,
+              {
+                ...meta,
+                totalAmount: groups.size === 1 ? s.totalAmount : null,
+                totalCount: rows.length,
+              },
+              rows,
+              months,
+            );
+            classified += r.classified;
+            pending += r.pending;
+          }
+        }
       }
 
       // 월 재집계
@@ -150,6 +203,53 @@ export class ImportPipelineService {
       });
       if (byName) return byName.id;
       throw new Error('계좌 자동 등록에 실패했습니다.');
+    }
+  }
+
+  /** 파일에서 인식한 카드번호를 등록 카드와 매칭(없으면 자동 생성). */
+  private async resolveCardAccount(
+    householdId: number,
+    issuer: string,
+    cardNo: string,
+    cardLabel: string | null,
+  ): Promise<number> {
+    const digits = cardNo.replace(/\D/g, '');
+    if (!digits) {
+      throw new Error('카드를 파일에서 인식하지 못했습니다. 업로드 시 카드를 선택하세요.');
+    }
+    // 등록 카드 중 카드번호 뒷자리가 일치하는 것 찾기(마스킹 저장 대응)
+    const cards = await this.prisma.paymentMethod.findMany({
+      where: { methodType: 'card', cardNo: { not: null } },
+      select: { id: true, cardNo: true },
+    });
+    const match = (a: string, b: string) =>
+      a.length >= 3 && b.length >= 3 && (a.endsWith(b) || b.endsWith(a));
+    const found = cards.find((c) =>
+      match((c.cardNo ?? '').replace(/\D/g, ''), digits),
+    );
+    if (found) return found.id;
+
+    // 미등록 → 자동 생성. 이름은 '발급사 + 뒤4자리'로 간결하게(본인/가족 라벨은 참고용).
+    const label = ISSUER_CARD_LABEL[issuer] ?? '카드';
+    const owner = cardLabel?.match(/(본인|가족)/)?.[1];
+    const name = owner ? `${label} ${owner} ${digits}` : `${label} ${digits}`;
+    try {
+      const created = await this.prisma.paymentMethod.create({
+        data: {
+          householdId,
+          methodType: 'card',
+          name,
+          issuer: label,
+          cardNo: digits,
+        },
+      });
+      return created.id;
+    } catch {
+      const byName = await this.prisma.paymentMethod.findFirst({
+        where: { methodType: 'card', name },
+      });
+      if (byName) return byName.id;
+      throw new Error('카드 자동 등록에 실패했습니다.');
     }
   }
 
@@ -243,27 +343,33 @@ export class ImportPipelineService {
   private async ingestCard(
     householdId: number,
     paymentMethodId: number,
-    statement: { statementYm: string; billingDate: Date | null; totalAmount: number; totalCount: number; rows: NormalizedCardRow[] },
+    meta: {
+      statementYm: string;
+      billingDate: Date | null;
+      totalAmount: number | null;
+      totalCount: number;
+    },
+    rows: NormalizedCardRow[],
     months: Set<string>,
   ) {
     const stmt = await this.prisma.cardStatement.upsert({
       where: {
-        paymentMethodId_statementYm: { paymentMethodId, statementYm: statement.statementYm },
+        paymentMethodId_statementYm: { paymentMethodId, statementYm: meta.statementYm },
       },
-      update: { totalAmount: statement.totalAmount, totalCount: statement.totalCount },
+      update: { totalAmount: meta.totalAmount, totalCount: meta.totalCount },
       create: {
         householdId,
         paymentMethodId,
-        statementYm: statement.statementYm,
-        billingDate: statement.billingDate,
-        totalAmount: statement.totalAmount,
-        totalCount: statement.totalCount,
+        statementYm: meta.statementYm,
+        billingDate: meta.billingDate,
+        totalAmount: meta.totalAmount,
+        totalCount: meta.totalCount,
       },
     });
 
     let classified = 0;
     let pending = 0;
-    for (const r of statement.rows) {
+    for (const r of rows) {
       // dedup은 가구 내에서만
       const exists = await this.prisma.cardTransaction.findFirst({
         where: { dedupHash: r.dedupHash },
@@ -307,7 +413,7 @@ export class ImportPipelineService {
       // 할부는 청구월, 일시불은 이용일 기준(§7.2 회차별 월 집계)
       const isInstallment = !!r.installmentPeriod;
       const txnDate = isInstallment
-        ? new Date(`${statement.statementYm}-01T00:00:00Z`)
+        ? new Date(`${meta.statementYm}-01T00:00:00Z`)
         : startOfDay(r.txnDate);
       months.add(txnDate.toISOString().slice(0, 7));
 
@@ -320,7 +426,7 @@ export class ImportPipelineService {
           description: r.merchantName,
           amount,
           transactionDate: txnDate,
-          settledDate: statement.billingDate ?? txnDate,
+          settledDate: meta.billingDate ?? txnDate,
           status: 'settled',
         },
       });
