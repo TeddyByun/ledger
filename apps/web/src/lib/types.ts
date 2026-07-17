@@ -93,6 +93,7 @@ export interface CardTxn {
   principal: string;
   fee: string;
   installmentPeriod: string | null;
+  billingRound: string | null;
   isCanceled: 'Y' | 'N';
   cardLabel: string | null;
   cardNo: string | null;

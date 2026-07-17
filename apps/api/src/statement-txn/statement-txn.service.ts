@@ -443,6 +443,7 @@ export class StatementTxnService {
       principal: c.principal,
       fee: c.fee,
       installmentPeriod: c.installmentPeriod,
+      billingRound: c.billingRound,
       isCanceled: c.isCanceled,
       cardLabel: c.cardLabel,
       cardNo: c.cardNo,
