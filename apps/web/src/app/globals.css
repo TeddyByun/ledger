@@ -164,3 +164,5 @@ table.tbl { width:100%; border-collapse:collapse; font-size:13px; }
 
 /* center layout (login) */
 .center-screen { min-height:100vh; display:grid; place-items:center; padding:24px; }
+
+.tbl tbody tr.row-sel { background:var(--brand-soft); }

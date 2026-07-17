@@ -196,6 +196,83 @@ export class StatementTxnService {
     return this.findBankOne(id);
   }
 
+  /** 선택한 은행 거래들의 분류를 일괄 변경(미분류 행은 거래 생성·확정). */
+  async bulkClassifyBank(ids: number[], categoryCode: string) {
+    const hid = requireTenant().householdId;
+    const rows = await this.prisma.bankTransaction.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        transactionId: true,
+        txnAt: true,
+        withdrawal: true,
+        deposit: true,
+        description: true,
+        paymentMethodId: true,
+      },
+    });
+    const months = new Set<string>();
+    let updated = 0;
+    for (const b of rows) {
+      const isExpense = Number(b.withdrawal) > 0;
+      const amount = isExpense ? Number(b.withdrawal) : Number(b.deposit);
+      if (amount <= 0) continue;
+      const type = isExpense ? 'expense' : 'income';
+      if (b.transactionId) {
+        await this.prisma.transaction.update({
+          where: { id: b.transactionId },
+          data: { categoryCode, type },
+        });
+      } else {
+        const day = startOfDay(b.txnAt);
+        const tx = await this.prisma.transaction.create({
+          data: {
+            householdId: hid,
+            type,
+            categoryCode,
+            paymentMethodId: b.paymentMethodId,
+            description: b.description,
+            amount,
+            transactionDate: day,
+            settledDate: day,
+            status: 'settled',
+          },
+        });
+        await this.prisma.bankTransaction.update({
+          where: { id: b.id },
+          data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
+        });
+      }
+      months.add(b.txnAt.toISOString().slice(0, 7));
+      updated++;
+    }
+    for (const ym of months) await this.stats.rebuild(ym);
+    return { updated };
+  }
+
+  /** 선택한 은행 거래들을 일괄 삭제(연결된 거래도 함께 삭제). */
+  async bulkDeleteBank(ids: number[]) {
+    const rows = await this.prisma.bankTransaction.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, transactionId: true, txnAt: true },
+    });
+    if (rows.length === 0) return { deleted: 0 };
+    const months = new Set(rows.map((r) => r.txnAt.toISOString().slice(0, 7)));
+    const txIds = rows
+      .map((r) => r.transactionId)
+      .filter((x): x is number => x != null);
+
+    // 원천(bank_transaction)이 FK를 보유 → 먼저 삭제 후 연결 거래 삭제
+    await this.prisma.bankTransaction.deleteMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+    });
+    if (txIds.length) {
+      await this.prisma.transaction.deleteMany({ where: { id: { in: txIds } } });
+    }
+    for (const ym of months) await this.stats.rebuild(ym);
+    return { deleted: rows.length };
+  }
+
   /**
    * 은행 미분류 거래 일괄 자동 분류.
    *  1) 제외(분류 불필요): 당행송금 → transfer, 카드대금(구분에 '카드') → card_settlement
