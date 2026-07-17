@@ -405,10 +405,13 @@ export class ImportPipelineService {
       });
       if (exists) continue;
 
-      // 이용일 = 실제 이용/구매일(할부도 최초 구매일 그대로 표시).
       const usageDate = startOfDay(r.txnDate);
-      // 집계월(파생 거래)은 할부=청구월, 일시불=이용일 기준(§7.2 회차별 월 집계).
       const isInstallment = isInstallmentPeriod(r.installmentPeriod);
+      // 할부 표시 이용일 = 최초구매일의 '일' + (회차−1)개월 → 해당 명세서 월에 표기.
+      const displayDate = isInstallment
+        ? installmentUsageDate(usageDate, r.billingRound)
+        : usageDate;
+      // 집계월(파생 거래)은 할부=청구월, 일시불=이용일 기준(§7.2 회차별 월 집계).
       const effectiveDate = isInstallment
         ? new Date(`${meta.statementYm}-01T00:00:00Z`)
         : usageDate;
@@ -433,7 +436,7 @@ export class ImportPipelineService {
           installmentPlanId,
           cardLabel: r.cardLabel,
           cardNo: r.cardNo,
-          txnDate: usageDate,
+          txnDate: displayDate,
           merchantName: r.merchantName,
           usageAmount: storedUsage,
           principal: r.principal,
@@ -544,6 +547,22 @@ export class ImportPipelineService {
 /** 할부 여부 — 개월 값에 숫자가 있으면 할부. '-'·''·null·'일시불'은 일시불. */
 function isInstallmentPeriod(period: string | null): boolean {
   return !!period && /\d/.test(period);
+}
+
+/**
+ * 할부 표시 이용일 = 최초구매일의 '일' + (회차−1)개월.
+ * 예) 최초 1/5 · 3회차 → 3/5. 각 회차가 해당 명세서(사용) 월에 표기된다.
+ * 짧은 달로 일자 오버플로우 시 그 달 말일로 클램프.
+ */
+function installmentUsageDate(original: Date, round: string | null): Date {
+  const r = parseInt((round ?? '').replace(/\D/g, ''), 10);
+  const add = Number.isFinite(r) && r >= 1 ? r - 1 : 0;
+  const y = original.getUTCFullYear();
+  const m = original.getUTCMonth();
+  const day = original.getUTCDate();
+  const d = new Date(Date.UTC(y, m + add, day));
+  if (d.getUTCDate() !== day) return new Date(Date.UTC(y, m + add + 1, 0));
+  return d;
 }
 
 function startOfDay(d: Date): Date {
