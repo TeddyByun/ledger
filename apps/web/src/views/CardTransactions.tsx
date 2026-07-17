@@ -85,6 +85,56 @@ export function CardTransactions() {
   // 조회 조건 전체에 대한 합계(이용금액·결제금액·건수)
   const [summary, setSummary] = useState<CardSummary | null>(null);
 
+  // 선택 + 일괄 작업
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkCat, setBulkCat] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const clearSel = () => setSelected(new Set());
+  const toggleOne = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const bulkClassify = async () => {
+    if (!bulkCat || selected.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.post('/card-transactions/bulk-classify', {
+        ids: [...selected],
+        categoryCode: bulkCat,
+      });
+      setBulkCat('');
+      clearSel();
+      await load(true, applied, sortParam, 0);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`선택한 ${selected.size}건을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.post('/card-transactions/bulk-delete', { ids: [...selected] });
+      clearSel();
+      await load(true, applied, sortParam, 0);
+      api
+        .get<CardSummary>(`/card-transactions/summary?${filterParams(applied)}`)
+        .then(setSummary)
+        .catch(() => {});
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const load = useCallback(
     async (reset: boolean, f: Filters, sp: string, offset: number) => {
       const params = filterParams(f);
@@ -110,6 +160,7 @@ export function CardTransactions() {
     setLoading(true);
     setError(null);
     setSummary(null);
+    setSelected(new Set());
     load(true, applied, sortParam, 0)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -128,6 +179,9 @@ export function CardTransactions() {
   const catOptions = [...cats]
     .filter((c) => c.type === 'expense')
     .sort((a, b) => a.code.localeCompare(b.code));
+  const allChecked = items.length > 0 && items.every((c) => selected.has(c.id));
+  const toggleAll = () =>
+    setSelected(allChecked ? new Set() : new Set(items.map((c) => c.id)));
 
   return (
     <>
@@ -237,10 +291,66 @@ export function CardTransactions() {
 
         {error && <div className="error-banner">{error}</div>}
 
+        {selected.size > 0 && (
+          <div
+            className="card"
+            style={{
+              marginBottom: 12,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <b>{selected.size}건 선택</b>
+            <span className="muted">|</span>
+            <select
+              className="select"
+              style={{ width: 'auto', minWidth: 160 }}
+              value={bulkCat}
+              onChange={(e) => setBulkCat(e.target.value)}
+            >
+              <option value="">분류 선택…</option>
+              {catOptions.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.depth === 2 ? '　└ ' : ''}
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn primary"
+              disabled={!bulkCat || bulkBusy}
+              onClick={bulkClassify}
+            >
+              {bulkBusy ? '처리 중…' : '분류 일괄 적용'}
+            </button>
+            <button
+              className="btn"
+              style={{ color: 'var(--expense)' }}
+              disabled={bulkBusy}
+              onClick={bulkDelete}
+            >
+              선택 삭제
+            </button>
+            <button className="btn ghost" onClick={clearSel} disabled={bulkBusy}>
+              선택 해제
+            </button>
+          </div>
+        )}
+
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
               <tr>
+                <th style={{ width: 32, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    aria-label="전체 선택"
+                  />
+                </th>
                 <SortTh col="date" sort={sort} onSort={toggle}>이용일</SortTh>
                 <SortTh col="card" sort={sort} onSort={toggle}>카드</SortTh>
                 <SortTh col="merchant" sort={sort} onSort={toggle}>가맹점</SortTh>
@@ -255,13 +365,13 @@ export function CardTransactions() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: 24 }}>
+                  <td colSpan={10} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <div className="empty">
                       <h3>카드 거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 카드 명세서를 올리세요.</p>
@@ -273,7 +383,19 @@ export function CardTransactions() {
                   const pay = Number(c.principal) + Number(c.fee);
                   const discount = Number(c.usageAmount) - pay; // 할인 = 이용금액 − 결제금액
                   return (
-                    <tr key={c.id} style={c.isCanceled === 'Y' ? { opacity: 0.55 } : undefined}>
+                    <tr
+                      key={c.id}
+                      className={selected.has(c.id) ? 'row-sel' : ''}
+                      style={c.isCanceled === 'Y' ? { opacity: 0.55 } : undefined}
+                    >
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(c.id)}
+                          onChange={() => toggleOne(c.id)}
+                          aria-label="행 선택"
+                        />
+                      </td>
                       <td className="date">{String(c.txnDate).slice(0, 10)}</td>
                       <td className="muted">
                         {c.card?.name ?? c.cardLabel ?? '—'}
@@ -311,7 +433,7 @@ export function CardTransactions() {
             {summary && summary.count > 0 && (
               <tfoot>
                 <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
-                  <td colSpan={6} style={{ textAlign: 'right' }}>
+                  <td colSpan={7} style={{ textAlign: 'right' }}>
                     합계 ({summary.count.toLocaleString()}건)
                   </td>
                   <td className="money" style={{ color: 'var(--ink-2)' }}>

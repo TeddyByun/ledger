@@ -483,6 +483,81 @@ export class StatementTxnService {
     return { count: agg._count, usageAmount, payAmount };
   }
 
+  /** 선택한 카드 거래들의 분류를 일괄 변경(미분류 행은 거래 생성·확정). */
+  async bulkClassifyCard(ids: number[], categoryCode: string) {
+    const hid = requireTenant().householdId;
+    const rows = await this.prisma.cardTransaction.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        transactionId: true,
+        txnDate: true,
+        merchantName: true,
+        principal: true,
+        fee: true,
+        paymentMethodId: true,
+        isCanceled: true,
+      },
+    });
+    const months = new Set<string>();
+    let updated = 0;
+    for (const c of rows) {
+      const amount = Number(c.principal) + Number(c.fee);
+      if (c.isCanceled === 'Y' || amount <= 0) continue;
+      const day = startOfDay(c.txnDate);
+      if (c.transactionId) {
+        await this.prisma.transaction.update({
+          where: { id: c.transactionId },
+          data: { categoryCode },
+        });
+      } else {
+        const tx = await this.prisma.transaction.create({
+          data: {
+            householdId: hid,
+            type: 'expense',
+            categoryCode,
+            paymentMethodId: c.paymentMethodId,
+            description: c.merchantName,
+            amount,
+            transactionDate: day,
+            settledDate: day,
+            status: 'settled',
+          },
+        });
+        await this.prisma.cardTransaction.update({
+          where: { id: c.id },
+          data: { transactionId: tx.id, isClassified: 'Y' },
+        });
+      }
+      months.add(day.toISOString().slice(0, 7));
+      updated++;
+    }
+    for (const ym of months) await this.stats.rebuild(ym);
+    return { updated };
+  }
+
+  /** 선택한 카드 거래들을 일괄 삭제(연결된 거래도 함께 삭제). */
+  async bulkDeleteCard(ids: number[]) {
+    const rows = await this.prisma.cardTransaction.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, transactionId: true, txnDate: true },
+    });
+    if (rows.length === 0) return { deleted: 0 };
+    const months = new Set(rows.map((r) => r.txnDate.toISOString().slice(0, 7)));
+    const txIds = rows
+      .map((r) => r.transactionId)
+      .filter((x): x is number => x != null);
+
+    await this.prisma.cardTransaction.deleteMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+    });
+    if (txIds.length) {
+      await this.prisma.transaction.deleteMany({ where: { id: { in: txIds } } });
+    }
+    for (const ym of months) await this.stats.rebuild(ym);
+    return { deleted: rows.length };
+  }
+
   // ── helpers ─────────────────────────────────────────────
   private async categoryCodes(code: string): Promise<string[]> {
     const children = await this.prisma.category.findMany({
