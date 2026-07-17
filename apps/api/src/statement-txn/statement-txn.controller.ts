@@ -24,6 +24,12 @@ export class StatementTxnController {
     return this.service.findBank(query);
   }
 
+  @Get('bank-transactions/types')
+  @ApiOperation({ summary: '은행 거래 구분(txn_type_raw) 목록' })
+  bankTypes() {
+    return this.service.bankTypes();
+  }
+
   @Get('card-transactions')
   @ApiOperation({ summary: '카드 원천 거래 목록 (카드·기간·분류·가맹점 검색)' })
   card(@Query() query: StatementTxnQueryDto) {

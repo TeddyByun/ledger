@@ -68,6 +68,17 @@ export class StatementTxnService {
     return { items, page: { nextCursor, hasNext } };
   }
 
+  /** 가구 은행 거래에 존재하는 '구분'(txn_type_raw) 목록 — 필터 셀렉트용. */
+  async bankTypes(): Promise<string[]> {
+    const rows = await this.prisma.bankTransaction.findMany({
+      where: { txnTypeRaw: { not: null } },
+      distinct: ['txnTypeRaw'],
+      select: { txnTypeRaw: true },
+      orderBy: { txnTypeRaw: 'asc' },
+    });
+    return rows.map((r) => r.txnTypeRaw!).filter(Boolean);
+  }
+
   private mapBank(b: BankRow) {
     return {
       id: b.id,
@@ -369,6 +380,7 @@ export class StatementTxnService {
   ): Promise<Prisma.BankTransactionWhereInput> {
     const where: Prisma.BankTransactionWhereInput = {};
     if (q.paymentMethodId) where.paymentMethodId = q.paymentMethodId;
+    if (q.txnType) where.txnTypeRaw = q.txnType;
     if (q.from || q.to) {
       where.txnAt = {
         ...(q.from && { gte: new Date(`${q.from}T00:00:00.000Z`) }),

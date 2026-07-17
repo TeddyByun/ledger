@@ -9,10 +9,18 @@ interface Filters {
   paymentMethodId: string;
   from: string;
   to: string;
+  txnType: string;
   categoryCode: string;
   q: string;
 }
-const EMPTY: Filters = { paymentMethodId: '', from: '', to: '', categoryCode: '', q: '' };
+const EMPTY: Filters = {
+  paymentMethodId: '',
+  from: '',
+  to: '',
+  txnType: '',
+  categoryCode: '',
+  q: '',
+};
 
 interface AutoResult {
   excludedTransfer: number;
@@ -31,6 +39,7 @@ export function BankTransactions() {
 
   const [accounts, setAccounts] = useState<PaymentMethod[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
 
   // 입력 중 필터 vs 실제 적용된 필터 분리 (검색 버튼/Enter 시 적용)
   const [draft, setDraft] = useState<Filters>(EMPTY);
@@ -89,6 +98,7 @@ export function BankTransactions() {
       if (f.paymentMethodId) params.set('paymentMethodId', f.paymentMethodId);
       if (f.from) params.set('from', f.from);
       if (f.to) params.set('to', f.to);
+      if (f.txnType) params.set('txnType', f.txnType);
       if (f.categoryCode) params.set('categoryCode', f.categoryCode);
       if (f.q) params.set('q', f.q);
       if (!reset && cur) params.set('cursor', cur);
@@ -106,6 +116,7 @@ export function BankTransactions() {
       .then((pm) => setAccounts(pm.filter((p) => p.methodType === 'bank')))
       .catch(() => {});
     api.get<Category[]>('/categories').then(setCats).catch(() => {});
+    api.get<string[]>('/bank-transactions/types').then(setTypes).catch(() => {});
   }, []);
 
   // applied 가 바뀌면 처음부터 다시 로드
@@ -166,21 +177,6 @@ export function BankTransactions() {
             }}
             style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}
           >
-            <div className="field" style={{ minWidth: 180 }}>
-              <label>계좌</label>
-              <select
-                className="select"
-                value={draft.paymentMethodId}
-                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
-              >
-                <option value="">전체 계좌</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="field">
               <label>기간</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -198,6 +194,36 @@ export function BankTransactions() {
                   onChange={(e) => setDraft({ ...draft, to: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="field" style={{ minWidth: 180 }}>
+              <label>계좌</label>
+              <select
+                className="select"
+                value={draft.paymentMethodId}
+                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
+              >
+                <option value="">전체 계좌</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field" style={{ minWidth: 150 }}>
+              <label>구분</label>
+              <select
+                className="select"
+                value={draft.txnType}
+                onChange={(e) => setDraft({ ...draft, txnType: e.target.value })}
+              >
+                <option value="">전체 구분</option>
+                {types.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>분류</label>
@@ -244,8 +270,8 @@ export function BankTransactions() {
                 <th>날짜</th>
                 <th>계좌</th>
                 <th>구분</th>
-                <th>내용</th>
                 <th>분류</th>
+                <th>내용</th>
                 <th style={{ textAlign: 'right' }}>출금</th>
                 <th style={{ textAlign: 'right' }}>입금</th>
                 <th style={{ textAlign: 'right' }}>거래 후 잔액</th>
@@ -285,6 +311,28 @@ export function BankTransactions() {
                       </td>
                       <td>
                         {isEditing ? (
+                          <select
+                            className="select"
+                            value={editCat}
+                            onChange={(e) => setEditCat(e.target.value)}
+                            style={{ minWidth: 140 }}
+                          >
+                            <option value="">미분류</option>
+                            {editCatOptions.map((c) => (
+                              <option key={c.code} value={c.code}>
+                                {c.depth === 2 ? '　└ ' : ''}
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : b.categoryName ? (
+                          <span className="tag">{b.categoryName}</span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {isEditing ? (
                           <input
                             className="input"
                             value={editDesc}
@@ -306,28 +354,6 @@ export function BankTransactions() {
                               </span>
                             )}
                           </>
-                        )}
-                      </td>
-                      <td>
-                        {isEditing ? (
-                          <select
-                            className="select"
-                            value={editCat}
-                            onChange={(e) => setEditCat(e.target.value)}
-                            style={{ minWidth: 140 }}
-                          >
-                            <option value="">미분류</option>
-                            {editCatOptions.map((c) => (
-                              <option key={c.code} value={c.code}>
-                                {c.depth === 2 ? '　└ ' : ''}
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                        ) : b.categoryName ? (
-                          <span className="tag">{b.categoryName}</span>
-                        ) : (
-                          <span className="muted">—</span>
                         )}
                       </td>
                       <td className={`money ${w > 0 ? 'exp' : ''}`}>
