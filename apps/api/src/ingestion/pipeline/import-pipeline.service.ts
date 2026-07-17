@@ -405,12 +405,13 @@ export class ImportPipelineService {
       });
       if (exists) continue;
 
-      // 할부는 청구월, 일시불은 이용일 기준(§7.2 회차별 월 집계).
-      // 할부 원거래 구매일로 저장하면 최근 기간 조회에서 빠지므로 청구월로 표기.
+      // 이용일 = 실제 이용/구매일(할부도 최초 구매일 그대로 표시).
+      const usageDate = startOfDay(r.txnDate);
+      // 집계월(파생 거래)은 할부=청구월, 일시불=이용일 기준(§7.2 회차별 월 집계).
       const isInstallment = isInstallmentPeriod(r.installmentPeriod);
       const effectiveDate = isInstallment
         ? new Date(`${meta.statementYm}-01T00:00:00Z`)
-        : startOfDay(r.txnDate);
+        : usageDate;
 
       // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조)
       let installmentPlanId: number | null = null;
@@ -432,7 +433,7 @@ export class ImportPipelineService {
           installmentPlanId,
           cardLabel: r.cardLabel,
           cardNo: r.cardNo,
-          txnDate: effectiveDate,
+          txnDate: usageDate,
           merchantName: r.merchantName,
           usageAmount: storedUsage,
           principal: r.principal,
