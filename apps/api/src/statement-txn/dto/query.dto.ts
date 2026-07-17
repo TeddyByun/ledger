@@ -22,6 +22,11 @@ export class StatementTxnQueryDto {
   @IsOptional()
   txnType?: string;
 
+  @ApiPropertyOptional({ description: "할부 여부 필터: 'yes'(할부만) | 'no'(일시불만)" })
+  @IsString()
+  @IsOptional()
+  installment?: string;
+
   @ApiPropertyOptional({ example: '2026-03-01', description: '기간 시작(포함)' })
   @Matches(DATE_RE)
   @IsOptional()

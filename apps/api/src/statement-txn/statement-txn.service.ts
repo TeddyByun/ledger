@@ -516,7 +516,13 @@ export class StatementTxnService {
         ...(q.to && { lte: new Date(`${q.to}T00:00:00.000Z`) }),
       };
     }
-    if (q.categoryCode) {
+    // 할부 여부: 원거래 연결 유무로 판단
+    if (q.installment === 'yes') where.installmentPlanId = { not: null };
+    else if (q.installment === 'no') where.installmentPlanId = null;
+    // 분류: '-' 는 미분류(연결 거래 없음)만
+    if (q.categoryCode === '-') {
+      where.transactionId = null;
+    } else if (q.categoryCode) {
       where.transaction = {
         is: { categoryCode: { in: await this.categoryCodes(q.categoryCode) } },
       };
