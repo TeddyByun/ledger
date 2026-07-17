@@ -129,11 +129,6 @@ export class ImportPipelineService {
             if (g) g.push(row);
             else groups.set(key, [row]);
           }
-          if (groups.size === 1 && groups.has('')) {
-            throw new Error(
-              '카드를 파일에서 인식하지 못했습니다. 업로드 시 카드를 선택하세요.',
-            );
-          }
           for (const [cardNo, rows] of groups) {
             const pmId = await this.resolveCardAccount(
               job.householdId,
@@ -228,10 +223,29 @@ export class ImportPipelineService {
     cardNo: string,
     cardLabel: string | null,
   ): Promise<number> {
+    const label = ISSUER_CARD_LABEL[issuer] ?? '카드';
     const digits = cardNo.replace(/\D/g, '');
+
+    // 카드번호가 없는 발급사(현대 등) → 발급사 단일 카드로 매칭/생성
     if (!digits) {
-      throw new Error('카드를 파일에서 인식하지 못했습니다. 업로드 시 카드를 선택하세요.');
+      const existing = await this.prisma.paymentMethod.findFirst({
+        where: { methodType: 'card', name: label },
+      });
+      if (existing) return existing.id;
+      try {
+        const created = await this.prisma.paymentMethod.create({
+          data: { householdId, methodType: 'card', name: label, issuer: label },
+        });
+        return created.id;
+      } catch {
+        const byName = await this.prisma.paymentMethod.findFirst({
+          where: { methodType: 'card', name: label },
+        });
+        if (byName) return byName.id;
+        throw new Error('카드 자동 등록에 실패했습니다.');
+      }
     }
+
     // 등록 카드 중 카드번호 뒷자리가 일치하는 것 찾기(마스킹 저장 대응)
     const cards = await this.prisma.paymentMethod.findMany({
       where: { methodType: 'card', cardNo: { not: null } },
@@ -245,7 +259,6 @@ export class ImportPipelineService {
     if (found) return found.id;
 
     // 미등록 → 자동 생성. 이름은 '발급사 + 뒤4자리'로 간결하게(본인/가족 라벨은 참고용).
-    const label = ISSUER_CARD_LABEL[issuer] ?? '카드';
     const owner = cardLabel?.match(/(본인|가족)/)?.[1];
     const name = owner ? `${label} ${owner} ${digits}` : `${label} ${digits}`;
     try {
