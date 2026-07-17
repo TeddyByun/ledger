@@ -47,6 +47,20 @@ export class StatementTxnQueryDto {
   @IsOptional()
   cursor?: string;
 
+  @ApiPropertyOptional({
+    description: "정렬 스펙(우선순위 순): 'col:dir,col:dir' 예) 'withdrawal:desc,date:asc'",
+  })
+  @IsString()
+  @IsOptional()
+  sort?: string;
+
+  @ApiPropertyOptional({ default: 0, minimum: 0, description: '오프셋(건너뛸 건수)' })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  offset: number = 0;
+
   @ApiPropertyOptional({ default: 50, minimum: 1, maximum: 100 })
   @Type(() => Number)
   @IsInt()

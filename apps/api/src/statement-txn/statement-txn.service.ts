@@ -7,10 +7,6 @@ import { requireTenant } from '../common/tenant/tenant-context.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
 import { UpdateBankTxnDto } from './dto/update-bank-txn.dto.js';
 
-interface Cursor {
-  d: string; // ISO datetime/date
-  id: number;
-}
 
 /** bank_transaction 조회 시 공통 include */
 const BANK_INCLUDE = {
@@ -34,27 +30,14 @@ export class StatementTxnService {
   // ── 은행 원천 거래 (bank_transaction) ───────────────────
   async findBank(query: StatementTxnQueryDto) {
     const limit = query.limit ?? 50;
-    const cursor = this.decodeCursor(query.cursor);
-    const base = await this.buildBankWhere(query);
-
-    const where: Prisma.BankTransactionWhereInput = cursor
-      ? {
-          AND: [
-            base,
-            {
-              OR: [
-                { txnAt: { lt: new Date(cursor.d) } },
-                { txnAt: new Date(cursor.d), id: { lt: cursor.id } },
-              ],
-            },
-          ],
-        }
-      : base;
+    const offset = query.offset ?? 0;
+    const where = await this.buildBankWhere(query);
 
     const rows = await this.prisma.bankTransaction.findMany({
       where,
       include: BANK_INCLUDE,
-      orderBy: [{ txnAt: 'desc' }, { id: 'desc' }],
+      orderBy: this.bankOrderBy(query.sort),
+      skip: offset,
       take: limit + 1,
     });
 
@@ -62,10 +45,30 @@ export class StatementTxnService {
     const items = (hasNext ? rows.slice(0, limit) : rows).map((b) =>
       this.mapBank(b),
     );
-    const last = items[items.length - 1];
-    const nextCursor =
-      hasNext && last ? this.encodeCursor(last.txnAt, last.id) : null;
-    return { items, page: { nextCursor, hasNext } };
+    return { items, page: { nextCursor: null, hasNext } };
+  }
+
+  /** 은행 정렬 스펙 → orderBy(우선순위 순). 화이트리스트 외 무시, id 로 안정화. */
+  private bankOrderBy(
+    sort?: string,
+  ): Prisma.BankTransactionOrderByWithRelationInput[] {
+    const map: Record<
+      string,
+      (d: 'asc' | 'desc') => Prisma.BankTransactionOrderByWithRelationInput
+    > = {
+      date: (d) => ({ txnAt: d }),
+      account: (d) => ({ paymentMethod: { name: d } }),
+      type: (d) => ({ txnTypeRaw: d }),
+      category: (d) => ({ transaction: { categoryCode: d } }),
+      description: (d) => ({ description: d }),
+      withdrawal: (d) => ({ withdrawal: d }),
+      deposit: (d) => ({ deposit: d }),
+      balance: (d) => ({ balance: d }),
+    };
+    const out = parseSort(sort, map);
+    if (out.length === 0) out.push({ txnAt: 'desc' });
+    out.push({ id: 'desc' });
+    return out;
   }
 
   /** 은행 조회 조건에 해당하는 전체 거래의 합계(출금·입금·건수). */
@@ -405,22 +408,8 @@ export class StatementTxnService {
   // ── 카드 원천 거래 (card_transaction) ───────────────────
   async findCard(query: StatementTxnQueryDto) {
     const limit = query.limit ?? 50;
-    const cursor = this.decodeCursor(query.cursor);
-    const base = await this.buildCardWhere(query);
-
-    const where: Prisma.CardTransactionWhereInput = cursor
-      ? {
-          AND: [
-            base,
-            {
-              OR: [
-                { txnDate: { lt: new Date(cursor.d) } },
-                { txnDate: new Date(cursor.d), id: { lt: cursor.id } },
-              ],
-            },
-          ],
-        }
-      : base;
+    const offset = query.offset ?? 0;
+    const where = await this.buildCardWhere(query);
 
     const rows = await this.prisma.cardTransaction.findMany({
       where,
@@ -430,7 +419,8 @@ export class StatementTxnService {
           select: { categoryCode: true, category: { select: { name: true } } },
         },
       },
-      orderBy: [{ txnDate: 'desc' }, { id: 'desc' }],
+      orderBy: this.cardOrderBy(query.sort),
+      skip: offset,
       take: limit + 1,
     });
 
@@ -453,10 +443,30 @@ export class StatementTxnService {
       categoryCode: c.transaction?.categoryCode ?? null,
       categoryName: c.transaction?.category?.name ?? null,
     }));
-    const last = items[items.length - 1];
-    const nextCursor =
-      hasNext && last ? this.encodeCursor(last.txnDate, last.id) : null;
-    return { items, page: { nextCursor, hasNext } };
+    return { items, page: { nextCursor: null, hasNext } };
+  }
+
+  /** 카드 정렬 스펙 → orderBy(우선순위 순). 결제금액은 원금 기준 근사. */
+  private cardOrderBy(
+    sort?: string,
+  ): Prisma.CardTransactionOrderByWithRelationInput[] {
+    const map: Record<
+      string,
+      (d: 'asc' | 'desc') => Prisma.CardTransactionOrderByWithRelationInput
+    > = {
+      date: (d) => ({ txnDate: d }),
+      card: (d) => ({ paymentMethod: { name: d } }),
+      merchant: (d) => ({ merchantName: d }),
+      category: (d) => ({ transaction: { categoryCode: d } }),
+      installment: (d) => ({ installmentPeriod: d }),
+      round: (d) => ({ billingRound: d }),
+      usage: (d) => ({ usageAmount: d }),
+      pay: (d) => ({ principal: d }),
+    };
+    const out = parseSort(sort, map);
+    if (out.length === 0) out.push({ txnDate: 'desc' });
+    out.push({ id: 'desc' });
+    return out;
   }
 
   /** 카드 조회 조건에 해당하는 전체 거래의 합계(이용금액·결제금액=원금+수수료·건수). */
@@ -533,21 +543,20 @@ export class StatementTxnService {
     return where;
   }
 
-  private encodeCursor(date: Date, id: number): string {
-    return Buffer.from(JSON.stringify({ d: date.toISOString(), id })).toString(
-      'base64url',
-    );
-  }
+}
 
-  private decodeCursor(c?: string): Cursor | undefined {
-    if (!c) return undefined;
-    try {
-      const parsed = JSON.parse(Buffer.from(c, 'base64url').toString('utf8'));
-      return { d: String(parsed.d), id: Number(parsed.id) };
-    } catch {
-      return undefined;
-    }
+/** 정렬 스펙('col:dir,...') → orderBy 배열. 화이트리스트(map) 밖은 무시. */
+function parseSort<T>(
+  sort: string | undefined,
+  map: Record<string, (d: 'asc' | 'desc') => T>,
+): T[] {
+  const out: T[] = [];
+  for (const part of (sort ?? '').split(',')) {
+    const [col, dirRaw] = part.split(':');
+    const make = col ? map[col] : undefined;
+    if (make) out.push(make(dirRaw === 'asc' ? 'asc' : 'desc'));
   }
+  return out;
 }
 
 function startOfDay(d: Date): Date {
