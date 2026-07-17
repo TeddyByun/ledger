@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -36,5 +37,13 @@ export class StatementTxnController {
     @Body() dto: UpdateBankTxnDto,
   ) {
     return this.service.updateBank(id, dto);
+  }
+
+  @Post('bank-transactions/auto-classify')
+  @ApiOperation({
+    summary: '은행 미분류 거래 일괄 자동분류 (이체·카드대금 제외 + 이력/규칙)',
+  })
+  autoClassify() {
+    return this.service.autoClassifyBank();
   }
 }
