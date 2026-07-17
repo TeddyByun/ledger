@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
+import { useSort, SortTh } from '@/components/sortable';
 import type { BankTxn, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
 interface Filters {
@@ -22,14 +23,21 @@ const EMPTY: Filters = {
   q: '',
 };
 
-/** 기본 조회 시작일 = 3개월 전 1일 (YYYY-MM-DD) */
-function defaultFrom(): string {
+/** 년월(YYYY-MM) → 그 달 마지막 날짜(YYYY-MM-DD) */
+function monthEnd(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const day = new Date(y!, m!, 0).getDate();
+  return `${ym}-${String(day).padStart(2, '0')}`;
+}
+
+/** 기본 조회 시작월 = 3개월 전 (YYYY-MM) */
+function defaultFromMonth(): string {
   const d = new Date();
   d.setMonth(d.getMonth() - 3, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-/** 기본 필터 — 조회 시작일만 3개월 전 1일로 채움 */
-const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFrom() });
+/** 기본 필터 — 조회 시작월만 3개월 전으로 채움 */
+const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFromMonth() });
 
 interface BankSummary {
   count: number;
@@ -37,12 +45,12 @@ interface BankSummary {
   deposit: number;
 }
 
-/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
+/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용. 기간은 년월 → 일자 변환 */
 function filterParams(f: Filters): URLSearchParams {
   const p = new URLSearchParams();
   if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
-  if (f.from) p.set('from', f.from);
-  if (f.to) p.set('to', f.to);
+  if (f.from) p.set('from', `${f.from}-01`);
+  if (f.to) p.set('to', monthEnd(f.to));
   if (f.txnType) p.set('txnType', f.txnType);
   if (f.categoryCode) p.set('categoryCode', f.categoryCode);
   if (f.q) p.set('q', f.q);
@@ -59,10 +67,10 @@ interface AutoResult {
 
 export function BankTransactions() {
   const [items, setItems] = useState<BankTxn[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { sort, toggle, param: sortParam } = useSort([{ col: 'date', dir: 'desc' }]);
 
   const [accounts, setAccounts] = useState<PaymentMethod[]>([]);
   const [cats, setCats] = useState<Category[]>([]);
@@ -103,7 +111,7 @@ export function BankTransactions() {
       });
       setBulkCat('');
       clearSel();
-      await load(true, applied, null);
+      await load(true, applied, sortParam, 0);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -118,7 +126,7 @@ export function BankTransactions() {
     try {
       await api.post('/bank-transactions/bulk-delete', { ids: [...selected] });
       clearSel();
-      await load(true, applied, null);
+      await load(true, applied, sortParam, 0);
       // 삭제로 건수·합계가 바뀌므로 합계 재조회
       api
         .get<BankSummary>(`/bank-transactions/summary?${filterParams(applied)}`)
@@ -141,7 +149,7 @@ export function BankTransactions() {
     try {
       const r = await api.post<AutoResult>('/bank-transactions/auto-classify');
       setAutoResult(r);
-      await load(true, applied, null); // 목록 새로고침
+      await load(true, applied, sortParam, 0); // 목록 새로고침
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -173,13 +181,13 @@ export function BankTransactions() {
   };
 
   const load = useCallback(
-    async (reset: boolean, f: Filters, cur: string | null) => {
+    async (reset: boolean, f: Filters, sp: string, offset: number) => {
       const params = filterParams(f);
       params.set('limit', '30');
-      if (!reset && cur) params.set('cursor', cur);
+      params.set('offset', String(offset));
+      if (sp) params.set('sort', sp);
       const res = await api.get<CursorPage<BankTxn>>(`/bank-transactions?${params}`);
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-      setCursor(res.page.nextCursor);
       setHasNext(res.page.hasNext);
     },
     [],
@@ -200,14 +208,14 @@ export function BankTransactions() {
     setError(null);
     setSelected(new Set());
     setSummary(null);
-    load(true, applied, null)
+    load(true, applied, sortParam, 0)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
     api
       .get<BankSummary>(`/bank-transactions/summary?${filterParams(applied)}`)
       .then(setSummary)
       .catch(() => setSummary(null));
-  }, [applied, load]);
+  }, [applied, sortParam, load]);
 
   const search = () => setApplied(draft);
   const reset = () => {
@@ -262,18 +270,18 @@ export function BankTransactions() {
             style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}
           >
             <div className="field">
-              <label>기간</label>
+              <label>기간 (년월)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
                   className="input"
-                  type="date"
+                  type="month"
                   value={draft.from}
                   onChange={(e) => setDraft({ ...draft, from: e.target.value })}
                 />
                 <span className="muted">~</span>
                 <input
                   className="input"
-                  type="date"
+                  type="month"
                   value={draft.to}
                   onChange={(e) => setDraft({ ...draft, to: e.target.value })}
                 />
@@ -407,14 +415,14 @@ export function BankTransactions() {
                     aria-label="전체 선택"
                   />
                 </th>
-                <th>날짜</th>
-                <th>계좌</th>
-                <th>구분</th>
-                <th>분류</th>
-                <th>내용</th>
-                <th style={{ textAlign: 'right' }}>출금</th>
-                <th style={{ textAlign: 'right' }}>입금</th>
-                <th style={{ textAlign: 'right' }}>거래 후 잔액</th>
+                <SortTh col="date" sort={sort} onSort={toggle}>날짜</SortTh>
+                <SortTh col="account" sort={sort} onSort={toggle}>계좌</SortTh>
+                <SortTh col="type" sort={sort} onSort={toggle}>구분</SortTh>
+                <SortTh col="category" sort={sort} onSort={toggle}>분류</SortTh>
+                <SortTh col="description" sort={sort} onSort={toggle}>내용</SortTh>
+                <SortTh col="withdrawal" sort={sort} onSort={toggle} align="right">출금</SortTh>
+                <SortTh col="deposit" sort={sort} onSort={toggle} align="right">입금</SortTh>
+                <SortTh col="balance" sort={sort} onSort={toggle} align="right">거래 후 잔액</SortTh>
                 <th style={{ textAlign: 'center' }}>관리</th>
               </tr>
             </thead>
@@ -563,7 +571,7 @@ export function BankTransactions() {
           <div className="tfoot">
             <span>{items.length}건 표시</span>
             {hasNext && (
-              <button className="btn sm" onClick={() => load(false, applied, cursor)}>
+              <button className="btn sm" onClick={() => load(false, applied, sortParam, items.length)}>
                 더 보기
               </button>
             )}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
+import { useSort, SortTh } from '@/components/sortable';
 import type { CardTxn, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
 interface Filters {
@@ -71,7 +72,6 @@ const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFromMonth() });
 
 export function CardTransactions() {
   const [items, setItems] = useState<CardTxn[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,17 +81,18 @@ export function CardTransactions() {
 
   const [draft, setDraft] = useState<Filters>(withDefaults);
   const [applied, setApplied] = useState<Filters>(withDefaults);
+  const { sort, toggle, param: sortParam } = useSort([{ col: 'date', dir: 'desc' }]);
   // 조회 조건 전체에 대한 합계(이용금액·결제금액·건수)
   const [summary, setSummary] = useState<CardSummary | null>(null);
 
   const load = useCallback(
-    async (reset: boolean, f: Filters, cur: string | null) => {
+    async (reset: boolean, f: Filters, sp: string, offset: number) => {
       const params = filterParams(f);
       params.set('limit', '30');
-      if (!reset && cur) params.set('cursor', cur);
+      params.set('offset', String(offset));
+      if (sp) params.set('sort', sp);
       const res = await api.get<CursorPage<CardTxn>>(`/card-transactions?${params}`);
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-      setCursor(res.page.nextCursor);
       setHasNext(res.page.hasNext);
     },
     [],
@@ -109,14 +110,14 @@ export function CardTransactions() {
     setLoading(true);
     setError(null);
     setSummary(null);
-    load(true, applied, null)
+    load(true, applied, sortParam, 0)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
     api
       .get<CardSummary>(`/card-transactions/summary?${filterParams(applied)}`)
       .then(setSummary)
       .catch(() => setSummary(null));
-  }, [applied, load]);
+  }, [applied, sortParam, load]);
 
   const search = () => setApplied(draft);
   const reset = () => {
@@ -240,15 +241,15 @@ export function CardTransactions() {
           <table className="tbl">
             <thead>
               <tr>
-                <th>이용일</th>
-                <th>카드</th>
-                <th>가맹점</th>
-                <th>분류</th>
-                <th>할부</th>
-                <th>할부회차</th>
-                <th style={{ textAlign: 'right' }}>이용금액</th>
+                <SortTh col="date" sort={sort} onSort={toggle}>이용일</SortTh>
+                <SortTh col="card" sort={sort} onSort={toggle}>카드</SortTh>
+                <SortTh col="merchant" sort={sort} onSort={toggle}>가맹점</SortTh>
+                <SortTh col="category" sort={sort} onSort={toggle}>분류</SortTh>
+                <SortTh col="installment" sort={sort} onSort={toggle}>할부</SortTh>
+                <SortTh col="round" sort={sort} onSort={toggle}>할부회차</SortTh>
+                <SortTh col="usage" sort={sort} onSort={toggle} align="right">이용금액</SortTh>
                 <th style={{ textAlign: 'right' }}>할인금액</th>
-                <th style={{ textAlign: 'right' }}>결제금액</th>
+                <SortTh col="pay" sort={sort} onSort={toggle} align="right">결제금액</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -329,7 +330,7 @@ export function CardTransactions() {
           <div className="tfoot">
             <span>{items.length}건 표시</span>
             {hasNext && (
-              <button className="btn sm" onClick={() => load(false, applied, cursor)}>
+              <button className="btn sm" onClick={() => load(false, applied, sortParam, items.length)}>
                 더 보기
               </button>
             )}
