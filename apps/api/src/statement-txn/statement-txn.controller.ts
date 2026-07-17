@@ -12,6 +12,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { StatementTxnService } from './statement-txn.service.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
 import { UpdateBankTxnDto } from './dto/update-bank-txn.dto.js';
+import { BulkClassifyDto, BulkIdsDto } from './dto/bulk.dto.js';
 
 @ApiTags('statement-transactions')
 @Controller()
@@ -51,5 +52,17 @@ export class StatementTxnController {
   })
   autoClassify() {
     return this.service.autoClassifyBank();
+  }
+
+  @Post('bank-transactions/bulk-classify')
+  @ApiOperation({ summary: '은행 거래 분류 일괄 변경' })
+  bulkClassify(@Body() dto: BulkClassifyDto) {
+    return this.service.bulkClassifyBank(dto.ids, dto.categoryCode);
+  }
+
+  @Post('bank-transactions/bulk-delete')
+  @ApiOperation({ summary: '은행 거래 일괄 삭제' })
+  bulkDelete(@Body() dto: BulkIdsDto) {
+    return this.service.bulkDeleteBank(dto.ids);
   }
 }

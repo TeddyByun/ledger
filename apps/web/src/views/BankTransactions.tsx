@@ -60,6 +60,52 @@ export function BankTransactions() {
   const [editCat, setEditCat] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // 선택 + 일괄 작업
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkCat, setBulkCat] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const clearSel = () => setSelected(new Set());
+  const toggleOne = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const bulkClassify = async () => {
+    if (!bulkCat || selected.size === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.post('/bank-transactions/bulk-classify', {
+        ids: [...selected],
+        categoryCode: bulkCat,
+      });
+      setBulkCat('');
+      clearSel();
+      await load(true, applied, null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`선택한 ${selected.size}건을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.post('/bank-transactions/bulk-delete', { ids: [...selected] });
+      clearSel();
+      await load(true, applied, null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   // 일괄 자동 분류
   const [autoBusy, setAutoBusy] = useState(false);
   const [autoResult, setAutoResult] = useState<AutoResult | null>(null);
@@ -128,10 +174,11 @@ export function BankTransactions() {
     api.get<string[]>('/bank-transactions/types').then(setTypes).catch(() => {});
   }, []);
 
-  // applied 가 바뀌면 처음부터 다시 로드
+  // applied 가 바뀌면 처음부터 다시 로드 + 선택 초기화
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSelected(new Set());
     load(true, applied, null)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -144,6 +191,9 @@ export function BankTransactions() {
   };
 
   const catOptions = [...cats].sort((a, b) => a.code.localeCompare(b.code));
+  const allChecked = items.length > 0 && items.every((b) => selected.has(b.id));
+  const toggleAll = () =>
+    setSelected(allChecked ? new Set() : new Set(items.map((b) => b.id)));
 
   return (
     <>
@@ -272,10 +322,66 @@ export function BankTransactions() {
 
         {error && <div className="error-banner">{error}</div>}
 
+        {selected.size > 0 && (
+          <div
+            className="card"
+            style={{
+              marginBottom: 12,
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <b>{selected.size}건 선택</b>
+            <span className="muted">|</span>
+            <select
+              className="select"
+              style={{ width: 'auto', minWidth: 160 }}
+              value={bulkCat}
+              onChange={(e) => setBulkCat(e.target.value)}
+            >
+              <option value="">분류 선택…</option>
+              {catOptions.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.depth === 2 ? '　└ ' : ''}
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn primary"
+              disabled={!bulkCat || bulkBusy}
+              onClick={bulkClassify}
+            >
+              {bulkBusy ? '처리 중…' : '분류 일괄 적용'}
+            </button>
+            <button
+              className="btn"
+              style={{ color: 'var(--expense)' }}
+              disabled={bulkBusy}
+              onClick={bulkDelete}
+            >
+              선택 삭제
+            </button>
+            <button className="btn ghost" onClick={clearSel} disabled={bulkBusy}>
+              선택 해제
+            </button>
+          </div>
+        )}
+
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
               <tr>
+                <th style={{ width: 32, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    aria-label="전체 선택"
+                  />
+                </th>
                 <th>날짜</th>
                 <th>계좌</th>
                 <th>구분</th>
@@ -290,13 +396,13 @@ export function BankTransactions() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: 24 }}>
+                  <td colSpan={10} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <div className="empty">
                       <h3>거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 은행 명세서를 올리세요.</p>
@@ -312,7 +418,15 @@ export function BankTransactions() {
                   const rowType = w > 0 ? 'expense' : 'income';
                   const editCatOptions = catOptions.filter((c) => c.type === rowType);
                   return (
-                    <tr key={b.id}>
+                    <tr key={b.id} className={selected.has(b.id) ? 'row-sel' : ''}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(b.id)}
+                          onChange={() => toggleOne(b.id)}
+                          aria-label="행 선택"
+                        />
+                      </td>
                       <td className="date">{b.txnAt.slice(0, 10)}</td>
                       <td className="muted">{b.account?.name ?? '—'}</td>
                       <td className="muted" style={{ whiteSpace: 'nowrap' }}>
