@@ -37,6 +37,12 @@ export class StatementTxnController {
     return this.service.findCard(query);
   }
 
+  @Get('card-transactions/summary')
+  @ApiOperation({ summary: '카드 조회 조건 합계 (이용금액·결제금액·건수)' })
+  cardSummary(@Query() query: StatementTxnQueryDto) {
+    return this.service.findCardSummary(query);
+  }
+
   @Patch('bank-transactions/:id')
   @ApiOperation({ summary: '은행 거래 건별 수정 (적요·분류)' })
   updateBank(

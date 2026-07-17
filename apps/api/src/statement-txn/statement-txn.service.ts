@@ -443,6 +443,20 @@ export class StatementTxnService {
     return { items, page: { nextCursor, hasNext } };
   }
 
+  /** 카드 조회 조건에 해당하는 전체 거래의 합계(이용금액·결제금액=원금+수수료·건수). */
+  async findCardSummary(query: StatementTxnQueryDto) {
+    const where = await this.buildCardWhere(query);
+    const agg = await this.prisma.cardTransaction.aggregate({
+      where,
+      _sum: { usageAmount: true, principal: true, fee: true },
+      _count: true,
+    });
+    const usageAmount = Number(agg._sum.usageAmount ?? 0);
+    const payAmount =
+      Number(agg._sum.principal ?? 0) + Number(agg._sum.fee ?? 0);
+    return { count: agg._count, usageAmount, payAmount };
+  }
+
   // ── helpers ─────────────────────────────────────────────
   private async categoryCodes(code: string): Promise<string[]> {
     const children = await this.prisma.category.findMany({
