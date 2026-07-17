@@ -124,16 +124,19 @@ export class ImportPipelineService {
           // 카드 미지정 → 파일의 카드번호별로 그룹화해 자동 매칭/등록
           const groups = new Map<string, NormalizedCardRow[]>();
           for (const row of s.rows) {
-            const key = (row.cardNo ?? '').replace(/\D/g, '');
+            // 카드번호가 있으면 번호로, 없으면(현대 등) 이용카드 라벨로 카드 구분
+            const digits = (row.cardNo ?? '').replace(/\D/g, '');
+            const key = digits || `L:${(row.cardLabel ?? '').trim()}`;
             const g = groups.get(key);
             if (g) g.push(row);
             else groups.set(key, [row]);
           }
-          for (const [cardNo, rows] of groups) {
+          for (const [, rows] of groups) {
+            // 실제 카드번호(현대는 없음)와 이용카드 라벨을 넘겨 카드 해석
             const pmId = await this.resolveCardAccount(
               job.householdId,
               job.issuer,
-              cardNo,
+              rows[0]?.cardNo ?? '',
               rows[0]?.cardLabel ?? null,
             );
             const r = await this.ingestCard(
@@ -226,20 +229,22 @@ export class ImportPipelineService {
     const label = ISSUER_CARD_LABEL[issuer] ?? '카드';
     const digits = cardNo.replace(/\D/g, '');
 
-    // 카드번호가 없는 발급사(현대 등) → 발급사 단일 카드로 매칭/생성
+    // 카드번호가 없는 발급사(현대 등) → 이용카드 라벨별로 카드 매칭/생성
     if (!digits) {
+      const lbl = (cardLabel ?? '').trim();
+      const name = lbl ? `${label} ${lbl}` : label; // 예) '현대카드 본인 ZERO'
       const existing = await this.prisma.paymentMethod.findFirst({
-        where: { methodType: 'card', name: label },
+        where: { methodType: 'card', name },
       });
       if (existing) return existing.id;
       try {
         const created = await this.prisma.paymentMethod.create({
-          data: { householdId, methodType: 'card', name: label, issuer: label },
+          data: { householdId, methodType: 'card', name, issuer: label },
         });
         return created.id;
       } catch {
         const byName = await this.prisma.paymentMethod.findFirst({
-          where: { methodType: 'card', name: label },
+          where: { methodType: 'card', name },
         });
         if (byName) return byName.id;
         throw new Error('카드 자동 등록에 실패했습니다.');
