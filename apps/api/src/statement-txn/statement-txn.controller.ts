@@ -31,6 +31,12 @@ export class StatementTxnController {
     return this.service.bankTypes();
   }
 
+  @Get('bank-transactions/summary')
+  @ApiOperation({ summary: '은행 조회 조건 합계 (출금·입금·건수)' })
+  bankSummary(@Query() query: StatementTxnQueryDto) {
+    return this.service.findBankSummary(query);
+  }
+
   @Get('card-transactions')
   @ApiOperation({ summary: '카드 원천 거래 목록 (카드·기간·분류·가맹점 검색)' })
   card(@Query() query: StatementTxnQueryDto) {

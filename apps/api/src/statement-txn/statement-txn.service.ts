@@ -68,6 +68,21 @@ export class StatementTxnService {
     return { items, page: { nextCursor, hasNext } };
   }
 
+  /** 은행 조회 조건에 해당하는 전체 거래의 합계(출금·입금·건수). */
+  async findBankSummary(query: StatementTxnQueryDto) {
+    const where = await this.buildBankWhere(query);
+    const agg = await this.prisma.bankTransaction.aggregate({
+      where,
+      _sum: { withdrawal: true, deposit: true },
+      _count: true,
+    });
+    return {
+      count: agg._count,
+      withdrawal: Number(agg._sum.withdrawal ?? 0),
+      deposit: Number(agg._sum.deposit ?? 0),
+    };
+  }
+
   /** 가구 은행 거래에 존재하는 '구분'(txn_type_raw) 목록 — 필터 셀렉트용. */
   async bankTypes(): Promise<string[]> {
     const rows = await this.prisma.bankTransaction.findMany({
