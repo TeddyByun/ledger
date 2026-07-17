@@ -14,6 +14,23 @@ interface Filters {
 }
 const EMPTY: Filters = { paymentMethodId: '', from: '', to: '', categoryCode: '', q: '' };
 
+interface CardSummary {
+  count: number;
+  usageAmount: number;
+  payAmount: number;
+}
+
+/** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
+function filterParams(f: Filters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  if (f.categoryCode) p.set('categoryCode', f.categoryCode);
+  if (f.q) p.set('q', f.q);
+  return p;
+}
+
 /** 기본 조회 시작일 = 3개월 전 1일 (YYYY-MM-DD) */
 function defaultFrom(): string {
   const d = new Date();
@@ -35,15 +52,13 @@ export function CardTransactions() {
 
   const [draft, setDraft] = useState<Filters>(withDefaults);
   const [applied, setApplied] = useState<Filters>(withDefaults);
+  // 조회 조건 전체에 대한 합계(이용금액·결제금액·건수)
+  const [summary, setSummary] = useState<CardSummary | null>(null);
 
   const load = useCallback(
     async (reset: boolean, f: Filters, cur: string | null) => {
-      const params = new URLSearchParams({ limit: '30' });
-      if (f.paymentMethodId) params.set('paymentMethodId', f.paymentMethodId);
-      if (f.from) params.set('from', f.from);
-      if (f.to) params.set('to', f.to);
-      if (f.categoryCode) params.set('categoryCode', f.categoryCode);
-      if (f.q) params.set('q', f.q);
+      const params = filterParams(f);
+      params.set('limit', '30');
       if (!reset && cur) params.set('cursor', cur);
       const res = await api.get<CursorPage<CardTxn>>(`/card-transactions?${params}`);
       setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
@@ -64,9 +79,14 @@ export function CardTransactions() {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSummary(null);
     load(true, applied, null)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    api
+      .get<CardSummary>(`/card-transactions/summary?${filterParams(applied)}`)
+      .then(setSummary)
+      .catch(() => setSummary(null));
   }, [applied, load]);
 
   const search = () => setApplied(draft);
@@ -238,6 +258,19 @@ export function CardTransactions() {
                 })
               )}
             </tbody>
+            {summary && summary.count > 0 && (
+              <tfoot>
+                <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
+                  <td colSpan={5} style={{ textAlign: 'right' }}>
+                    합계 ({summary.count.toLocaleString()}건)
+                  </td>
+                  <td className="money" style={{ color: 'var(--ink-2)' }}>
+                    ₩{won(summary.usageAmount)}
+                  </td>
+                  <td className="money exp">−₩{won(summary.payAmount)}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
           <div className="tfoot">
             <span>{items.length}건 표시</span>
