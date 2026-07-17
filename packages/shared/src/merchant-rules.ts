@@ -29,6 +29,7 @@ const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priorit
   // ── 공과금·주거 ──
   { patterns: ['아파트관리비', '관리비'], categoryCode: '0401', priority: 20 },
   { patterns: ['전기요금', '한국전력', '도시가스', '수도요금', '상수도'], categoryCode: '0402', priority: 20 },
+  { patterns: ['월세', '임차료', '임대료'], categoryCode: '0403', priority: 20 },
   // ── 교육 ──
   { patterns: ['대학서적', '학술정보', '서점', '교보문고', '영풍문고', '알라딘'], categoryCode: '1101', priority: 20 },
   { patterns: ['팬딩', '인프런', '클래스101', '탈잉'], categoryCode: '1102', priority: 22 },

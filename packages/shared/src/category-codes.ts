@@ -31,6 +31,7 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '04', parentCode: null, name: '공과금·주거', type: E, depth: 1, sortOrder: 4 },
   { code: '0401', parentCode: '04', name: '관리비', type: E, depth: 2, sortOrder: 1 },
   { code: '0402', parentCode: '04', name: '전기·가스·수도', type: E, depth: 2, sortOrder: 2 },
+  { code: '0403', parentCode: '04', name: '월세·임차료', type: E, depth: 2, sortOrder: 3 },
   // 05 생활
   { code: '05', parentCode: null, name: '생활', type: E, depth: 1, sortOrder: 5 },
   { code: '0501', parentCode: '05', name: '외식', type: E, depth: 2, sortOrder: 1 },
