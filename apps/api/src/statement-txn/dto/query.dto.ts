@@ -17,6 +17,11 @@ export class StatementTxnQueryDto {
   @IsOptional()
   categoryCode?: string;
 
+  @ApiPropertyOptional({ description: '거래 구분(txn_type_raw) 정확일치' })
+  @IsString()
+  @IsOptional()
+  txnType?: string;
+
   @ApiPropertyOptional({ example: '2026-03-01', description: '기간 시작(포함)' })
   @Matches(DATE_RE)
   @IsOptional()
