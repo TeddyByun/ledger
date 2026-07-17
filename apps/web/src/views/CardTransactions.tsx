@@ -20,6 +20,15 @@ interface CardSummary {
   payAmount: number;
 }
 
+/** 할부 표기 — 숫자 개월이 있으면 'N개월 R회차', 아니면 '일시불' */
+function installmentLabel(c: CardTxn): string {
+  const p = c.installmentPeriod ?? '';
+  if (!/\d/.test(p)) return '일시불';
+  const round = (c.billingRound ?? '').trim();
+  const roundOk = /\d/.test(round);
+  return `${p}개월${roundOk ? ` ${round}회차` : ''}`;
+}
+
 /** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
 function filterParams(f: Filters): URLSearchParams {
   const p = new URLSearchParams();
@@ -248,7 +257,7 @@ export function CardTransactions() {
                           <span className="muted">—</span>
                         )}
                       </td>
-                      <td className="muted">{c.installmentPeriod ?? '일시불'}</td>
+                      <td className="muted">{installmentLabel(c)}</td>
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
                         ₩{won(Number(c.usageAmount))}
                       </td>

@@ -405,6 +405,13 @@ export class ImportPipelineService {
       });
       if (exists) continue;
 
+      // 할부는 청구월, 일시불은 이용일 기준(§7.2 회차별 월 집계).
+      // 할부 원거래 구매일로 저장하면 최근 기간 조회에서 빠지므로 청구월로 표기.
+      const isInstallment = isInstallmentPeriod(r.installmentPeriod);
+      const effectiveDate = isInstallment
+        ? new Date(`${meta.statementYm}-01T00:00:00Z`)
+        : startOfDay(r.txnDate);
+
       const ct = await this.prisma.cardTransaction.create({
         data: {
           householdId,
@@ -412,7 +419,7 @@ export class ImportPipelineService {
           paymentMethodId,
           cardLabel: r.cardLabel,
           cardNo: r.cardNo,
-          txnDate: r.txnDate,
+          txnDate: effectiveDate,
           merchantName: r.merchantName,
           usageAmount: r.usageAmount,
           principal: r.principal,
@@ -438,12 +445,7 @@ export class ImportPipelineService {
         pending++;
         continue;
       }
-      // 할부는 청구월, 일시불은 이용일 기준(§7.2 회차별 월 집계)
-      const isInstallment = !!r.installmentPeriod;
-      const txnDate = isInstallment
-        ? new Date(`${meta.statementYm}-01T00:00:00Z`)
-        : startOfDay(r.txnDate);
-      months.add(txnDate.toISOString().slice(0, 7));
+      months.add(effectiveDate.toISOString().slice(0, 7));
 
       const tx = await this.prisma.transaction.create({
         data: {
@@ -453,8 +455,8 @@ export class ImportPipelineService {
           paymentMethodId,
           description: r.merchantName,
           amount,
-          transactionDate: txnDate,
-          settledDate: meta.billingDate ?? txnDate,
+          transactionDate: effectiveDate,
+          settledDate: meta.billingDate ?? effectiveDate,
           status: 'settled',
         },
       });
@@ -490,6 +492,11 @@ export class ImportPipelineService {
   private async setStatus(jobId: string, status: 'parsing' | 'classifying') {
     await this.prisma.importJob.update({ where: { id: jobId }, data: { status } });
   }
+}
+
+/** 할부 여부 — 개월 값에 숫자가 있으면 할부. '-'·''·null·'일시불'은 일시불. */
+function isInstallmentPeriod(period: string | null): boolean {
+  return !!period && /\d/.test(period);
 }
 
 function startOfDay(d: Date): Date {
