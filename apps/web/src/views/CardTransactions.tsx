@@ -9,10 +9,18 @@ interface Filters {
   paymentMethodId: string;
   from: string;
   to: string;
+  installment: string; // '' 전체 | 'yes' 할부 | 'no' 일시불
   categoryCode: string;
   q: string;
 }
-const EMPTY: Filters = { paymentMethodId: '', from: '', to: '', categoryCode: '', q: '' };
+const EMPTY: Filters = {
+  paymentMethodId: '',
+  from: '',
+  to: '',
+  installment: '',
+  categoryCode: '',
+  q: '',
+};
 
 interface CardSummary {
   count: number;
@@ -46,6 +54,7 @@ function filterParams(f: Filters): URLSearchParams {
   if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
   if (f.from) p.set('from', `${f.from}-01`);
   if (f.to) p.set('to', monthEnd(f.to));
+  if (f.installment) p.set('installment', f.installment);
   if (f.categoryCode) p.set('categoryCode', f.categoryCode);
   if (f.q) p.set('q', f.q);
   return p;
@@ -176,6 +185,18 @@ export function CardTransactions() {
                 />
               </div>
             </div>
+            <div className="field" style={{ minWidth: 120 }}>
+              <label>할부</label>
+              <select
+                className="select"
+                value={draft.installment}
+                onChange={(e) => setDraft({ ...draft, installment: e.target.value })}
+              >
+                <option value="">전체</option>
+                <option value="no">일시불</option>
+                <option value="yes">할부</option>
+              </select>
+            </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>분류</label>
               <select
@@ -184,6 +205,7 @@ export function CardTransactions() {
                 onChange={(e) => setDraft({ ...draft, categoryCode: e.target.value })}
               >
                 <option value="">전체 분류</option>
+                <option value="-">미분류 (-)</option>
                 {catOptions.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.depth === 2 ? '　└ ' : ''}
