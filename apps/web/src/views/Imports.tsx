@@ -128,54 +128,6 @@ export function Imports() {
             </div>
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="field">
-                <label htmlFor="issuer">
-                  발급사
-                  {autoDetected && (
-                    <span className="muted"> (파일명에서 자동 선택됨)</span>
-                  )}
-                </label>
-                <select
-                  id="issuer"
-                  className="select"
-                  value={issuer}
-                  onChange={(e) => {
-                    setIssuer(e.target.value);
-                    setAutoDetected(false);
-                  }}
-                >
-                  {ISSUERS.map((i) => (
-                    <option key={i.value} value={i.value}>
-                      {i.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="pm">
-                  {kind === 'bank' ? '계좌' : '카드'}
-                  <span className="muted"> (선택 — 파일에서 자동 인식)</span>
-                </label>
-                <select
-                  id="pm"
-                  className="select"
-                  value={paymentMethodId}
-                  onChange={(e) => setPaymentMethodId(e.target.value)}
-                >
-                  <option value="">파일에서 자동 인식</option>
-                  {options.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                      {p.cardNo ? ` (${p.cardNo})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <span className="muted" style={{ fontSize: 11 }}>
-                  {kind === 'bank'
-                    ? '은행 명세서는 파일 안 계좌번호로 자동 매칭·등록됩니다. (특정 계좌로 강제하려면 선택)'
-                    : '카드 명세서는 파일 안 카드번호로 자동 매칭·등록됩니다. (특정 카드로 강제하려면 선택)'}
-                </span>
-              </div>
-              <div className="field">
                 <label htmlFor="file">명세서 파일 (.xlsx)</label>
                 <input
                   id="file"
@@ -185,11 +137,70 @@ export function Imports() {
                   onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
                   style={{ padding: 9 }}
                 />
+                {!file && (
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    파일을 선택하면 발급사와 계좌/카드가 자동으로 인식됩니다.
+                  </span>
+                )}
               </div>
+
+              {file && (
+                <>
+                  <div className="field">
+                    <label htmlFor="issuer">
+                      발급사
+                      {autoDetected && (
+                        <span className="muted"> (파일명에서 자동 선택됨)</span>
+                      )}
+                    </label>
+                    <select
+                      id="issuer"
+                      className="select"
+                      value={issuer}
+                      onChange={(e) => {
+                        setIssuer(e.target.value);
+                        setAutoDetected(false);
+                      }}
+                    >
+                      {ISSUERS.map((i) => (
+                        <option key={i.value} value={i.value}>
+                          {i.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="pm">
+                      {kind === 'bank' ? '계좌' : '카드'}
+                      <span className="muted"> (선택 — 파일에서 자동 인식)</span>
+                    </label>
+                    <select
+                      id="pm"
+                      className="select"
+                      value={paymentMethodId}
+                      onChange={(e) => setPaymentMethodId(e.target.value)}
+                    >
+                      <option value="">파일에서 자동 인식</option>
+                      {options.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {p.cardNo ? ` (${p.cardNo})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="muted" style={{ fontSize: 11 }}>
+                      {kind === 'bank'
+                        ? '은행 명세서는 파일 안 계좌번호로 자동 매칭·등록됩니다. (특정 계좌로 강제하려면 선택)'
+                        : '카드 명세서는 파일 안 카드번호로 자동 매칭·등록됩니다. (특정 카드로 강제하려면 선택)'}
+                    </span>
+                  </div>
+                </>
+              )}
+
               <button
                 className="btn primary"
                 type="submit"
-                disabled={busy}
+                disabled={busy || !file}
                 style={{ justifyContent: 'center', padding: 11 }}
               >
                 {busy ? '업로드 중…' : '업로드'}
