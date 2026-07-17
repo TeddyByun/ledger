@@ -96,6 +96,7 @@ export class HyundaiCardParser implements StatementParser {
         saleType: installmentPeriod ? '할부' : '일시불',
         isCanceled: usageAmount < 0,
         point,
+        // 할부는 회차 포함해 월별로 다른 건으로 인식(중복제거 방지)
         dedupHash: dedupHash([
           this.issuer,
           txnDate.toISOString(),
@@ -103,6 +104,7 @@ export class HyundaiCardParser implements StatementParser {
           usageAmount,
           principal,
           pm,
+          billingRound,
         ]),
       });
     }

@@ -412,16 +412,29 @@ export class ImportPipelineService {
         ? new Date(`${meta.statementYm}-01T00:00:00Z`)
         : startOfDay(r.txnDate);
 
+      // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조)
+      let installmentPlanId: number | null = null;
+      if (isInstallment && r.usageAmount > 0) {
+        installmentPlanId = await this.upsertInstallmentPlan(
+          householdId,
+          paymentMethodId,
+          r,
+        );
+      }
+      // 할부 월 청구건의 '이용금액' = 이번달 청구액(원금+이자). 전체금액은 원거래 테이블.
+      const storedUsage = isInstallment ? r.principal + r.fee : r.usageAmount;
+
       const ct = await this.prisma.cardTransaction.create({
         data: {
           householdId,
           statementId: stmt.id,
           paymentMethodId,
+          installmentPlanId,
           cardLabel: r.cardLabel,
           cardNo: r.cardNo,
           txnDate: effectiveDate,
           merchantName: r.merchantName,
-          usageAmount: r.usageAmount,
+          usageAmount: storedUsage,
           principal: r.principal,
           fee: r.fee,
           installmentPeriod: r.installmentPeriod,
@@ -467,6 +480,39 @@ export class ImportPipelineService {
       classified++;
     }
     return { classified, pending };
+  }
+
+  /** 할부 원거래(최초 구매) 적재/조회 — 회차마다 동일 원거래를 참조. */
+  private async upsertInstallmentPlan(
+    householdId: number,
+    paymentMethodId: number,
+    r: NormalizedCardRow,
+  ): Promise<number> {
+    const totalMonths =
+      parseInt((r.installmentPeriod ?? '').replace(/\D/g, ''), 10) || 0;
+    const original = startOfDay(r.txnDate);
+    const dedupKey = [
+      r.cardNo ?? '',
+      r.merchantName,
+      original.toISOString().slice(0, 10),
+      r.usageAmount,
+      totalMonths,
+    ].join('|');
+    const plan = await this.prisma.installmentPlan.upsert({
+      where: { householdId_dedupKey: { householdId, dedupKey } },
+      update: {},
+      create: {
+        householdId,
+        paymentMethodId,
+        cardNo: r.cardNo,
+        merchantName: r.merchantName,
+        originalDate: original,
+        totalAmount: r.usageAmount,
+        totalMonths,
+        dedupKey,
+      },
+    });
+    return plan.id;
   }
 
   // ── helpers ──────────────────────────────────────────
