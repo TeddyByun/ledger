@@ -62,8 +62,7 @@ export function Imports() {
     e.preventDefault();
     setError(null);
     if (!file) return setError('파일을 선택하세요.');
-    // 은행은 파일에서 계좌 자동 인식 → 선택 안 해도 됨. 카드는 선택 필요.
-    if (kind === 'card' && !paymentMethodId) return setError('카드를 선택하세요.');
+    // 은행·카드 모두 파일 내용에서 계좌/카드번호로 자동 인식 → 선택 안 해도 됨.
     setBusy(true);
     setJob(null);
     try {
@@ -123,18 +122,15 @@ export function Imports() {
               <div className="field">
                 <label htmlFor="pm">
                   {kind === 'bank' ? '계좌' : '카드'}
-                  {kind === 'bank' && <span className="muted"> (선택 — 파일에서 자동 인식)</span>}
+                  <span className="muted"> (선택 — 파일에서 자동 인식)</span>
                 </label>
                 <select
                   id="pm"
                   className="select"
                   value={paymentMethodId}
                   onChange={(e) => setPaymentMethodId(e.target.value)}
-                  required={kind === 'card'}
                 >
-                  <option value="">
-                    {kind === 'bank' ? '파일에서 자동 인식' : '선택…'}
-                  </option>
+                  <option value="">파일에서 자동 인식</option>
                   {options.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -142,17 +138,11 @@ export function Imports() {
                     </option>
                   ))}
                 </select>
-                {kind === 'bank' ? (
-                  <span className="muted" style={{ fontSize: 11 }}>
-                    은행 명세서는 파일 안 계좌번호로 자동 매칭·등록됩니다. (특정 계좌로 강제하려면 선택)
-                  </span>
-                ) : (
-                  options.length === 0 && (
-                    <span className="muted" style={{ fontSize: 11 }}>
-                      먼저 “카드 관리”에서 카드를 등록하세요.
-                    </span>
-                  )
-                )}
+                <span className="muted" style={{ fontSize: 11 }}>
+                  {kind === 'bank'
+                    ? '은행 명세서는 파일 안 계좌번호로 자동 매칭·등록됩니다. (특정 계좌로 강제하려면 선택)'
+                    : '카드 명세서는 파일 안 카드번호로 자동 매칭·등록됩니다. (특정 카드로 강제하려면 선택)'}
+                </span>
               </div>
               <div className="field">
                 <label htmlFor="file">명세서 파일 (.xlsx)</label>
