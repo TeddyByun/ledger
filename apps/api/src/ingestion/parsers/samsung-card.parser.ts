@@ -56,8 +56,13 @@ export class SamsungCardParser implements StatementParser {
       const installmentPeriod = norm(cell(row, columns, 'installmentPeriod'));
       const billingRound = norm(cell(row, columns, 'billingRound'));
 
+      // 이용구분은 '본 인 252' / '가족 …' 형태. 해외이용 섹션은 컬럼 구성이 달라
+      // 이 자리에 접수일(예: 20260504)이 들어오는데, 해당 매출은 일시불에 이미
+      // 포함된 상세이므로 제외한다(중복 적재·가짜 카드번호 방지).
       const label = norm(cell(row, columns, 'cardLabel'));
-      const cardNo = label ? (label.replace(/\s/g, '').match(/\d+/)?.[0] ?? null) : null;
+      const compact = (label ?? '').replace(/\s/g, '');
+      if (!/(본인|가족)/.test(compact)) continue;
+      const cardNo = compact.match(/\d+/)?.[0] ?? null;
 
       out.push({
         cardLabel: label,
