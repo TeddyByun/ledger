@@ -80,6 +80,7 @@ export class SamsungCardParser implements StatementParser {
         saleType: installmentPeriod ? '할부' : '일시불',
         isCanceled: usageAmount < 0,
         point: parseAmount(cell(row, columns, 'point')) ?? 0,
+        // 할부는 회차 포함해 월별로 다른 건으로 인식(중복제거 방지)
         dedupHash: dedupHash([
           this.issuer,
           txnDate.toISOString(),
@@ -88,6 +89,7 @@ export class SamsungCardParser implements StatementParser {
           principal,
           benefitAmount,
           cardNo,
+          billingRound,
         ]),
       });
     }

@@ -68,6 +68,7 @@ export class HanaCardParser implements StatementParser {
       const benefitAmount = parseAmount(cell(row, columns, 'benefitAmount')) ?? 0;
       const saleType = norm(cell(row, columns, 'saleType'));
       const isCanceled = usageAmount < 0 || saleType === '취소';
+      const billingRound = norm(cell(row, columns, 'billingRound'));
 
       out.push({
         cardLabel: curLabel,
@@ -78,13 +79,14 @@ export class HanaCardParser implements StatementParser {
         principal,
         fee,
         installmentPeriod: norm(cell(row, columns, 'installmentPeriod')),
-        billingRound: norm(cell(row, columns, 'billingRound')),
+        billingRound,
         benefitType: norm(cell(row, columns, 'benefitType')),
         benefitAmount,
         region: norm(cell(row, columns, 'region')),
         saleType,
         isCanceled,
         point: parseAmount(cell(row, columns, 'point')) ?? 0,
+        // 할부는 회차를 포함해 월별로 다른 건으로 인식(중복제거 방지)
         dedupHash: dedupHash([
           this.issuer,
           txnDate.toISOString(),
@@ -93,6 +95,7 @@ export class HanaCardParser implements StatementParser {
           principal,
           benefitAmount,
           curCardNo,
+          billingRound,
         ]),
       });
     }

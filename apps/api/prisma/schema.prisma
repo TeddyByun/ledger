@@ -83,6 +83,7 @@ model Household {
   bankTransactions BankTransaction[]
   cardStatements   CardStatement[]
   cardTransactions CardTransaction[]
+  installmentPlans InstallmentPlan[]
   importJobs       ImportJob[]
 
   @@map("household")
@@ -168,6 +169,7 @@ model PaymentMethod {
   cardStatements      CardStatement[]      @relation("CardOfStatement")
   settledStatements   CardStatement[]      @relation("SettleAccount")
   cardTransactions    CardTransaction[]
+  installmentPlans    InstallmentPlan[]
   monthlyPaymentStats MonthlyPaymentStat[]
 
   @@unique([householdId, name])
@@ -355,14 +357,16 @@ model CardTransaction {
   pointName           String?  @map("point_name")
   point               Decimal  @default(0) @db.Decimal(15, 2)
   transactionId       Int?     @unique @map("transaction_id")
+  installmentPlanId   Int?     @map("installment_plan_id")
   isClassified        YesNo    @default(N) @map("is_classified")
   dedupHash           String?  @map("dedup_hash")
   createdAt           DateTime @default(now()) @map("created_at")
 
-  household     Household     @relation(fields: [householdId], references: [id])
-  statement     CardStatement @relation(fields: [statementId], references: [id])
-  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
-  transaction   Transaction?  @relation(fields: [transactionId], references: [id])
+  household       Household        @relation(fields: [householdId], references: [id])
+  statement       CardStatement    @relation(fields: [statementId], references: [id])
+  paymentMethod   PaymentMethod    @relation(fields: [paymentMethodId], references: [id])
+  transaction     Transaction?     @relation(fields: [transactionId], references: [id])
+  installmentPlan InstallmentPlan? @relation(fields: [installmentPlanId], references: [id])
 
   @@unique([householdId, dedupHash])
   @@index([householdId])
@@ -371,6 +375,30 @@ model CardTransaction {
   @@index([txnDate])
   @@index([isClassified])
   @@map("card_transaction")
+}
+
+// ─────────────────────────────────────────────
+// 할부 원거래(최초 구매) — 매달 청구건이 참조
+// ─────────────────────────────────────────────
+model InstallmentPlan {
+  id              Int      @id @default(autoincrement())
+  householdId     Int      @map("household_id")
+  paymentMethodId Int      @map("payment_method_id")
+  cardNo          String?  @map("card_no")
+  merchantName    String   @map("merchant_name")
+  originalDate    DateTime @map("original_date") @db.Date // 최초 구매일
+  totalAmount     Decimal  @map("total_amount") @db.Decimal(15, 2) // 전체 이용금액
+  totalMonths     Int      @map("total_months") // 총 할부개월
+  dedupKey        String   @map("dedup_key")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  household     Household         @relation(fields: [householdId], references: [id])
+  paymentMethod PaymentMethod     @relation(fields: [paymentMethodId], references: [id])
+  transactions  CardTransaction[]
+
+  @@unique([householdId, dedupKey])
+  @@index([householdId])
+  @@map("installment_plan")
 }
 
 model MerchantCategoryMap {

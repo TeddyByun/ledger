@@ -20,13 +20,17 @@ interface CardSummary {
   payAmount: number;
 }
 
-/** 할부 표기 — 숫자 개월이 있으면 'N개월 R회차', 아니면 '일시불' */
-function installmentLabel(c: CardTxn): string {
+/** 할부(총 개월) 표기 — 숫자 개월이 있으면 'N개월', 아니면 '일시불' */
+function installmentMonths(c: CardTxn): string {
   const p = c.installmentPeriod ?? '';
-  if (!/\d/.test(p)) return '일시불';
+  return /\d/.test(p) ? `${p}개월` : '일시불';
+}
+/** 할부회차 — 이번 명세서의 결제 회차. 일시불이면 '—' */
+function installmentRound(c: CardTxn): string {
+  const p = c.installmentPeriod ?? '';
   const round = (c.billingRound ?? '').trim();
-  const roundOk = /\d/.test(round);
-  return `${p}개월${roundOk ? ` ${round}회차` : ''}`;
+  if (!/\d/.test(p) || !/\d/.test(round)) return '—';
+  return `${round}회차`;
 }
 
 /** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용 */
@@ -212,6 +216,7 @@ export function CardTransactions() {
                 <th>가맹점</th>
                 <th>분류</th>
                 <th>할부</th>
+                <th>할부회차</th>
                 <th style={{ textAlign: 'right' }}>이용금액</th>
                 <th style={{ textAlign: 'right' }}>결제금액</th>
               </tr>
@@ -219,13 +224,13 @@ export function CardTransactions() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: 24 }}>
+                  <td colSpan={8} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="empty">
                       <h3>카드 거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 카드 명세서를 올리세요.</p>
@@ -257,7 +262,8 @@ export function CardTransactions() {
                           <span className="muted">—</span>
                         )}
                       </td>
-                      <td className="muted">{installmentLabel(c)}</td>
+                      <td className="muted">{installmentMonths(c)}</td>
+                      <td className="muted">{installmentRound(c)}</td>
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
                         ₩{won(Number(c.usageAmount))}
                       </td>
@@ -270,7 +276,7 @@ export function CardTransactions() {
             {summary && summary.count > 0 && (
               <tfoot>
                 <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
-                  <td colSpan={5} style={{ textAlign: 'right' }}>
+                  <td colSpan={6} style={{ textAlign: 'right' }}>
                     합계 ({summary.count.toLocaleString()}건)
                   </td>
                   <td className="money" style={{ color: 'var(--ink-2)' }}>
