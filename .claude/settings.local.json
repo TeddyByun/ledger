@@ -6,7 +6,8 @@
       "Bash(pnpm --filter @ledger/api build)",
       "Bash(pnpm install *)",
       "Bash(cd /home/coder/ledger/apps/web/src/app *)",
-      "Bash(pnpm --filter @ledger/web build)"
+      "Bash(pnpm --filter @ledger/web build)",
+      "Bash(pkill -f \"next-server\")"
     ]
   }
 }

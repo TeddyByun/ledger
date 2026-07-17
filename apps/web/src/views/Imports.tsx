@@ -12,6 +12,15 @@ const ISSUERS = [
   { value: 'samsung_card', label: '삼성카드', kind: 'card' as const },
 ];
 
+/** 파일명에서 발급사 추정 (예: '2604_신한카드-…' → shinhan_card) */
+function detectIssuer(filename: string): string | null {
+  const name = filename.replace(/\s/g, '');
+  for (const i of ISSUERS) {
+    if (name.includes(i.label)) return i.value;
+  }
+  return null;
+}
+
 const STATUS_LABEL: Record<ImportJob['status'], string> = {
   queued: '대기 중',
   parsing: '파싱 중',
@@ -29,7 +38,21 @@ export function Imports() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ImportJob | null>(null);
+  const [autoDetected, setAutoDetected] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 파일 선택 시 파일명으로 발급사 자동 선택(추정 실패 시 현재 값 유지)
+  const onPickFile = (f: File | null) => {
+    setFile(f);
+    setError(null);
+    if (f) {
+      const det = detectIssuer(f.name);
+      if (det && det !== issuer) setIssuer(det);
+      setAutoDetected(!!det);
+    } else {
+      setAutoDetected(false);
+    }
+  };
 
   const kind = ISSUERS.find((i) => i.value === issuer)?.kind ?? 'bank';
   const options = pms.filter((p) => p.methodType === kind);
@@ -105,12 +128,20 @@ export function Imports() {
             </div>
             <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div className="field">
-                <label htmlFor="issuer">발급사</label>
+                <label htmlFor="issuer">
+                  발급사
+                  {autoDetected && (
+                    <span className="muted"> (파일명에서 자동 선택됨)</span>
+                  )}
+                </label>
                 <select
                   id="issuer"
                   className="select"
                   value={issuer}
-                  onChange={(e) => setIssuer(e.target.value)}
+                  onChange={(e) => {
+                    setIssuer(e.target.value);
+                    setAutoDetected(false);
+                  }}
                 >
                   {ISSUERS.map((i) => (
                     <option key={i.value} value={i.value}>
@@ -151,7 +182,7 @@ export function Imports() {
                   className="input"
                   type="file"
                   accept=".xlsx,.xls,.csv"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
                   style={{ padding: 9 }}
                 />
               </div>
