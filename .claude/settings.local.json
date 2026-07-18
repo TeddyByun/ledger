@@ -10,7 +10,9 @@
       "Bash(pkill -f \"next-server\")",
       "Bash(pkill -f \"dist/main.js\")",
       "Bash(kill 343381)",
-      "Bash(pkill -9 -f \"dist/main.js\")"
+      "Bash(pkill -9 -f \"dist/main.js\")",
+      "Bash(pkill -9 -f \"next-server\")",
+      "Bash(curl -s -o /dev/null -w \"api %{http_code}\\\\n\" localhost:4000/api/v1/docs)"
     ]
   }
 }
