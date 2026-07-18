@@ -61,7 +61,7 @@ export function PaymentMethods() {
     <>
       <header className="topbar">
         <span className="crumb">
-          설정 / <b>결제수단 · 카드 목록</b>
+          관리 / <b>결제수단 · 카드 목록</b>
         </span>
       </header>
       <main className="page">

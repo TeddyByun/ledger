@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IsEnum, IsOptional } from 'class-validator';
 import { TransactionType } from '@ledger/shared';
 import { CategoryService } from './category.service.js';
+import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto.js';
 
 class CategoryQueryDto {
   @IsEnum(TransactionType)
@@ -31,5 +32,23 @@ export class CategoryController {
   @ApiOperation({ summary: '분류 단건 조회' })
   findOne(@Param('code') code: string) {
     return this.categories.findOne(code);
+  }
+
+  @Post()
+  @ApiOperation({ summary: '분류 추가 (대분류 또는 소분류)' })
+  create(@Body() dto: CreateCategoryDto) {
+    return this.categories.create(dto);
+  }
+
+  @Patch(':code')
+  @ApiOperation({ summary: '분류 수정 (이름/정렬)' })
+  update(@Param('code') code: string, @Body() dto: UpdateCategoryDto) {
+    return this.categories.update(code, dto);
+  }
+
+  @Delete(':code')
+  @ApiOperation({ summary: '분류 삭제 (사용 중이면 비활성 처리)' })
+  remove(@Param('code') code: string) {
+    return this.categories.remove(code);
   }
 }

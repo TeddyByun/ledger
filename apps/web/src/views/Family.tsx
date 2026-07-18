@@ -175,7 +175,7 @@ export function Family() {
     <>
       <header className="topbar">
         <span className="crumb">
-          설정 / <b>가족 관리</b>
+          관리 / <b>가족 관리</b>
         </span>
       </header>
       <main className="page">
