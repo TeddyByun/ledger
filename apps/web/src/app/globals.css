@@ -181,6 +181,15 @@ table.tbl { width:100%; border-collapse:collapse; font-size:13px; }
   box-shadow:var(--nm-in-sm); }
 .callout b { color:var(--brand-ink); }
 
+/* category tree caret */
+.tree-caret { flex:none; width:18px; height:18px; border:0; background:transparent; padding:0;
+  color:var(--muted); font-size:10px; line-height:1; cursor:pointer; border-radius:5px;
+  display:inline-grid; place-items:center; }
+button.tree-caret:hover { color:var(--ink); background:var(--surface-3); box-shadow:var(--nm-in-sm); }
+.tree-row { background:transparent; }
+.tree-row:hover { background:var(--surface-2); }
+.tree-row.active, .tree-row.active:hover { background:var(--brand-soft); }
+
 /* center layout (login) */
 .center-screen { min-height:100vh; display:grid; place-items:center; padding:24px; }
 
