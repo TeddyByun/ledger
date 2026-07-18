@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import type { PaymentMethod, ImportJob } from '@/lib/types';
+import type { PaymentMethod, ImportJob, ImportRecord } from '@/lib/types';
 
 const ISSUERS = [
   { value: 'hana_bank', label: '하나은행', kind: 'bank' as const },
@@ -39,7 +39,11 @@ export function Imports() {
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [autoDetected, setAutoDetected] = useState(false);
+  const [records, setRecords] = useState<ImportRecord[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadRecords = () =>
+    api.get<ImportRecord[]>('/imports').then(setRecords).catch(() => {});
 
   // 파일 선택 시 파일명으로 발급사 자동 선택(추정 실패 시 현재 값 유지)
   const onPickFile = (f: File | null) => {
@@ -59,6 +63,7 @@ export function Imports() {
 
   useEffect(() => {
     api.get<PaymentMethod[]>('/payment-methods').then(setPms).catch(() => {});
+    loadRecords();
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
@@ -76,6 +81,8 @@ export function Imports() {
         setJob(j);
         if (j.status !== 'completed' && j.status !== 'review' && j.status !== 'failed') {
           timer.current = setTimeout(() => poll(jobId), 1500);
+        } else {
+          loadRecords(); // 완료/실패 시 기록 목록 갱신
         }
       })
       .catch(() => {});
@@ -244,9 +251,77 @@ export function Imports() {
             )}
           </div>
         </div>
+
+        {/* 업로드 기록 */}
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="card-head">
+            <h3>업로드 기록</h3>
+            <div className="r">
+              <span className="tag">{records.length}건</span>
+            </div>
+          </div>
+          {records.length === 0 ? (
+            <div className="empty">
+              <p>아직 업로드한 명세서가 없습니다.</p>
+            </div>
+          ) : (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>업로드일시</th>
+                    <th>발급사</th>
+                    <th>파일명</th>
+                    <th>명세서월</th>
+                    <th style={{ textAlign: 'right' }}>파싱</th>
+                    <th style={{ textAlign: 'right' }}>자동분류</th>
+                    <th style={{ textAlign: 'right' }}>검토대기</th>
+                    <th>상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr key={r.id}>
+                      <td className="date" style={{ whiteSpace: 'nowrap' }}>
+                        {r.createdAt.slice(0, 16).replace('T', ' ')}
+                      </td>
+                      <td className="muted">{issuerLabel(r.issuer)}</td>
+                      <td>
+                        <b>{r.originalName ?? '—'}</b>
+                      </td>
+                      <td className="muted">{r.statementYm ?? '—'}</td>
+                      <td className="money">{r.parsedRows.toLocaleString()}</td>
+                      <td className="money inc">{r.classifiedRows.toLocaleString()}</td>
+                      <td className="money">{r.pendingRows.toLocaleString()}</td>
+                      <td>
+                        <span
+                          className={`pill ${
+                            r.status === 'failed'
+                              ? 'expense'
+                              : r.status === 'completed' || r.status === 'review'
+                                ? 'settled'
+                                : 'pending'
+                          }`}
+                          title={r.error ?? ''}
+                        >
+                          {STATUS_LABEL[r.status]}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
     </>
   );
+}
+
+/** 발급사 코드 → 표시명 */
+function issuerLabel(value: string): string {
+  return ISSUERS.find((i) => i.value === value)?.label ?? value;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

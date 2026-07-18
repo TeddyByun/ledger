@@ -65,6 +65,14 @@ export class ImportPipelineService {
         .get(job.issuer as Issuer)
         .parse(rows, { issuer: job.issuer as Issuer, statementYm: job.statementYm ?? undefined });
 
+      // 카드 명세서월(청구월)을 잡에 기록 — 업로드 기록에서 표기
+      if (result.kind === 'card' && result.statement.statementYm) {
+        await this.prisma.importJob.update({
+          where: { id: jobId },
+          data: { statementYm: result.statement.statementYm },
+        });
+      }
+
       await this.setStatus(jobId, 'classifying');
       const months = new Set<string>();
       let parsed = 0;
