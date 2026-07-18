@@ -16,6 +16,102 @@ export class StatisticsService {
     return this.prisma.monthlySummary.findUnique({ where: { ym } });
   }
 
+  /**
+   * 대시보드용 — 올해 월별(1~12) 집계.
+   *  - 계좌별 수입/지출
+   *  - 카드별 지출
+   *  - 대분류별 지출
+   * 거래(transaction)에서 직접 집계(항상 최신). 가구 스코프는 미들웨어가 주입.
+   */
+  async dashboard(year: number) {
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year + 1, 0, 1));
+    const [txns, cats] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: { transactionDate: { gte: start, lt: end } },
+        select: {
+          type: true,
+          amount: true,
+          transactionDate: true,
+          categoryCode: true,
+          paymentMethod: {
+            select: { id: true, name: true, methodType: true },
+          },
+        },
+      }),
+      this.prisma.category.findMany({
+        select: { code: true, name: true, parentCode: true },
+      }),
+    ]);
+
+    // 리프 분류코드 → 대분류(code,name)
+    const byCode = new Map(cats.map((c) => [c.code, c]));
+    const topOf = new Map<string, { code: string; name: string }>();
+    for (const c of cats) {
+      const top = (c.parentCode ? byCode.get(c.parentCode) : null) ?? c;
+      topOf.set(c.code, { code: top.code, name: top.name });
+    }
+
+    const z = () => new Array(12).fill(0) as number[];
+    const bank = new Map<number, { name: string; income: number[]; expense: number[] }>();
+    const card = new Map<number, { name: string; expense: number[] }>();
+    const cat = new Map<string, { name: string; expense: number[] }>();
+
+    for (const t of txns) {
+      const m = t.transactionDate.getUTCMonth(); // 0~11
+      const amt = Number(t.amount ?? 0);
+      const pm = t.paymentMethod;
+      if (pm?.methodType === 'bank') {
+        let e = bank.get(pm.id);
+        if (!e) {
+          e = { name: pm.name, income: z(), expense: z() };
+          bank.set(pm.id, e);
+        }
+        if (t.type === 'income') e.income[m] = (e.income[m] ?? 0) + amt;
+        else e.expense[m] = (e.expense[m] ?? 0) + amt;
+      } else if (pm?.methodType === 'card' && t.type === 'expense') {
+        let e = card.get(pm.id);
+        if (!e) {
+          e = { name: pm.name, expense: z() };
+          card.set(pm.id, e);
+        }
+        e.expense[m] = (e.expense[m] ?? 0) + amt;
+      }
+      if (t.type === 'expense') {
+        const top = topOf.get(t.categoryCode) ?? {
+          code: t.categoryCode,
+          name: t.categoryCode,
+        };
+        let e = cat.get(top.code);
+        if (!e) {
+          e = { name: top.name, expense: z() };
+          cat.set(top.code, e);
+        }
+        e.expense[m] = (e.expense[m] ?? 0) + amt;
+      }
+    }
+
+    const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+    return {
+      year,
+      bank: [...bank]
+        .map(([id, v]) => ({
+          id,
+          name: v.name,
+          income: v.income,
+          expense: v.expense,
+          total: sum(v.income) + sum(v.expense),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      card: [...card]
+        .map(([id, v]) => ({ id, name: v.name, expense: v.expense, total: sum(v.expense) }))
+        .sort((a, b) => b.total - a.total),
+      category: [...cat]
+        .map(([code, v]) => ({ code, name: v.name, expense: v.expense, total: sum(v.expense) }))
+        .sort((a, b) => b.total - a.total),
+    };
+  }
+
   getRecent(limit = 6) {
     return this.prisma.monthlySummary.findMany({
       orderBy: { ym: 'desc' },

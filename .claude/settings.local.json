@@ -14,7 +14,11 @@
       "Bash(pkill -9 -f \"next-server\")",
       "Bash(curl -s -o /dev/null -w \"api %{http_code}\\\\n\" localhost:4000/api/v1/docs)",
       "Bash(rm -f /tmp/claude-1000/-home-coder-ledger/cc94ecb1-22e8-4280-a8d2-13e1c516b790/scratchpad/bank.xlsx /tmp/claude-1000/-home-coder-ledger/cc94ecb1-22e8-4280-a8d2-13e1c516b790/scratchpad/card.xlsx)",
-      "Bash(./node_modules/.bin/next start *)"
+      "Bash(./node_modules/.bin/next start *)",
+      "Bash(cd /home/coder/ledger/apps/api *)"
+    ],
+    "additionalDirectories": [
+      "/home/coder/ledger/prisma"
     ]
   }
 }

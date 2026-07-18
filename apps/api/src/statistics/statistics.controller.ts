@@ -8,6 +8,14 @@ import { StatisticsService } from './statistics.service.js';
 export class StatisticsController {
   constructor(private readonly stats: StatisticsService) {}
 
+  @Get('dashboard')
+  @ApiOperation({ summary: '대시보드 — 올해 월별 계좌/카드/분류 집계' })
+  @ApiQuery({ name: 'year', required: false, example: 2026 })
+  dashboard(@Query('year') year?: string) {
+    const y = year ? Number(year) : new Date().getUTCFullYear();
+    return this.stats.dashboard(y);
+  }
+
   @Get('monthly')
   @ApiOperation({ summary: '월 전체 요약 (ym 지정 또는 최근 N개월)' })
   @ApiQuery({ name: 'ym', required: false, example: '2026-03' })
