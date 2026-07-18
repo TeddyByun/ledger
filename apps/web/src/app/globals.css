@@ -156,8 +156,8 @@ h1,h2,h3,h4 { margin:0; letter-spacing:-.02em; }
 .tbl-wrap { background:var(--surface); border:1px solid rgba(255,255,255,.03); border-radius:var(--r-lg);
   box-shadow:var(--nm-out); overflow-x:auto; }
 table.tbl { width:100%; border-collapse:collapse; font-size:13px; }
-.tbl th { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
-  color:var(--muted); font-weight:600; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line);
+.tbl th { font-size:13px; letter-spacing:normal;
+  color:var(--ink-2); font-weight:700; text-align:left; padding:13px 16px; border-bottom:1px solid var(--line);
   background:var(--surface-2); white-space:nowrap; }
 .tbl td { padding:13px 16px; border-bottom:1px solid var(--line); vertical-align:middle; }
 .tbl tbody tr:hover { background:var(--surface-2); }
