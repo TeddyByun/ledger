@@ -16,6 +16,14 @@ export class StatisticsController {
     return this.stats.dashboard(y);
   }
 
+  @Get('monthly-trend')
+  @ApiOperation({ summary: '최근 N개월 월별 수입·지출 추이 (롤링)' })
+  @ApiQuery({ name: 'months', required: false, example: 12 })
+  monthlyTrend(@Query('months') months?: string) {
+    const m = months ? Math.min(24, Math.max(1, Number(months))) : 12;
+    return this.stats.monthlyTrend(m);
+  }
+
   @Get('monthly')
   @ApiOperation({ summary: '월 전체 요약 (ym 지정 또는 최근 N개월)' })
   @ApiQuery({ name: 'ym', required: false, example: '2026-03' })

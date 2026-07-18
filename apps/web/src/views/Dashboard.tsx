@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { MonthlyBars, Legend, type BarSeries } from '@/components/MonthlyBars';
+import { TrendChart, type TrendMonth } from '@/components/TrendChart';
 import type { View } from '@/components/Shell';
 
 interface BankRow {
@@ -43,6 +44,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
   const [year, setYear] = useState(nowYear);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [trend, setTrend] = useState<TrendMonth[] | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -52,6 +54,14 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [year]);
+
+  // 최근 12개월 추이는 연도 선택과 무관 — 최초 1회만 로드
+  useEffect(() => {
+    api
+      .get<{ months: TrendMonth[] }>('/stats/monthly-trend?months=12')
+      .then((d) => setTrend(d.months))
+      .catch(() => setTrend(null));
+  }, []);
 
   const banks = data?.bank ?? [];
   const cards = data?.card ?? [];
@@ -84,6 +94,22 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
             <p>{year}년 계좌·카드·분류별 월별 추이입니다.</p>
           </div>
         </div>
+
+        {/* 0. 최근 12개월 월별 수입·지출 (롤링) */}
+        <Section
+          title="월별 수입·지출 (최근 12개월)"
+          sub="최근 12개월간 월별 총수입과 총지출"
+          legend={[
+            { label: '수입', color: 'var(--income)' },
+            { label: '지출', color: 'var(--expense)' },
+          ]}
+          empty={!trend || trend.every((m) => m.income === 0 && m.expense === 0)}
+          emptyMsg={trend ? '집계할 거래가 없습니다.' : '불러오는 중…'}
+        >
+          <div className="card">
+            {trend && <TrendChart data={trend} />}
+          </div>
+        </Section>
 
         {loading ? (
           <div className="card">
