@@ -17,6 +17,44 @@ export class StatisticsService {
   }
 
   /**
+   * 최근 N개월(기본 12) 월별 수입·지출 추이. (달력 연도가 아닌 롤링 기간)
+   * 거래(transaction)에서 직접 집계. 이번 달 포함, 과거 방향으로 N개월.
+   */
+  async monthlyTrend(months = 12) {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
+    const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const txns = await this.prisma.transaction.findMany({
+      where: { transactionDate: { gte: start, lt: endExclusive } },
+      select: { type: true, amount: true, transactionDate: true },
+    });
+
+    const buckets: { ym: string; income: number; expense: number }[] = [];
+    const idx = new Map<string, number>();
+    for (let i = 0; i < months; i++) {
+      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      idx.set(ym, i);
+      buckets.push({ ym, income: 0, expense: 0 });
+    }
+
+    for (const t of txns) {
+      const d = t.transactionDate;
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const i = idx.get(ym);
+      if (i === undefined) continue;
+      const b = buckets[i];
+      if (!b) continue;
+      const amt = Number(t.amount ?? 0);
+      if (t.type === 'income') b.income += amt;
+      else b.expense += amt;
+    }
+
+    return { months: buckets };
+  }
+
+  /**
    * 대시보드용 — 올해 월별(1~12) 집계.
    *  - 계좌별 수입/지출
    *  - 카드별 지출
