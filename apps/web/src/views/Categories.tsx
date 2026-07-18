@@ -25,6 +25,23 @@ export function Categories() {
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [form, setForm] = useState<CatForm>({ name: '', type: 'expense' });
   const [busy, setBusy] = useState(false);
+  // 접힌 대분류 코드 집합 (기본: 모두 펼침)
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+
+  const toggle = (code: string) =>
+    setCollapsed((s) => {
+      const n = new Set(s);
+      if (n.has(code)) n.delete(code);
+      else n.add(code);
+      return n;
+    });
+  const expand = (code: string) =>
+    setCollapsed((s) => {
+      if (!s.has(code)) return s;
+      const n = new Set(s);
+      n.delete(code);
+      return n;
+    });
 
   const selected = cats.find((c) => c.code === selectedCode) ?? null;
   const editing = mode === 'edit' || mode === 'create';
@@ -86,6 +103,7 @@ export function Categories() {
   const startCreateSub = (parent: Category) => {
     setError(null);
     setSelectedCode(null);
+    expand(parent.code);
     setForm({ name: '', type: parent.type, parentCode: parent.code });
     setMode('create');
   };
@@ -195,38 +213,60 @@ export function Categories() {
                         분류가 없습니다.
                       </div>
                     ) : (
-                      tree[t].map(({ root, children }) => (
-                        <div key={root.code}>
-                          <Row
-                            active={selectedCode === root.code}
-                            onClick={() => viewCat(root)}
-                            main={<b style={{ fontSize: 13.5 }}>{root.name}</b>}
-                            meta={`${root.code}${children.length ? ` · 소분류 ${children.length}` : ''}`}
-                            action={
-                              <button
-                                className="btn ghost sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  startCreateSub(root);
-                                }}
-                                title="소분류 추가"
-                              >
-                                +
-                              </button>
-                            }
-                          />
-                          {children.map((ch) => (
-                            <Row
-                              key={ch.code}
-                              indent
-                              active={selectedCode === ch.code}
-                              onClick={() => viewCat(ch)}
-                              main={<span style={{ fontSize: 13 }}>{ch.name}</span>}
-                              meta={ch.code}
+                      tree[t].map(({ root, children }) => {
+                        const hasKids = children.length > 0;
+                        const open = hasKids && !collapsed.has(root.code);
+                        return (
+                          <div key={root.code}>
+                            <TreeRow
+                              active={selectedCode === root.code}
+                              onClick={() => viewCat(root)}
+                              caret={
+                                hasKids ? (
+                                  <button
+                                    className="tree-caret"
+                                    aria-label={open ? '접기' : '펼치기'}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggle(root.code);
+                                    }}
+                                  >
+                                    {open ? '▾' : '▸'}
+                                  </button>
+                                ) : (
+                                  <span className="tree-caret" aria-hidden="true" />
+                                )
+                              }
+                              label={<b style={{ fontSize: 13.5 }}>{root.name}</b>}
+                              right={`${root.code}${hasKids ? ` · ${children.length}` : ''}`}
+                              action={
+                                <button
+                                  className="btn ghost sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startCreateSub(root);
+                                  }}
+                                  title="소분류 추가"
+                                >
+                                  +
+                                </button>
+                              }
                             />
-                          ))}
-                        </div>
-                      ))
+                            {open &&
+                              children.map((ch) => (
+                                <TreeRow
+                                  key={ch.code}
+                                  indent
+                                  active={selectedCode === ch.code}
+                                  onClick={() => viewCat(ch)}
+                                  caret={<span className="tree-caret" aria-hidden="true" />}
+                                  label={<span style={{ fontSize: 13 }}>{ch.name}</span>}
+                                  right={ch.code}
+                                />
+                              ))}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 ))}
@@ -340,16 +380,18 @@ export function Categories() {
   );
 }
 
-function Row({
-  main,
-  meta,
+function TreeRow({
+  caret,
+  label,
+  right,
   action,
   active,
   indent,
   onClick,
 }: {
-  main: React.ReactNode;
-  meta?: string;
+  caret?: React.ReactNode;
+  label: React.ReactNode;
+  right?: string;
   action?: React.ReactNode;
   active?: boolean;
   indent?: boolean;
@@ -358,27 +400,26 @@ function Row({
   return (
     <div
       onClick={onClick}
+      className={`tree-row${active ? ' active' : ''}`}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '8px 8px',
-        paddingLeft: indent ? 26 : 8,
+        gap: 6,
+        padding: '5px 8px',
+        paddingLeft: indent ? 30 : 8,
         borderRadius: 8,
         cursor: 'pointer',
-        background: active ? 'var(--brand-soft)' : 'transparent',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {main}
-        </div>
-        {meta && (
-          <div className="muted mono" style={{ fontSize: 11 }}>
-            {meta}
-          </div>
-        )}
+      {caret}
+      <div style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {label}
       </div>
+      {right && (
+        <span className="muted mono" style={{ fontSize: 11, flex: 'none' }}>
+          {right}
+        </span>
+      )}
       {action}
     </div>
   );
