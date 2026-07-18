@@ -6,6 +6,8 @@ import type { PaymentMethod, DetectedCard } from '@/lib/types';
 
 const ISSUERS = ['하나카드', '현대카드', '신한카드', '삼성카드', '국민카드', '롯데카드', '우리카드'];
 
+type Mode = 'none' | 'view' | 'edit' | 'create';
+
 interface CardForm {
   id?: number;
   issuer: string;
@@ -13,7 +15,6 @@ interface CardForm {
   cardNo: string;
   owner: string;
 }
-
 const EMPTY: CardForm = { issuer: '하나카드', name: '', cardNo: '', owner: '본인' };
 
 export function Cards() {
@@ -21,10 +22,14 @@ export function Cards() {
   const [detected, setDetected] = useState<DetectedCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [mode, setMode] = useState<Mode>('none');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [form, setForm] = useState<CardForm>(EMPTY);
   const [busy, setBusy] = useState(false);
 
-  const editing = form.id !== undefined;
+  const selected = cards.find((c) => c.id === selectedId) ?? null;
+  const editing = mode === 'edit' || mode === 'create';
 
   const load = async () => {
     const [pms, det] = await Promise.all([
@@ -41,7 +46,35 @@ export function Cards() {
       .finally(() => setLoading(false));
   }, []);
 
-  const reset = () => setForm(EMPTY);
+  const viewCard = (pm: PaymentMethod) => {
+    setError(null);
+    setSelectedId(pm.id);
+    setMode('view');
+  };
+
+  const startEdit = () => {
+    if (!selected) return;
+    setForm({
+      id: selected.id,
+      issuer: selected.issuer ?? '',
+      name: selected.name,
+      cardNo: '', // 마스킹 저장 → 변경 시에만 새로 입력
+      owner: selected.owner ?? '',
+    });
+    setMode('edit');
+  };
+
+  const startCreate = () => {
+    setError(null);
+    setSelectedId(null);
+    setForm(EMPTY);
+    setMode('create');
+  };
+
+  const cancel = () => {
+    setError(null);
+    setMode(selected ? 'view' : 'none');
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,10 +88,16 @@ export function Cards() {
         cardNo: form.cardNo || undefined,
         owner: form.owner || undefined,
       };
-      if (editing) await api.patch(`/payment-methods/${form.id}`, body);
-      else await api.post('/payment-methods', body);
-      reset();
-      await load();
+      if (mode === 'edit' && form.id !== undefined) {
+        await api.patch(`/payment-methods/${form.id}`, body);
+        await load();
+        setSelectedId(form.id);
+      } else {
+        const created = await api.post<PaymentMethod>('/payment-methods', body);
+        await load();
+        setSelectedId(created?.id ?? null);
+      }
+      setMode('view');
     } catch (err) {
       setError(
         err instanceof ApiError && err.code === 'CONFLICT'
@@ -70,21 +109,16 @@ export function Cards() {
     }
   };
 
-  const edit = (pm: PaymentMethod) =>
-    setForm({
-      id: pm.id,
-      issuer: pm.issuer ?? '',
-      name: pm.name,
-      cardNo: '', // 마스킹 저장이라 재입력(비우면 기존 유지 아님 — 필요시 새로 입력)
-      owner: pm.owner ?? '',
-    });
-
   const remove = async (pm: PaymentMethod) => {
     if (!confirm(`'${pm.name}' 카드를 삭제할까요?`)) return;
+    setError(null);
     try {
       await api.del(`/payment-methods/${pm.id}`);
-      if (form.id === pm.id) reset();
       await load();
+      if (selectedId === pm.id) {
+        setSelectedId(null);
+        setMode('none');
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -92,8 +126,16 @@ export function Cards() {
 
   const registerDetected = (d: DetectedCard) => {
     const owner = d.sampleLabel?.match(/(본인|가족)/)?.[0] ?? '본인';
+    setSelectedId(null);
     setForm({ ...EMPTY, cardNo: d.cardNo, owner, name: `카드 ${d.cardNo}` });
+    setMode('create');
   };
+
+  // 발급사 옵션 — 기존 값이 목록에 없으면 추가
+  const issuerOptions =
+    form.issuer && !ISSUERS.includes(form.issuer)
+      ? [form.issuer, ...ISSUERS]
+      : ISSUERS;
 
   return (
     <>
@@ -149,7 +191,7 @@ export function Cards() {
         )}
 
         <div className="grid cols-2">
-          {/* 등록된 카드 */}
+          {/* 등록된 카드 목록 */}
           <div className="card pad-0" style={{ alignSelf: 'start' }}>
             <div className="card-head" style={{ padding: '18px 20px 0' }}>
               <h3>등록된 카드</h3>
@@ -164,123 +206,183 @@ export function Cards() {
             ) : cards.length === 0 ? (
               <div className="empty">
                 <h3>등록된 카드가 없어요</h3>
-                <p>오른쪽에서 카드를 추가하세요.</p>
+                <p>아래 “+ 새 카드 추가”로 등록하세요.</p>
               </div>
             ) : (
-              <div className="tbl-wrap" style={{ border: 'none', boxShadow: 'none' }}>
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>카드</th>
-                      <th>카드번호</th>
-                      <th>명의</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cards.map((pm) => (
-                      <tr key={pm.id}>
-                        <td>
-                          <b>{pm.name}</b>
-                          <div className="muted" style={{ fontSize: 11.5 }}>
-                            {pm.issuer ?? ''}
-                          </div>
-                        </td>
-                        <td className="mono" style={{ fontSize: 12 }}>
-                          {pm.cardNo ?? '—'}
-                        </td>
-                        <td className="muted">{pm.owner ?? '—'}</td>
-                        <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                          <button className="btn ghost sm" onClick={() => edit(pm)}>
-                            수정
-                          </button>
-                          <button
-                            className="btn ghost sm"
-                            style={{ color: 'var(--expense)' }}
-                            onClick={() => remove(pm)}
-                          >
-                            삭제
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ padding: '4px 12px 4px' }}>
+                {cards.map((pm) => (
+                  <div
+                    key={pm.id}
+                    onClick={() => viewCard(pm)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '11px 8px',
+                      borderBottom: '1px solid var(--line)',
+                      cursor: 'pointer',
+                      borderRadius: 8,
+                      background:
+                        selectedId === pm.id ? 'var(--brand-soft)' : 'transparent',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <b style={{ fontSize: 14 }}>{pm.name}</b>
+                      <div className="muted" style={{ fontSize: 11.5 }}>
+                        {pm.issuer ?? ''}
+                        {pm.cardNo ? ` · ${pm.cardNo}` : ''}
+                        {pm.owner ? ` · ${pm.owner}` : ''}
+                      </div>
+                    </div>
+                    <span className="muted" style={{ fontSize: 16, flex: 'none' }}>
+                      ›
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
+            <div style={{ padding: '10px 14px 16px' }}>
+              <button
+                className="btn primary"
+                onClick={startCreate}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                + 새 카드 추가
+              </button>
+            </div>
           </div>
 
-          {/* 등록/수정 폼 */}
+          {/* 우측: 카드 정보 / 수정 / 추가 */}
           <div className="card" style={{ alignSelf: 'start' }}>
             <div className="card-head">
-              <h3>{editing ? '카드 수정' : '새 카드'}</h3>
-              {editing && (
-                <div className="r">
-                  <button className="btn ghost sm" onClick={reset}>
-                    새 카드로
+              <h3>
+                {mode === 'create'
+                  ? '새 카드'
+                  : mode === 'edit'
+                    ? '카드 정보 수정'
+                    : '카드 정보'}
+              </h3>
+              {mode === 'view' && selected && (
+                <div className="r" style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn ghost sm" onClick={startEdit}>
+                    수정
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    style={{ color: 'var(--expense)' }}
+                    onClick={() => remove(selected)}
+                  >
+                    삭제
                   </button>
                 </div>
               )}
             </div>
-            <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="field">
-                <label>발급사</label>
-                <select
-                  className="select"
-                  value={form.issuer}
-                  onChange={(e) => setForm({ ...form, issuer: e.target.value })}
-                >
-                  {ISSUERS.map((i) => (
-                    <option key={i} value={i}>
-                      {i}
-                    </option>
-                  ))}
-                </select>
+
+            {mode === 'view' && selected ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{selected.name}</div>
+                <Info label="발급사" value={selected.issuer || '—'} />
+                <Info label="카드번호" value={selected.cardNo || '—'} mono />
+                <Info label="명의" value={selected.owner || '—'} />
               </div>
-              <div className="field">
-                <label>카드 이름/별칭</label>
-                <input
-                  className="input"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="하나카드 Navy 본인"
-                  required
-                />
+            ) : editing ? (
+              <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="field">
+                  <label>발급사</label>
+                  <select
+                    className="select"
+                    value={form.issuer}
+                    onChange={(e) => setForm({ ...form, issuer: e.target.value })}
+                  >
+                    {issuerOptions.map((i) => (
+                      <option key={i} value={i}>
+                        {i}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>카드 이름/별칭</label>
+                  <input
+                    className="input"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="하나카드 Navy 본인"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label>
+                    카드번호 {mode === 'edit' && <span className="muted">(변경 시에만 입력)</span>}
+                  </label>
+                  <input
+                    className="input"
+                    value={form.cardNo}
+                    onChange={(e) => setForm({ ...form, cardNo: e.target.value })}
+                    placeholder="5699-1020-1234-7322"
+                    inputMode="numeric"
+                  />
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    뒤 4자리만 남기고 마스킹되어 저장됩니다.
+                  </span>
+                </div>
+                <div className="field">
+                  <label>명의</label>
+                  <input
+                    className="input"
+                    value={form.owner}
+                    onChange={(e) => setForm({ ...form, owner: e.target.value })}
+                    placeholder="본인 / 가족"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="btn primary"
+                    type="submit"
+                    disabled={busy}
+                    style={{ flex: 1, justifyContent: 'center', padding: 11 }}
+                  >
+                    {busy ? '저장 중…' : mode === 'edit' ? '수정 저장' : '카드 추가'}
+                  </button>
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={cancel}
+                    disabled={busy}
+                    style={{ flex: 'none' }}
+                  >
+                    취소
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="empty">
+                <h3>카드를 선택하세요</h3>
+                <p>왼쪽에서 카드 이름을 클릭하면 정보가 표시됩니다.</p>
               </div>
-              <div className="field">
-                <label>카드번호 {editing && <span className="muted">(변경 시에만 입력)</span>}</label>
-                <input
-                  className="input"
-                  value={form.cardNo}
-                  onChange={(e) => setForm({ ...form, cardNo: e.target.value })}
-                  placeholder="5699-1020-1234-7322"
-                  inputMode="numeric"
-                />
-                <span className="muted" style={{ fontSize: 11 }}>
-                  뒤 4자리만 남기고 마스킹되어 저장됩니다.
-                </span>
-              </div>
-              <div className="field">
-                <label>명의</label>
-                <input
-                  className="input"
-                  value={form.owner}
-                  onChange={(e) => setForm({ ...form, owner: e.target.value })}
-                  placeholder="본인 / 가족"
-                />
-              </div>
-              <button
-                className="btn primary"
-                type="submit"
-                disabled={busy}
-                style={{ justifyContent: 'center', padding: 11 }}
-              >
-                {busy ? '저장 중…' : editing ? '수정 저장' : '카드 추가'}
-              </button>
-            </form>
+            )}
           </div>
         </div>
       </main>
     </>
+  );
+}
+
+function Info({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <div className={mono ? 'mono' : undefined} style={{ fontSize: 14, padding: '2px 0' }}>
+        {value}
+      </div>
+    </div>
   );
 }
