@@ -412,14 +412,23 @@ function TreeRow({
       }}
     >
       {caret}
-      <div style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <span
+        style={{
+          flex: '0 1 auto',
+          minWidth: 0,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
         {label}
-      </div>
+      </span>
       {right && (
         <span className="muted mono" style={{ fontSize: 11, flex: 'none' }}>
           {right}
         </span>
       )}
+      <span style={{ flex: 1 }} />
       {action}
     </div>
   );
