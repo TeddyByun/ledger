@@ -38,6 +38,11 @@ export class CreatePaymentMethodDto {
   @IsString()
   @IsOptional()
   owner?: string;
+
+  @ApiPropertyOptional({ example: '연회비 12만원, 주유 3% 적립', description: '메모' })
+  @IsString()
+  @IsOptional()
+  memo?: string;
 }
 
 export class UpdatePaymentMethodDto extends PartialType(CreatePaymentMethodDto) {}

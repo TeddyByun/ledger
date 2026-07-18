@@ -14,8 +14,9 @@ interface CardForm {
   name: string;
   cardNo: string;
   owner: string;
+  memo: string;
 }
-const EMPTY: CardForm = { issuer: '하나카드', name: '', cardNo: '', owner: '본인' };
+const EMPTY: CardForm = { issuer: '하나카드', name: '', cardNo: '', owner: '본인', memo: '' };
 
 export function Cards() {
   const [cards, setCards] = useState<PaymentMethod[]>([]);
@@ -60,6 +61,7 @@ export function Cards() {
       name: selected.name,
       cardNo: '', // 마스킹 저장 → 변경 시에만 새로 입력
       owner: selected.owner ?? '',
+      memo: selected.memo ?? '',
     });
     setMode('edit');
   };
@@ -87,6 +89,7 @@ export function Cards() {
         issuer: form.issuer || undefined,
         cardNo: form.cardNo || undefined,
         owner: form.owner || undefined,
+        memo: form.memo,
       };
       if (mode === 'edit' && form.id !== undefined) {
         await api.patch(`/payment-methods/${form.id}`, body);
@@ -284,6 +287,7 @@ export function Cards() {
                 <Info label="발급사" value={selected.issuer || '—'} />
                 <Info label="카드번호" value={selected.cardNo || '—'} mono />
                 <Info label="명의" value={selected.owner || '—'} />
+                <Info label="메모" value={selected.memo || '—'} />
               </div>
             ) : editing ? (
               <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -335,6 +339,17 @@ export function Cards() {
                     placeholder="본인 / 가족"
                   />
                 </div>
+                <div className="field">
+                  <label>메모</label>
+                  <textarea
+                    className="input"
+                    value={form.memo}
+                    onChange={(e) => setForm({ ...form, memo: e.target.value })}
+                    placeholder="연회비, 적립·할인 혜택, 결제일 등 자유 메모"
+                    rows={3}
+                    style={{ resize: 'vertical', minHeight: 64, fontFamily: 'inherit' }}
+                  />
+                </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     className="btn primary"
@@ -380,7 +395,10 @@ function Info({
   return (
     <div className="field">
       <label>{label}</label>
-      <div className={mono ? 'mono' : undefined} style={{ fontSize: 14, padding: '2px 0' }}>
+      <div
+        className={mono ? 'mono' : undefined}
+        style={{ fontSize: 14, padding: '2px 0', whiteSpace: 'pre-wrap' }}
+      >
         {value}
       </div>
     </div>

@@ -28,6 +28,7 @@ export interface PaymentMethod {
   identifier: string | null;
   cardNo: string | null;
   owner: string | null;
+  memo: string | null;
 }
 
 export interface HouseholdMember {
