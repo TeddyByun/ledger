@@ -426,8 +426,23 @@ export function CardTransactions() {
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
                         {signed(Number(c.usageAmount))}
                       </td>
-                      <td className="money" style={{ color: discount > 0 ? 'var(--income)' : 'var(--muted)' }}>
-                        {discount > 0 ? `−₩${won(discount)}` : '—'}
+                      <td
+                        className="money"
+                        style={{
+                          color:
+                            discount > 0
+                              ? 'var(--income)'
+                              : discount < 0
+                                ? 'var(--expense)'
+                                : 'var(--muted)',
+                        }}
+                        title={discount < 0 ? '해외이용수수료 등' : undefined}
+                      >
+                        {discount > 0
+                          ? `−₩${won(discount)}`
+                          : discount < 0
+                            ? `+₩${won(-discount)}`
+                            : '—'}
                       </td>
                       <td className={`money ${pay < 0 ? 'inc' : 'exp'}`}>
                         {pay < 0 ? `+₩${won(-pay)}` : `−₩${won(pay)}`}
@@ -446,11 +461,17 @@ export function CardTransactions() {
                   <td className="money" style={{ color: 'var(--ink-2)' }}>
                     ₩{won(summary.usageAmount)}
                   </td>
-                  <td className="money" style={{ color: 'var(--income)' }}>
-                    {summary.usageAmount - summary.payAmount > 0
-                      ? `−₩${won(summary.usageAmount - summary.payAmount)}`
-                      : '—'}
-                  </td>
+                  {(() => {
+                    const d = summary.usageAmount - summary.payAmount;
+                    return (
+                      <td
+                        className="money"
+                        style={{ color: d > 0 ? 'var(--income)' : d < 0 ? 'var(--expense)' : 'var(--muted)' }}
+                      >
+                        {d > 0 ? `−₩${won(d)}` : d < 0 ? `+₩${won(-d)}` : '—'}
+                      </td>
+                    );
+                  })()}
                   <td className="money exp">−₩{won(summary.payAmount)}</td>
                 </tr>
               </tfoot>
