@@ -42,6 +42,7 @@ export function Categories() {
       n.delete(code);
       return n;
     });
+  const expandAll = () => setCollapsed(new Set());
 
   const selected = cats.find((c) => c.code === selectedCode) ?? null;
   const editing = mode === 'edit' || mode === 'create';
@@ -75,6 +76,12 @@ export function Categories() {
   const parentName = (code: string | null | undefined) =>
     code ? cats.find((c) => c.code === code)?.name ?? code : null;
   const childCount = (code: string) => cats.filter((c) => c.parentCode === code).length;
+
+  const parentsWithKids = [...tree.expense, ...tree.income]
+    .filter((x) => x.children.length > 0)
+    .map((x) => x.root.code);
+  const collapseAll = () => setCollapsed(new Set(parentsWithKids));
+  const allCollapsed = parentsWithKids.length > 0 && parentsWithKids.every((c) => collapsed.has(c));
 
   const viewCat = (c: Category) => {
     setError(null);
@@ -191,6 +198,31 @@ export function Categories() {
               </div>
             ) : (
               <div style={{ padding: '8px 12px 12px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 6,
+                    padding: '4px 4px 2px',
+                    borderBottom: '1px solid var(--line)',
+                    marginBottom: 4,
+                  }}
+                >
+                  <button
+                    className="btn ghost sm"
+                    onClick={expandAll}
+                    disabled={parentsWithKids.length === 0 || collapsed.size === 0}
+                  >
+                    전체 펼치기
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    onClick={collapseAll}
+                    disabled={allCollapsed}
+                  >
+                    전체 접기
+                  </button>
+                </div>
                 {(['expense', 'income'] as TxType[]).map((t) => (
                   <div key={t} style={{ marginBottom: 10 }}>
                     <div
