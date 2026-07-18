@@ -52,11 +52,14 @@ export class ShinhanCardParser implements StatementParser {
       const merchant = (row[COL.merchant] ?? '').trim();
       if (!txnDate || !merchant || /합계|소계/.test(merchant)) continue;
 
-      const usageAmount = parseAmount(row[COL.usageAmount]) ?? 0;
+      const rawUsage = parseAmount(row[COL.usageAmount]) ?? 0;
       const principal = parseAmount(row[COL.principal]) ?? 0;
       const fee = parseAmount(row[COL.fee]) ?? 0;
+      // 해외이용: 이용금액 칸이 외화(원금보다 작음) → 원화 원금을 이용금액으로.
+      const isOverseas = principal > 0 && rawUsage > 0 && rawUsage < principal;
+      const usageAmount = isOverseas ? principal : rawUsage;
       const saleType = norm(row[COL.saleType]);
-      const isCanceled = saleType === '취소' || usageAmount < 0;
+      const isCanceled = saleType === '취소' || rawUsage < 0;
 
       const label = norm(row[COL.cardLabel]); // 본인253 / 가족160
       // 이용카드가 본인/가족(카드) 행만 거래로 인정 → 할인내역 등 다른 섹션 제외
@@ -75,7 +78,7 @@ export class ShinhanCardParser implements StatementParser {
         billingRound: norm(row[COL.billingRound]),
         benefitType: saleType, // 할인/취소
         benefitAmount: 0, // 신한은 원금에 할인 반영(별도 금액 미제공)
-        region: null,
+        region: isOverseas ? '해외' : null,
         saleType,
         isCanceled,
         point: 0,
