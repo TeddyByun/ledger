@@ -9,7 +9,8 @@
       "Bash(pnpm --filter @ledger/web build)",
       "Bash(pkill -f \"next-server\")",
       "Bash(pkill -f \"dist/main.js\")",
-      "Bash(kill 343381)"
+      "Bash(kill 343381)",
+      "Bash(pkill -9 -f \"dist/main.js\")"
     ]
   }
 }
