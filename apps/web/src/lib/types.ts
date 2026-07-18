@@ -13,6 +13,13 @@ export interface ImportJob {
   error: string | null;
 }
 
+/** 업로드 기록 목록 항목 */
+export interface ImportRecord extends ImportJob {
+  originalName: string | null;
+  statementYm: string | null;
+  createdAt: string;
+}
+
 export interface PaymentMethod {
   id: number;
   name: string;

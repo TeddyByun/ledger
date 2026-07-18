@@ -46,6 +46,12 @@ export class IngestionController {
     return this.ingestion.enqueue(dto, file);
   }
 
+  @Get()
+  @ApiOperation({ summary: '업로드 기록 목록 (최근 순)' })
+  list() {
+    return this.ingestion.listJobs();
+  }
+
   @Get(':jobId')
   @ApiOperation({ summary: '적재 잡 진행 상태 조회 (폴링)' })
   status(@Param('jobId') jobId: string) {
