@@ -336,6 +336,7 @@ export function BankTransactions() {
                 onChange={(e) => setDraft({ ...draft, categoryCode: e.target.value })}
               >
                 <option value="">전체 분류</option>
+                <option value="-">미분류 (-)</option>
                 {catOptions.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.depth === 2 ? '　└ ' : ''}

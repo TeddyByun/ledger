@@ -25,7 +25,9 @@
       "Bash(git add *)",
       "Bash(curl -s -o /dev/null -w \"app %{http_code}\\\\n\" localhost:3000/)",
       "Bash(curl -s -o /dev/null -w \"preview %{http_code}\\\\n\" localhost:3000/neumorphic.html)",
-      "Edit(/.claude/skills/neumorphic-theme/**)"
+      "Edit(/.claude/skills/neumorphic-theme/**)",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select count\\(*\\) filter \\(where category_code='-'\\) as dash, count\\(*\\) filter \\(where category_code is null\\) as isnull, count\\(*\\) filter \\(where category_code=''\\) as empty from transaction;\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select code,name from category where code='-';\")"
     ],
     "additionalDirectories": [
       "/home/coder/ledger/prisma"
