@@ -40,18 +40,57 @@ export class SamsungCardParser implements StatementParser {
   parse(rows: string[][], ctx: ParseContext): ParseResult {
     const { headerIndex, columns } = locateHeader(rows, ALIASES);
     const out: NormalizedCardRow[] = [];
+    let lastInstallment: NormalizedCardRow | null = null;
 
     for (let i = headerIndex + 1; i < rows.length; i++) {
       const row = rows[i]!;
       const merchant = (cell(row, columns, 'merchantName') ?? '').trim();
       if (!merchant || /합계|소계/.test(merchant)) continue;
 
+      const principalRaw = parseAmount(cell(row, columns, 'principal'));
+      const feeRaw = parseAmount(cell(row, columns, 'fee')) ?? 0;
+
+      // '미리입금/할인,면제 등' — 이용일·이용구분 없이 원금 조정만 있는 행.
+      // 실적 채워 받는 할부 할인 등 → 직전 할부와 같은 이용일·카드로 거래 추가.
+      if (/미리입금|면제/.test(merchant)) {
+        if (lastInstallment && principalRaw != null && principalRaw !== 0) {
+          out.push({
+            cardLabel: lastInstallment.cardLabel,
+            cardNo: lastInstallment.cardNo,
+            txnDate: lastInstallment.txnDate,
+            merchantName: merchant,
+            usageAmount: principalRaw,
+            principal: principalRaw,
+            fee: feeRaw,
+            installmentPeriod: lastInstallment.installmentPeriod,
+            billingRound: lastInstallment.billingRound,
+            benefitType: '할부할인',
+            benefitAmount: 0,
+            region: null,
+            saleType: '할부',
+            isCanceled: false,
+            point: 0,
+            dedupHash: dedupHash([
+              this.issuer,
+              lastInstallment.txnDate.toISOString(),
+              merchant,
+              principalRaw,
+              principalRaw,
+              0,
+              lastInstallment.cardNo,
+              lastInstallment.billingRound,
+            ]),
+          });
+        }
+        continue;
+      }
+
       const txnDate = parseDate(cell(row, columns, 'txnDate'));
       if (!txnDate) continue;
 
       const usageAmount = parseAmount(cell(row, columns, 'usageAmount')) ?? 0;
-      const principal = parseAmount(cell(row, columns, 'principal')) ?? usageAmount;
-      const fee = parseAmount(cell(row, columns, 'fee')) ?? 0;
+      const principal = principalRaw ?? usageAmount;
+      const fee = feeRaw;
       const benefitAmount = parseAmount(cell(row, columns, 'benefitAmount')) ?? 0;
       const installmentPeriod = norm(cell(row, columns, 'installmentPeriod'));
       const billingRound = norm(cell(row, columns, 'billingRound'));
@@ -64,7 +103,7 @@ export class SamsungCardParser implements StatementParser {
       if (!/(본인|가족)/.test(compact)) continue;
       const cardNo = compact.match(/\d+/)?.[0] ?? null;
 
-      out.push({
+      const pushed: NormalizedCardRow = {
         cardLabel: label,
         cardNo,
         txnDate,
@@ -91,7 +130,9 @@ export class SamsungCardParser implements StatementParser {
           cardNo,
           billingRound,
         ]),
-      });
+      };
+      out.push(pushed);
+      if (installmentPeriod) lastInstallment = pushed;
     }
 
     const statementYm = ctx.statementYm ?? this.inferBillingMonth(out);

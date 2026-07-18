@@ -29,6 +29,11 @@ interface CardSummary {
   payAmount: number;
 }
 
+/** 금액 표기 — 음수(할인·환급)는 −₩ 대신 ₩ 앞에 부호를 붙여 표시 */
+function signed(n: number): string {
+  return n < 0 ? `−₩${won(-n)}` : `₩${won(n)}`;
+}
+
 /** 할부(총 개월) 표기 — 숫자 개월이 있으면 'N개월', 아니면 '일시불' */
 function installmentMonths(c: CardTxn): string {
   const p = c.installmentPeriod ?? '';
@@ -419,12 +424,14 @@ export function CardTransactions() {
                       <td className="muted">{installmentMonths(c)}</td>
                       <td className="muted">{installmentRound(c)}</td>
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
-                        ₩{won(Number(c.usageAmount))}
+                        {signed(Number(c.usageAmount))}
                       </td>
                       <td className="money" style={{ color: discount > 0 ? 'var(--income)' : 'var(--muted)' }}>
                         {discount > 0 ? `−₩${won(discount)}` : '—'}
                       </td>
-                      <td className="money exp">−₩{won(pay)}</td>
+                      <td className={`money ${pay < 0 ? 'inc' : 'exp'}`}>
+                        {pay < 0 ? `+₩${won(-pay)}` : `−₩${won(pay)}`}
+                      </td>
                     </tr>
                   );
                 })
