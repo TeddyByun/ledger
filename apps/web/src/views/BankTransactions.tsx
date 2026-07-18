@@ -217,6 +217,14 @@ export function BankTransactions() {
       .catch(() => setSummary(null));
   }, [applied, sortParam, load]);
 
+  const exportXlsx = () => {
+    const p = filterParams(applied);
+    if (sortParam) p.set('sort', sortParam);
+    api
+      .download(`/bank-transactions/export?${p}`, '은행거래.xlsx')
+      .catch((e) => setError((e as Error).message));
+  };
+
   const search = () => setApplied(draft);
   const reset = () => {
     setDraft(withDefaults());
@@ -242,6 +250,9 @@ export function BankTransactions() {
             <p>계좌 입출금 내역 · 거래 후 잔액. 조건으로 검색하세요.</p>
           </div>
           <div className="actions">
+            <button className="btn" onClick={exportXlsx}>
+              엑셀 저장
+            </button>
             <button className="btn primary" onClick={runAuto} disabled={autoBusy}>
               {autoBusy ? '자동 분류 중…' : '자동 분류'}
             </button>

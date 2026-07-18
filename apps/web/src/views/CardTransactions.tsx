@@ -175,6 +175,14 @@ export function CardTransactions() {
       .catch(() => setSummary(null));
   }, [applied, sortParam, load]);
 
+  const exportXlsx = () => {
+    const p = filterParams(applied);
+    if (sortParam) p.set('sort', sortParam);
+    api
+      .download(`/card-transactions/export?${p}`, '카드거래.xlsx')
+      .catch((e) => setError((e as Error).message));
+  };
+
   const search = () => setApplied(draft);
   const reset = () => {
     setDraft(withDefaults());
@@ -200,6 +208,11 @@ export function CardTransactions() {
           <div className="titles">
             <h1>카드 거래 내역</h1>
             <p>카드 이용내역 · 결제금액(원금+수수료). 조건으로 검색하세요.</p>
+          </div>
+          <div className="actions">
+            <button className="btn" onClick={exportXlsx}>
+              엑셀 저장
+            </button>
           </div>
         </div>
 

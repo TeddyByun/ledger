@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import ExcelJS from 'exceljs';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
@@ -558,6 +559,102 @@ export class StatementTxnService {
     return { deleted: rows.length };
   }
 
+  // ── 엑셀(xlsx) 내보내기 ──────────────────────────────────
+  /** 은행 조회 결과 전체를 xlsx 버퍼로. */
+  async exportBank(query: StatementTxnQueryDto): Promise<Buffer> {
+    const where = await this.buildBankWhere(query);
+    const rows = await this.prisma.bankTransaction.findMany({
+      where,
+      include: BANK_INCLUDE,
+      orderBy: this.bankOrderBy(query.sort),
+    });
+    const items = rows.map((b) => this.mapBank(b));
+    const excl = (r: string | null) =>
+      r === 'card_settlement'
+        ? '카드대금'
+        : r === 'self_transfer'
+          ? '자기이체'
+          : r === 'transfer'
+            ? '이체'
+            : '';
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('은행거래');
+    ws.columns = [
+      { header: '날짜', key: 'date', width: 12 },
+      { header: '계좌', key: 'account', width: 18 },
+      { header: '구분', key: 'type', width: 18 },
+      { header: '분류', key: 'category', width: 14 },
+      { header: '내용', key: 'desc', width: 32 },
+      { header: '출금', key: 'withdrawal', width: 14 },
+      { header: '입금', key: 'deposit', width: 14 },
+      { header: '거래후잔액', key: 'balance', width: 16 },
+      { header: '제외', key: 'exclude', width: 10 },
+    ];
+    for (const b of items) {
+      ws.addRow({
+        date: b.txnAt.toISOString().slice(0, 10),
+        account: b.account?.name ?? '',
+        type: b.txnTypeRaw ?? '',
+        category: b.categoryName ?? '',
+        desc: b.description ?? '',
+        withdrawal: Number(b.withdrawal) || null,
+        deposit: Number(b.deposit) || null,
+        balance: b.balance != null ? Number(b.balance) : null,
+        exclude: excl(b.excludeReason),
+      });
+    }
+    formatSheet(ws, ['F', 'G', 'H']);
+    return Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer);
+  }
+
+  /** 카드 조회 결과 전체를 xlsx 버퍼로. */
+  async exportCard(query: StatementTxnQueryDto): Promise<Buffer> {
+    const where = await this.buildCardWhere(query);
+    const rows = await this.prisma.cardTransaction.findMany({
+      where,
+      include: {
+        paymentMethod: { select: { name: true, cardNo: true } },
+        transaction: {
+          select: { category: { select: { name: true } } },
+        },
+      },
+      orderBy: this.cardOrderBy(query.sort),
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('카드거래');
+    ws.columns = [
+      { header: '이용일', key: 'date', width: 12 },
+      { header: '카드', key: 'card', width: 20 },
+      { header: '가맹점', key: 'merchant', width: 32 },
+      { header: '분류', key: 'category', width: 14 },
+      { header: '할부(개월)', key: 'months', width: 11 },
+      { header: '할부회차', key: 'round', width: 10 },
+      { header: '이용금액', key: 'usage', width: 14 },
+      { header: '할인금액', key: 'discount', width: 12 },
+      { header: '결제금액', key: 'pay', width: 14 },
+    ];
+    for (const c of rows) {
+      const usage = Number(c.usageAmount);
+      const pay = Number(c.principal) + Number(c.fee);
+      const hasInst = /\d/.test(c.installmentPeriod ?? '');
+      ws.addRow({
+        date: c.txnDate.toISOString().slice(0, 10),
+        card: c.paymentMethod?.name ?? c.cardLabel ?? '',
+        merchant: c.merchantName,
+        category: c.transaction?.category?.name ?? '',
+        months: hasInst ? `${c.installmentPeriod}개월` : '일시불',
+        round: hasInst && /\d/.test(c.billingRound ?? '') ? c.billingRound : '',
+        usage,
+        discount: usage - pay, // +는 할인, -는 수수료
+        pay,
+      });
+    }
+    formatSheet(ws, ['G', 'H', 'I']);
+    return Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer);
+  }
+
   // ── helpers ─────────────────────────────────────────────
   private async categoryCodes(code: string): Promise<string[]> {
     const children = await this.prisma.category.findMany({
@@ -636,6 +733,13 @@ function parseSort<T>(
 
 function startOfDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/** 헤더 볼드 + 지정 금액 컬럼에 천단위 숫자서식. */
+function formatSheet(ws: ExcelJS.Worksheet, moneyCols: string[]): void {
+  ws.getRow(1).font = { bold: true };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+  for (const col of moneyCols) ws.getColumn(col).numFmt = '#,##0';
 }
 
 /** 내용 정규화 — 공백 제거(대소문자 유지). 이력 매칭 키. */

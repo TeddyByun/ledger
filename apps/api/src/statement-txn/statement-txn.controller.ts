@@ -7,7 +7,9 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { StatementTxnService } from './statement-txn.service.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
@@ -37,6 +39,16 @@ export class StatementTxnController {
     return this.service.findBankSummary(query);
   }
 
+  @Get('bank-transactions/export')
+  @ApiOperation({ summary: '은행 조회 결과 엑셀(xlsx) 내보내기' })
+  async bankExport(
+    @Query() query: StatementTxnQueryDto,
+    @Res() res: Response,
+  ) {
+    const buf = await this.service.exportBank(query);
+    sendXlsx(res, buf, '은행거래');
+  }
+
   @Get('card-transactions')
   @ApiOperation({ summary: '카드 원천 거래 목록 (카드·기간·분류·가맹점 검색)' })
   card(@Query() query: StatementTxnQueryDto) {
@@ -47,6 +59,16 @@ export class StatementTxnController {
   @ApiOperation({ summary: '카드 조회 조건 합계 (이용금액·결제금액·건수)' })
   cardSummary(@Query() query: StatementTxnQueryDto) {
     return this.service.findCardSummary(query);
+  }
+
+  @Get('card-transactions/export')
+  @ApiOperation({ summary: '카드 조회 결과 엑셀(xlsx) 내보내기' })
+  async cardExport(
+    @Query() query: StatementTxnQueryDto,
+    @Res() res: Response,
+  ) {
+    const buf = await this.service.exportCard(query);
+    sendXlsx(res, buf, '카드거래');
   }
 
   @Post('card-transactions/bulk-classify')
@@ -89,4 +111,19 @@ export class StatementTxnController {
   bulkDelete(@Body() dto: BulkIdsDto) {
     return this.service.bulkDeleteBank(dto.ids);
   }
+}
+
+/** xlsx 버퍼를 다운로드 응답으로 전송. 한글 파일명은 filename*(UTF-8)로만. */
+function sendXlsx(res: Response, buf: Buffer, base: string): void {
+  const ymd = new Date().toISOString().slice(0, 10);
+  const name = `${base}_${ymd}.xlsx`; // 예: 은행거래_2026-07-18.xlsx
+  // filename= 은 ASCII만 허용 → 폴백은 ascii, 실제 한글명은 filename*(UTF-8 인코딩)
+  const asciiFallback = base === '은행거래' ? 'bank' : 'card';
+  res.set({
+    'Content-Type':
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'Content-Disposition': `attachment; filename="${asciiFallback}_${ymd}.xlsx"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'Content-Length': String(buf.length),
+  });
+  res.end(buf);
 }

@@ -152,6 +152,39 @@ export const api = {
     }
     return body as T;
   },
+  /** 파일 다운로드(xlsx 등). 응답 blob 을 브라우저 저장 트리거. */
+  async download(path: string, fallbackName: string): Promise<void> {
+    const send = () =>
+      fetch(getBase() + path, {
+        credentials: 'include',
+        headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+      });
+    let res = await send();
+    if (res.status === 401 && (await tryRefresh())) res = await send();
+    if (!res.ok) {
+      throw new ApiError(res.status, 'EXPORT_FAILED', '내보내기에 실패했습니다.');
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') ?? '';
+    let name = fallbackName;
+    const m =
+      cd.match(/filename\*=UTF-8''([^;]+)/i) ?? cd.match(/filename="?([^";]+)"?/i);
+    if (m?.[1]) {
+      try {
+        name = decodeURIComponent(m[1]);
+      } catch {
+        name = m[1];
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   restore: tryRefresh,
   async logout() {
     try {
