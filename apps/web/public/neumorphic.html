@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>가계부 · 뉴모피즘 테마 미리보기</title>
+<style>
+/* ══════════════════════════════════════════════════════════
+   가계부 · Ledger — 뉴모피즘/글래스모피즘 다크 테마 (미리보기)
+   의미색 유지: 수입=파랑 · 지출=빨강 (가독성 우선)
+   ══════════════════════════════════════════════════════════ */
+:root{
+  --canvas:#1b1832; --surface:#241f42; --surface-2:#1e1a3a; --surface-3:#2a2550;
+  --ink:#ECEAFB; --ink-2:#BBB5E4; --muted:#8B84BE; --faint:#655E92;
+  --line:#332d5c; --line-2:#3d3668;
+  --brand-a:#A855F7; --brand-b:#22D3EE; --brand:#9D6BF0; --brand-ink:#C9AEFF; --brand-soft:#2b2358;
+  --income:#5E9BF0; --income-soft:#1b2748; --expense:#F26D5B; --expense-soft:#3a2033;
+  --good:#34D399; --warn:#FBBF24;
+  --grad:linear-gradient(135deg,var(--brand-a),var(--brand-b));
+  --nm-out:-6px -6px 16px rgba(255,255,255,.045), 8px 8px 22px rgba(0,0,0,.5);
+  --nm-out-sm:-3px -3px 8px rgba(255,255,255,.04), 4px 4px 12px rgba(0,0,0,.45);
+  --nm-in:inset 3px 3px 8px rgba(0,0,0,.55), inset -3px -3px 8px rgba(255,255,255,.045);
+  --nm-in-sm:inset 2px 2px 5px rgba(0,0,0,.5), inset -2px -2px 5px rgba(255,255,255,.04);
+  --r-sm:12px; --r:18px; --r-lg:24px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(168,85,247,.18), transparent 60%),
+    radial-gradient(1000px 500px at 100% 0%, rgba(34,211,238,.12), transparent 55%),
+    var(--canvas);
+  color:var(--ink); font-family:var(--sans); line-height:1.5; font-size:14px;
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+.tnum,.mono{font-variant-numeric:tabular-nums;} .mono{font-family:var(--mono);}
+.muted{color:var(--muted);}
+h1,h2,h3{margin:0;letter-spacing:-.02em;}
+
+.app{display:grid;grid-template-columns:250px 1fr;min-height:100vh;}
+
+/* ── Sidebar ── */
+.sidebar{padding:22px 16px;display:flex;flex-direction:column;gap:6px;
+  position:sticky;top:0;height:100vh;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
+  border-right:1px solid var(--line);}
+.logo{display:flex;align-items:center;gap:12px;padding:6px 6px 18px;}
+.logo .mark{width:42px;height:42px;border-radius:14px;background:var(--grad);
+  display:grid;place-items:center;color:#fff;font-weight:800;font-size:20px;
+  box-shadow:0 8px 20px -6px rgba(168,85,247,.6), var(--nm-out-sm);}
+.logo .name{font-weight:800;font-size:19px;}
+.logo .name small{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted);font-weight:500;margin-top:2px;}
+.hh{display:flex;align-items:center;gap:11px;margin:2px 2px 14px;padding:12px 13px;
+  border-radius:var(--r);background:var(--surface-2);box-shadow:var(--nm-in-sm);}
+.hh .av{width:34px;height:34px;border-radius:11px;background:var(--grad);color:#fff;
+  display:grid;place-items:center;font-weight:700;font-size:14px;
+  box-shadow:0 6px 14px -4px rgba(168,85,247,.55);}
+.hh .info b{font-size:13.5px;display:block;} .hh .info span{font-size:11px;color:var(--muted);}
+.nav-label{font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--ink);padding:16px 10px 8px;}
+.nav{display:flex;flex-direction:column;gap:4px;}
+.nav a{display:flex;align-items:center;gap:11px;padding:11px 14px 11px 26px;border-radius:var(--r-sm);
+  color:var(--ink-2);font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none;
+  transition:all .15s ease;}
+.nav a:hover{color:var(--ink);box-shadow:var(--nm-out-sm);}
+.nav a.active{color:#fff;background:var(--grad);
+  box-shadow:0 10px 22px -8px rgba(168,85,247,.6), var(--nm-out-sm);}
+.nav a .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55;}
+
+/* ── Main ── */
+.main{padding:28px 30px 48px;}
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:22px;flex-wrap:wrap;}
+.crumb{font-size:12.5px;color:var(--muted);} .crumb b{color:var(--ink);}
+.spacer{flex:1;}
+h1.page-title{font-size:26px;font-weight:800;margin-bottom:4px;}
+.sub{color:var(--muted);font-size:13px;margin-bottom:22px;}
+
+.grid{display:grid;gap:18px;}
+.cols-3{grid-template-columns:repeat(3,1fr);}
+.auto{grid-template-columns:repeat(auto-fill,minmax(300px,1fr));}
+
+/* ── Cards / surfaces ── */
+.card{background:var(--surface);border-radius:var(--r-lg);padding:20px;
+  box-shadow:var(--nm-out);border:1px solid rgba(255,255,255,.03);}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;}
+.card-head h3{font-size:15px;font-weight:700;}
+
+/* Stat tile */
+.stat .label{font-size:12.5px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.stat .ico{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;font-size:15px;
+  box-shadow:var(--nm-in-sm);}
+.stat .value{font-size:25px;font-weight:800;letter-spacing:-.03em;}
+.stat .delta{font-size:12px;margin-top:8px;color:var(--muted);}
+.pos{color:var(--income);} .neg{color:var(--expense);}
+
+/* Chips / tags / legend */
+.legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap;}
+.legend span{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);}
+.legend i{width:11px;height:11px;border-radius:4px;display:inline-block;box-shadow:var(--nm-out-sm);}
+.tag{font-size:11.5px;padding:5px 11px;border-radius:999px;background:var(--surface-2);
+  color:var(--ink-2);box-shadow:var(--nm-in-sm);font-weight:600;}
+.pill-tabs{display:inline-flex;gap:4px;padding:5px;border-radius:999px;background:var(--surface-2);
+  box-shadow:var(--nm-in-sm);}
+.pill-tabs button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;
+  font-weight:700;padding:7px 16px;border-radius:999px;cursor:pointer;}
+.pill-tabs button.on{color:#fff;background:var(--grad);box-shadow:0 6px 14px -5px rgba(168,85,247,.6);}
+
+/* Buttons */
+.btn{border:0;font:inherit;font-weight:700;font-size:13px;cursor:pointer;
+  padding:12px 20px;border-radius:var(--r);color:var(--ink-2);background:var(--surface);
+  box-shadow:var(--nm-out-sm);transition:all .13s ease;display:inline-flex;align-items:center;gap:8px;}
+.btn:hover{color:var(--ink);}
+.btn:active{box-shadow:var(--nm-in);}
+.btn.primary{color:#fff;background:var(--grad);
+  box-shadow:0 12px 26px -8px rgba(168,85,247,.6), var(--nm-out-sm);}
+.btn.sm{padding:8px 14px;font-size:12px;border-radius:var(--r-sm);}
+
+/* Inputs */
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;}
+.input,.select{width:100%;font:inherit;font-size:13.5px;color:var(--ink);
+  background:var(--surface-2);border:0;border-radius:var(--r);padding:13px 15px;
+  box-shadow:var(--nm-in);outline:none;}
+.input::placeholder{color:var(--faint);}
+.input:focus,.select:focus{box-shadow:var(--nm-in), 0 0 0 2px rgba(168,85,247,.4);}
+.search{position:relative;}
+.search .input{padding-left:42px;}
+.search .mag{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:var(--muted);}
+
+/* Toggle */
+.toggle{width:52px;height:30px;border-radius:999px;background:var(--surface-2);position:relative;
+  cursor:pointer;box-shadow:var(--nm-in);transition:.2s;}
+.toggle::after{content:"";position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;
+  background:var(--surface);box-shadow:var(--nm-out-sm);transition:.2s;}
+.toggle.on{background:var(--grad);}
+.toggle.on::after{left:26px;background:#fff;}
+
+/* Progress / slider */
+.track{height:12px;border-radius:999px;background:var(--surface-2);box-shadow:var(--nm-in);overflow:hidden;}
+.track .fill{height:100%;border-radius:999px;background:var(--grad);
+  box-shadow:0 0 14px rgba(168,85,247,.5);}
+.slider{height:12px;border-radius:999px;background:var(--surface-2);box-shadow:var(--nm-in);position:relative;}
+.slider .fill{position:absolute;left:0;top:0;height:100%;border-radius:999px;background:var(--grad);}
+.slider .knob{position:absolute;top:50%;width:22px;height:22px;border-radius:50%;background:var(--surface);
+  transform:translate(-50%,-50%);box-shadow:var(--nm-out-sm), 0 0 0 3px rgba(168,85,247,.35);}
+
+/* Category tree */
+.tree-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--r-sm);
+  cursor:pointer;margin-bottom:3px;}
+.tree-row:hover{box-shadow:var(--nm-out-sm);}
+.tree-row.sub{margin-left:22px;}
+.tree-row.active{background:var(--grad);color:#fff;box-shadow:0 8px 18px -7px rgba(168,85,247,.55);}
+.tree-row .code{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.tree-row.active .code{color:rgba(255,255,255,.8);}
+
+svg text{font-family:var(--sans);}
+.note{margin:34px 30px;padding:16px 20px;border-radius:var(--r);background:var(--surface);
+  box-shadow:var(--nm-out-sm);color:var(--ink-2);font-size:12.5px;grid-column:1/-1;}
+.note b{color:var(--brand-ink);}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="mark">₩</div>
+      <div class="name">가계부<small>Ledger</small></div>
+    </div>
+    <div class="hh">
+      <div class="av">변</div>
+      <div class="info"><b>변씨네 가구</b><span>소유자</span></div>
+    </div>
+    <div class="nav-label">집계</div>
+    <nav class="nav"><a class="active"><span class="dot"></span>대시보드</a></nav>
+    <div class="nav-label">거래내역</div>
+    <nav class="nav">
+      <a><span class="dot"></span>은행 거래</a>
+      <a><span class="dot"></span>카드 거래</a>
+    </nav>
+    <div class="nav-label">관리</div>
+    <nav class="nav">
+      <a><span class="dot"></span>가족 관리</a>
+      <a><span class="dot"></span>카드 관리</a>
+      <a><span class="dot"></span>분류 관리</a>
+      <a><span class="dot"></span>명세서 업로드</a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <span class="crumb">집계 / <b>대시보드</b></span>
+      <span class="spacer"></span>
+      <div class="pill-tabs">
+        <button class="on">2026년</button><button>2025년</button><button>2024년</button>
+      </div>
+    </div>
+    <h1 class="page-title">대시보드</h1>
+    <div class="sub">2026년 계좌·카드·분류별 월별 추이입니다.</div>
+
+    <!-- Stat tiles -->
+    <div class="grid cols-3" style="margin-bottom:18px;">
+      <div class="card stat">
+        <div class="label"><span class="ico" style="color:var(--income)">▲</span> 이번 달 수입</div>
+        <div class="value pos">₩5,903,458</div>
+        <div class="delta">전월 대비 <span class="pos">+12.4%</span></div>
+      </div>
+      <div class="card stat">
+        <div class="label"><span class="ico" style="color:var(--expense)">▼</span> 이번 달 지출</div>
+        <div class="value neg">₩3,187,204</div>
+        <div class="delta">전월 대비 <span class="neg">+4.1%</span></div>
+      </div>
+      <div class="card stat">
+        <div class="label"><span class="ico" style="color:var(--brand-ink)">＝</span> 잔액</div>
+        <div class="value">₩2,716,254</div>
+        <div class="delta">저축률 46%</div>
+      </div>
+    </div>
+
+    <!-- Bank chart card -->
+    <div class="grid auto" style="margin-bottom:18px;">
+      <div class="card">
+        <div class="card-head">
+          <h3>하나은행 47307</h3>
+          <span class="mono" style="font-size:12px;"><span class="pos">+₩59,034,958</span></span>
+        </div>
+        <div class="legend" style="margin-bottom:12px;">
+          <span><i style="background:var(--income)"></i>수입</span>
+          <span><i style="background:var(--expense)"></i>지출</span>
+        </div>
+        <svg viewBox="0 0 300 120" width="100%" style="display:block">
+          <line x1="0" y1="104" x2="300" y2="104" stroke="var(--line-2)" stroke-width="1"/>
+          <!-- 12 groups of 2 bars -->
+          <g>
+            <!-- generated-ish sample bars -->
+            <rect x="4"  y="40" width="8" height="64" rx="3" fill="var(--income)"/>
+            <rect x="14" y="70" width="8" height="34" rx="3" fill="var(--expense)"/>
+            <rect x="29" y="55" width="8" height="49" rx="3" fill="var(--income)"/>
+            <rect x="39" y="78" width="8" height="26" rx="3" fill="var(--expense)"/>
+            <rect x="54" y="30" width="8" height="74" rx="3" fill="var(--income)"/>
+            <rect x="64" y="64" width="8" height="40" rx="3" fill="var(--expense)"/>
+            <rect x="79" y="48" width="8" height="56" rx="3" fill="var(--income)"/>
+            <rect x="89" y="82" width="8" height="22" rx="3" fill="var(--expense)"/>
+            <rect x="104" y="36" width="8" height="68" rx="3" fill="var(--income)"/>
+            <rect x="114" y="72" width="8" height="32" rx="3" fill="var(--expense)"/>
+            <rect x="129" y="60" width="8" height="44" rx="3" fill="var(--income)"/>
+            <rect x="139" y="86" width="8" height="18" rx="3" fill="var(--expense)"/>
+            <rect x="154" y="44" width="8" height="60" rx="3" fill="var(--income)"/>
+            <rect x="164" y="68" width="8" height="36" rx="3" fill="var(--expense)"/>
+            <rect x="179" y="52" width="8" height="52" rx="3" fill="var(--income)"/>
+            <rect x="189" y="80" width="8" height="24" rx="3" fill="var(--expense)"/>
+            <rect x="204" y="34" width="8" height="70" rx="3" fill="var(--income)"/>
+            <rect x="214" y="74" width="8" height="30" rx="3" fill="var(--expense)"/>
+            <rect x="229" y="58" width="8" height="46" rx="3" fill="var(--income)"/>
+            <rect x="239" y="84" width="8" height="20" rx="3" fill="var(--expense)"/>
+            <rect x="254" y="42" width="8" height="62" rx="3" fill="var(--income)"/>
+            <rect x="264" y="76" width="8" height="28" rx="3" fill="var(--expense)"/>
+            <rect x="279" y="50" width="8" height="54" rx="3" fill="var(--income)"/>
+            <rect x="289" y="88" width="8" height="16" rx="3" fill="var(--expense)"/>
+          </g>
+          <g fill="var(--muted)" font-size="8" text-anchor="middle">
+            <text x="12" y="116">1</text><text x="37" y="116">2</text><text x="62" y="116">3</text>
+            <text x="87" y="116">4</text><text x="112" y="116">5</text><text x="137" y="116">6</text>
+            <text x="162" y="116">7</text><text x="187" y="116">8</text><text x="212" y="116">9</text>
+            <text x="237" y="116">10</text><text x="262" y="116">11</text><text x="287" y="116">12</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Card spend chart -->
+      <div class="card">
+        <div class="card-head">
+          <h3>하나카드 본인 7322</h3>
+          <span class="mono" style="font-size:12px;color:var(--expense)">−₩4,981,929</span>
+        </div>
+        <div class="legend" style="margin-bottom:12px;">
+          <span><i style="background:var(--expense)"></i>지출</span>
+        </div>
+        <svg viewBox="0 0 300 120" width="100%" style="display:block">
+          <line x1="0" y1="104" x2="300" y2="104" stroke="var(--line-2)" stroke-width="1"/>
+          <g fill="var(--expense)">
+            <rect x="8"   y="60" width="14" height="44" rx="4"/>
+            <rect x="33"  y="48" width="14" height="56" rx="4"/>
+            <rect x="58"  y="72" width="14" height="32" rx="4"/>
+            <rect x="83"  y="40" width="14" height="64" rx="4"/>
+            <rect x="108" y="66" width="14" height="38" rx="4"/>
+            <rect x="133" y="54" width="14" height="50" rx="4"/>
+            <rect x="158" y="34" width="14" height="70" rx="4"/>
+            <rect x="183" y="62" width="14" height="42" rx="4"/>
+            <rect x="208" y="50" width="14" height="54" rx="4"/>
+            <rect x="233" y="70" width="14" height="34" rx="4"/>
+            <rect x="258" y="44" width="14" height="60" rx="4"/>
+            <rect x="283" y="58" width="14" height="46" rx="4"/>
+          </g>
+          <g fill="var(--muted)" font-size="8" text-anchor="middle">
+            <text x="15" y="116">1</text><text x="40" y="116">2</text><text x="65" y="116">3</text>
+            <text x="90" y="116">4</text><text x="115" y="116">5</text><text x="140" y="116">6</text>
+            <text x="165" y="116">7</text><text x="190" y="116">8</text><text x="215" y="116">9</text>
+            <text x="240" y="116">10</text><text x="265" y="116">11</text><text x="290" y="116">12</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Components showcase -->
+    <div class="grid" style="grid-template-columns:1.1fr .9fr;">
+      <!-- Form / controls -->
+      <div class="card">
+        <div class="card-head"><h3>카드 정보 수정</h3>
+          <div style="display:flex;gap:8px;"><span class="tag">본인</span></div>
+        </div>
+        <div class="search field">
+          <span class="mag">⌕</span>
+          <input class="input" placeholder="거래 내역 검색…" />
+        </div>
+        <div class="field">
+          <label>카드 이름/별칭</label>
+          <input class="input" value="하나카드 Navy 본인" />
+        </div>
+        <div class="field">
+          <label>메모</label>
+          <input class="input" placeholder="연회비·할인 혜택·결제일 등" />
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 18px;">
+          <span class="muted" style="font-size:12.5px;">집계에서 제외</span>
+          <div class="toggle on"></div>
+        </div>
+        <div style="margin-bottom:18px;">
+          <div class="muted" style="font-size:12px;margin-bottom:8px;">이번 달 예산 사용률 · 72%</div>
+          <div class="track"><div class="fill" style="width:72%"></div></div>
+        </div>
+        <div style="margin-bottom:22px;">
+          <div class="muted" style="font-size:12px;margin-bottom:10px;">한도 조정</div>
+          <div class="slider"><div class="fill" style="width:52%"></div><div class="knob" style="left:52%"></div></div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn primary" style="flex:1;justify-content:center;">수정 저장</button>
+          <button class="btn">취소</button>
+        </div>
+      </div>
+
+      <!-- Category tree -->
+      <div class="card">
+        <div class="card-head"><h3>분류 관리</h3><button class="btn sm">+ 대분류</button></div>
+        <div style="font-size:12.5px;color:var(--expense);font-weight:800;padding:6px 4px 8px;">지출 분류</div>
+        <div class="tree-row active">
+          <div style="flex:1"><b>공과금·주거</b></div><span class="code" style="color:rgba(255,255,255,.8)">04 · 소분류 3</span>
+        </div>
+        <div class="tree-row sub"><div style="flex:1">관리비</div><span class="code">0401</span></div>
+        <div class="tree-row sub"><div style="flex:1">전기·가스</div><span class="code">0402</span></div>
+        <div class="tree-row"><div style="flex:1"><b>생활</b></div><span class="code">05 · 소분류 5</span></div>
+        <div class="tree-row"><div style="flex:1"><b>교통</b></div><span class="code">08 · 소분류 2</span></div>
+        <div style="font-size:12.5px;color:var(--income);font-weight:800;padding:14px 4px 8px;">수입 분류</div>
+        <div class="tree-row"><div style="flex:1"><b>급여</b></div><span class="code">13</span></div>
+        <div class="tree-row"><div style="flex:1"><b>이자</b></div><span class="code">16</span></div>
+      </div>
+    </div>
+
+    <div class="note">
+      🎨 <b>뉴모피즘 · 다크 테마 미리보기</b> — 보라→청록 그라데이션 포인트, 부드러운 볼록/오목 그림자.
+      금액의 <span class="pos">수입=파랑</span> · <span class="neg">지출=빨강</span>은 가독성을 위해 유지했습니다.
+      이 방향이 괜찮으면 실제 앱 <b>globals.css</b>에 그대로 적용합니다.
+    </div>
+  </main>
+</div>
+</body>
+</html>
