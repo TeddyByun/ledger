@@ -22,7 +22,10 @@
       "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email, display_name from household_member limit 5;\")",
       "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email from household_member;\")",
       "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email, name from household_member where name like '%중환%' or email like '%test%' order by email;\")",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(curl -s -o /dev/null -w \"app %{http_code}\\\\n\" localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"preview %{http_code}\\\\n\" localhost:3000/neumorphic.html)",
+      "Edit(/.claude/skills/neumorphic-theme/**)"
     ],
     "additionalDirectories": [
       "/home/coder/ledger/prisma"
