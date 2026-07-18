@@ -161,6 +161,7 @@ model PaymentMethod {
   cardNo      String?    @map("card_no") // 카드 식별번호(마스킹 저장, 뒤 4자리 노출). 은행은 null
   accountNo   String?    @map("account_no")
   owner       String?
+  memo        String?
   createdAt   DateTime   @default(now()) @map("created_at")
 
   household           Household            @relation(fields: [householdId], references: [id])
