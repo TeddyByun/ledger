@@ -676,7 +676,10 @@ export class StatementTxnService {
         ...(q.to && { lte: new Date(`${q.to}T23:59:59.999Z`) }),
       };
     }
-    if (q.categoryCode) {
+    // 분류: '-' 는 미분류(연결 거래 없음)만
+    if (q.categoryCode === '-') {
+      where.transactionId = null;
+    } else if (q.categoryCode) {
       where.transaction = {
         is: { categoryCode: { in: await this.categoryCodes(q.categoryCode) } },
       };
