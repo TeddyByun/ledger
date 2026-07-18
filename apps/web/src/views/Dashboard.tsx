@@ -61,7 +61,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
     <>
       <header className="topbar">
         <span className="crumb">
-          개요 / <b>대시보드</b>
+          집계 / <b>대시보드</b>
         </span>
         <div className="spacer" />
         <select

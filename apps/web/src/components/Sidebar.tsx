@@ -4,13 +4,14 @@ import { useAuth } from '@/lib/auth';
 import type { View } from '@/components/Shell';
 
 const NAV: { view: View; label: string; group: string }[] = [
-  { view: 'dashboard', label: '대시보드', group: '개요' },
-  { view: 'bank-transactions', label: '은행 거래', group: '기록' },
-  { view: 'card-transactions', label: '카드 거래', group: '기록' },
-  { view: 'imports', label: '명세서 업로드', group: '기록' },
-  { view: 'family', label: '가족 관리', group: '설정' },
-  { view: 'cards', label: '카드 관리', group: '설정' },
-  { view: 'payment-methods', label: '결제수단', group: '설정' },
+  { view: 'dashboard', label: '대시보드', group: '집계' },
+  { view: 'bank-transactions', label: '은행 거래', group: '거래내역' },
+  { view: 'card-transactions', label: '카드 거래', group: '거래내역' },
+  { view: 'family', label: '가족 관리', group: '관리' },
+  { view: 'cards', label: '카드 관리', group: '관리' },
+  { view: 'payment-methods', label: '결제수단', group: '관리' },
+  { view: 'categories', label: '분류 관리', group: '관리' },
+  { view: 'imports', label: '명세서 업로드', group: '관리' },
 ];
 
 export function Sidebar({

@@ -144,7 +144,7 @@ export function Cards() {
     <>
       <header className="topbar">
         <span className="crumb">
-          설정 / <b>카드 관리</b>
+          관리 / <b>카드 관리</b>
         </span>
       </header>
       <main className="page">

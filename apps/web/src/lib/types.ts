@@ -61,6 +61,12 @@ export interface Category {
   type: 'income' | 'expense';
   depth: number;
   parentCode: string | null;
+  sortOrder?: number;
+  useYn?: 'Y' | 'N';
+}
+
+export interface CategoryNode extends Category {
+  children: CategoryNode[];
 }
 
 export interface Transaction {

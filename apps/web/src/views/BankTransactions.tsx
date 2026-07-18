@@ -240,7 +240,7 @@ export function BankTransactions() {
     <>
       <header className="topbar">
         <span className="crumb">
-          기록 / <b>은행 거래</b>
+          거래내역 / <b>은행 거래</b>
         </span>
       </header>
       <main className="page">

@@ -115,7 +115,7 @@ export function Imports() {
     <>
       <header className="topbar">
         <span className="crumb">
-          기록 / <b>명세서 업로드</b>
+          관리 / <b>명세서 업로드</b>
         </span>
       </header>
       <main className="page">

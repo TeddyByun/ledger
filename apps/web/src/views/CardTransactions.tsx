@@ -200,7 +200,7 @@ export function CardTransactions() {
     <>
       <header className="topbar">
         <span className="crumb">
-          기록 / <b>카드 거래</b>
+          거래내역 / <b>카드 거래</b>
         </span>
       </header>
       <main className="page">

@@ -15,7 +15,14 @@
       "Bash(curl -s -o /dev/null -w \"api %{http_code}\\\\n\" localhost:4000/api/v1/docs)",
       "Bash(rm -f /tmp/claude-1000/-home-coder-ledger/cc94ecb1-22e8-4280-a8d2-13e1c516b790/scratchpad/bank.xlsx /tmp/claude-1000/-home-coder-ledger/cc94ecb1-22e8-4280-a8d2-13e1c516b790/scratchpad/card.xlsx)",
       "Bash(./node_modules/.bin/next start *)",
-      "Bash(cd /home/coder/ledger/apps/api *)"
+      "Bash(cd /home/coder/ledger/apps/api *)",
+      "Bash(psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"set search_path to ledger; select code,name,parent_code,depth,type,sort_order,use_yn from category order by depth,sort_order limit 30;\")",
+      "Bash(kill -9 1082477)",
+      "Bash(psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"set search_path to ledger; \\\\dt\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email, display_name from household_member limit 5;\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email from household_member;\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select email, name from household_member where name like '%중환%' or email like '%test%' order by email;\")",
+      "Bash(git add *)"
     ],
     "additionalDirectories": [
       "/home/coder/ledger/prisma"
