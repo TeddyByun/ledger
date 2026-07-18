@@ -410,6 +410,7 @@ export class ImportPipelineService {
 
     let classified = 0;
     let pending = 0;
+    let lastPlanId: number | null = null; // 직전 할부 원거래(미리입금/할인 등 조정행 연결용)
     for (const r of rows) {
       // dedup은 가구 내에서만
       const exists = await this.prisma.cardTransaction.findFirst({
@@ -429,14 +430,20 @@ export class ImportPipelineService {
         ? new Date(`${meta.statementYm}-01T00:00:00Z`)
         : usageDate;
 
-      // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조)
+      // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조).
+      // 미리입금/할인 등 조정행(음수·0원)은 직전 할부 원거래에 연결 → 필터·표시 일치.
       let installmentPlanId: number | null = null;
-      if (isInstallment && r.usageAmount > 0) {
-        installmentPlanId = await this.upsertInstallmentPlan(
-          householdId,
-          paymentMethodId,
-          r,
-        );
+      if (isInstallment) {
+        if (r.usageAmount > 0) {
+          installmentPlanId = await this.upsertInstallmentPlan(
+            householdId,
+            paymentMethodId,
+            r,
+          );
+          lastPlanId = installmentPlanId;
+        } else {
+          installmentPlanId = lastPlanId;
+        }
       }
       // 할부 월 청구건의 '이용금액' = 이번달 청구액(원금+이자). 전체금액은 원거래 테이블.
       const storedUsage = isInstallment ? r.principal + r.fee : r.usageAmount;
