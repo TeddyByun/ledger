@@ -472,7 +472,14 @@ export function BankTransactions() {
                           aria-label="행 선택"
                         />
                       </td>
-                      <td className="date">{b.txnAt.slice(0, 10)}</td>
+                      <td className="date">
+                        {b.txnAt.slice(0, 10)}
+                        {b.txnAt.slice(11, 19) !== '00:00:00' && (
+                          <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>
+                            {b.txnAt.slice(11, 16)}
+                          </span>
+                        )}
+                      </td>
                       <td className="muted">{b.account?.name ?? '—'}</td>
                       <td className="muted" style={{ whiteSpace: 'nowrap' }}>
                         {b.txnTypeRaw ?? '—'}

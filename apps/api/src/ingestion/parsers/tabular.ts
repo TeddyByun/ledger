@@ -113,3 +113,25 @@ export function parseDate(raw: string | undefined, defaultYear?: number): Date |
 function toUtc(y: number, mo: number, d: number): Date {
   return new Date(Date.UTC(y, mo - 1, d));
 }
+
+/**
+ * 날짜 + 시간 파싱. 날짜는 parseDate 로 정규화하고, 문자열에 "HH:MM(:SS)" 시각이
+ * 있으면 그 시각을 덧입힌다. 시간이 없으면 자정. (은행 거래일시: "2026-03-21 05:16:17")
+ * 벽시계 시각을 그대로 UTC 성분으로 저장(날짜와 동일 규약).
+ */
+export function parseDateTime(
+  raw: string | undefined,
+  defaultYear?: number,
+): Date | null {
+  const base = parseDate(raw, defaultYear);
+  if (!base || !raw) return base;
+  const t = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!t) return base;
+  const hh = +t[1]!;
+  const mm = +t[2]!;
+  const ss = t[3] ? +t[3] : 0;
+  if (hh > 23 || mm > 59 || ss > 59) return base;
+  return new Date(
+    Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hh, mm, ss),
+  );
+}

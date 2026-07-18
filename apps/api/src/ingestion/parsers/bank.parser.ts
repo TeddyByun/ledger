@@ -1,5 +1,5 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
+import { parseAmount, parseDateTime } from './tabular.js';
 import { cell, dedupHash, locateHeader } from './generic.js';
 import type {
   FieldAliasMap,
@@ -31,7 +31,7 @@ export class GenericBankParser implements StatementParser {
     const out: NormalizedBankRow[] = [];
     for (let i = headerIndex + 1; i < rows.length; i++) {
       const row = rows[i]!;
-      const txnAt = parseDate(cell(row, columns, 'txnAt'));
+      const txnAt = parseDateTime(cell(row, columns, 'txnAt'));
       if (!txnAt) continue; // 합계/공백 행 skip
 
       const withdrawal = parseAmount(cell(row, columns, 'withdrawal')) ?? 0;
@@ -41,6 +41,12 @@ export class GenericBankParser implements StatementParser {
       const description = (cell(row, columns, 'description') ?? '').trim() || null;
       const txnTypeRaw = (cell(row, columns, 'txnTypeRaw') ?? '').trim() || null;
       const branch = (cell(row, columns, 'branch') ?? '').trim() || null;
+
+      // dedup 키는 '날짜'(시각 제외) 기준 — 시각을 넣으면 재업로드 중복방지가 깨지고
+      // 기존 데이터와도 어긋난다. 시각은 txnAt 에만 담아 정렬/표시에 쓴다.
+      const dateKey = new Date(
+        Date.UTC(txnAt.getUTCFullYear(), txnAt.getUTCMonth(), txnAt.getUTCDate()),
+      ).toISOString();
 
       out.push({
         txnAt,
@@ -52,7 +58,7 @@ export class GenericBankParser implements StatementParser {
         branch,
         dedupHash: dedupHash([
           this.issuer,
-          txnAt.toISOString(),
+          dateKey,
           withdrawal,
           deposit,
           balance,
