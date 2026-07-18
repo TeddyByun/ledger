@@ -65,6 +65,12 @@ export class ImportPipelineService {
         .get(job.issuer as Issuer)
         .parse(rows, { issuer: job.issuer as Issuer, statementYm: job.statementYm ?? undefined });
 
+      // 파일 내 완전 동일 거래(같은 날·금액·가맹점)는 실제 별건 → 발생 순번을
+      // dedup 키에 붙여 각각 저장. 재업로드는 같은 순번이라 여전히 중복 방지.
+      disambiguateDedup(
+        result.kind === 'bank' ? result.rows : result.statement.rows,
+      );
+
       // 카드 명세서월(청구월)을 잡에 기록 — 업로드 기록에서 표기
       if (result.kind === 'card' && result.statement.statementYm) {
         await this.prisma.importJob.update({
@@ -567,6 +573,20 @@ export class ImportPipelineService {
 /** 할부 여부 — 개월 값에 숫자가 있으면 할부. '-'·''·null·'일시불'은 일시불. */
 function isInstallmentPeriod(period: string | null): boolean {
   return !!period && /\d/.test(period);
+}
+
+/**
+ * 파일 내 dedup 키가 겹치는 행(완전 동일 거래)에 발생 순번을 붙여 구분.
+ * 2번째부터 '#2','#3'… → 같은 파일의 진짜 별건은 각각 저장되고,
+ * 재업로드 시엔 동일 순번이 재현되어 중복 방지가 유지된다.
+ */
+function disambiguateDedup(rows: Array<{ dedupHash: string }>): void {
+  const seen = new Map<string, number>();
+  for (const r of rows) {
+    const n = (seen.get(r.dedupHash) ?? 0) + 1;
+    seen.set(r.dedupHash, n);
+    if (n > 1) r.dedupHash = `${r.dedupHash}#${n}`;
+  }
 }
 
 /**
