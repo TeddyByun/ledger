@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { TransactionType } from '@ledger/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  EXCLUDE_CATEGORY_NAME,
+  excludeCategoryCodes,
+} from '../common/exclude-category.js';
 
 const YM_RE = /^\d{4}-\d{2}$/;
 
@@ -25,8 +29,12 @@ export class StatisticsService {
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
     const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
+    const excluded = await excludeCategoryCodes(this.prisma);
     const txns = await this.prisma.transaction.findMany({
-      where: { transactionDate: { gte: start, lt: endExclusive } },
+      where: {
+        transactionDate: { gte: start, lt: endExclusive },
+        ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
+      },
       select: { type: true, amount: true, transactionDate: true },
     });
 
@@ -90,12 +98,20 @@ export class StatisticsService {
       topOf.set(c.code, { code: top.code, name: top.name });
     }
 
+    // '분류제외' 분류(대분류+소분류)는 집계에서 제외
+    const excludeRoots = cats.filter((c) => c.name === EXCLUDE_CATEGORY_NAME).map((c) => c.code);
+    const excludeSet = new Set<string>(excludeRoots);
+    for (const c of cats) {
+      if (c.parentCode && excludeRoots.includes(c.parentCode)) excludeSet.add(c.code);
+    }
+
     const z = () => new Array(12).fill(0) as number[];
     const bank = new Map<number, { name: string; income: number[]; expense: number[] }>();
     const card = new Map<number, { name: string; expense: number[] }>();
     const cat = new Map<string, { name: string; expense: number[] }>();
 
     for (const t of txns) {
+      if (excludeSet.has(t.categoryCode)) continue;
       const m = t.transactionDate.getUTCMonth(); // 0~11
       const amt = Number(t.amount ?? 0);
       const pm = t.paymentMethod;
