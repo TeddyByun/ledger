@@ -129,7 +129,7 @@
 - **금액 기준 동일**: 가계부 지출 = `결제원금(principal)`. 예: `모바일이즐 500 / 할인 -4 / 결제원금 496` → 496.
 - **적립 vs 할인 판별**: `결제원금 < 이용금액`이면 그 차액은 **할인**(`benefit_amount` 음수), `결제원금 = 이용금액`이고 값이 양수면 **적립 포인트**(`point`). 예: 코스트코 `21,690 / +108 / 결제원금 21,690` → 적립 108, 지출 21,690.
 - **결제원금 0원 정보성 행 제외**: `GS25 M포인트 사용 / 이용금액 0 / 결제원금 0`처럼 실제 청구 0원 행은 `status='info'`(또는 미연결)로 두어 집계 제외. (직전 GS25 구매 20,900 → M포인트 2,769 사용 → 결제원금 18,131에 이미 반영됨.)
-- **할부 원거래일 vs 청구월**: 할부 건은 `이용일`(예: 2026-01-05)을 `card_transaction.txn_date`에 보존하되, **회차별 월 집계 정책**(7.2)에 따라 가계부 `transaction_date`는 청구월(명세서 월)로 생성하고 `amount = principal`(회차 금액). 예: `나이스-팬딩 330,000 할부 3/3 / 결제원금 110,000` → 이번 달 지출 110,000.
+- **할부 원거래일 vs 청구월**: 할부 건은 회차 표기 `이용일`(= 최초구매일의 '일' + (회차−1)개월)을 `card_transaction.txn_date`에 저장하고, 가계부 `transaction_date`도 **동일한 이용일**로 생성한다(카드 거래 목록·전체 거래 목록·수동분류 모두 일치). 청구 시점은 `settled_date = card_statement.billing_date`로 별도 보존. `amount = principal`(회차 금액). 예: `나이스-팬딩 330,000 할부 3/3 / 결제원금 110,000` → 지출 110,000.
 
 ### 1.7 신한카드 명세서 특이사항
 | 항목 | 신한카드 표기 | 정규화 |
@@ -417,7 +417,7 @@ category ──────┘
 | is_classified | CHAR(1) | DEFAULT 'N' | 분류 완료 여부 |
 | created_at | DATETIME | DEFAULT now | 적재 시각 |
 
-> **가계부 연결 시**: `amount = principal + fee`(할부 이자 포함), `description = merchant_name`, `transaction_date = txn_date`(할부는 청구월), `settled_date = card_statement.billing_date`.
+> **가계부 연결 시**: `amount = principal + fee`(할부 이자 포함), `description = merchant_name`, `transaction_date = card_transaction.txn_date`(이용일; 할부는 회차 표기 이용일), `settled_date = card_statement.billing_date`(청구일).
 
 ### 3.9 `merchant_category_map` — 가맹점 자동 분류 규칙
 가맹점명 패턴을 분류 코드에 매핑하는 **자동 입력 규칙 테이블**. 업로드 시 이 규칙으로 `category_code`를 자동 부여한다.
@@ -788,7 +788,7 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
 - **자동 분류**: `merchant_category_map`을 `priority` 순으로 적용해 `category_code` 부여 → 매칭 시 `transaction` 자동 생성·연결. 미매칭은 `is_classified='N'`으로 남겨 수기 처리 후 규칙 보강.
 - **금액 기준 (확정)**: 가계부 지출 금액 = `principal + fee`(할인 반영 실청구 원금 + 할부 이자). 일시불은 `fee=0`이라 `principal`과 동일, 할부는 이자까지 포함(1.8 확정 정책). `usage_amount`/`benefit_amount`는 분석·혜택 통계용으로 보존.
 - **카드대금 출금 제외 (확정)**: 은행 명세의 `타사카드`/`하나카드` 구분 출금(= 카드대금 결제)은 **카드 건별 지출과 중복**이므로 **지출 집계에서 제외**한다. 해당 `bank_transaction` 행은 `transaction`에 연결하지 않고(`transaction_id=NULL`), `exclude_reason='card_settlement'`로 표시해 실지출은 오직 `card_transaction`(카드 건별)으로만 잡는다. **자동 식별**: `card_statement.settle_account_id` + `billing_date` + `total_amount`로 은행 명세의 카드대금 출금 행과 매칭(예: 신한카드 명세 결제계좌 `하나은행47307` → 은행 `타사카드(신한카드)` 출금 제외).
-- **할부 거래 (확정: 청구 회차별 월 집계)**: 할부는 **최초 거래월에 총액을 잡지 않고, 매 청구 회차에 해당 월의 청구액만 지출로 집계**한다. 즉 카드 명세서에 그 달 청구된 회차 금액(`principal`)이 곧 그 달의 지출이며, `transaction.transaction_date`는 청구 시점(명세서 월) 기준으로 생성한다. `installment_period`(예: 12/24 → 총 24회)와 `billing_round`(예: 12 → 12회차)는 회차 추적용으로 보존한다.
+- **할부 거래 (확정: 회차별 월 집계, 이용일 기준)**: 할부는 **최초 거래월에 총액을 잡지 않고, 매 청구 회차에 해당 월의 청구액만 지출로 집계**한다. 그 달 청구된 회차 금액(`principal`)이 곧 그 달의 지출이며, `transaction.transaction_date`는 **회차 표기 이용일**(`card_transaction.txn_date`와 동일)로 생성한다 — 카드 거래·전체 거래 목록이 같은 날짜로 보이도록 통일. 청구 시점은 `settled_date`로 보존. `installment_period`(예: 12/24 → 총 24회)와 `billing_round`(예: 12 → 12회차)는 회차 추적용으로 보존한다.
 
 > 향후 다른 시트(예: 자산 현황)도 공유해 주시면 통합 모델에 반영하겠습니다.
 

@@ -428,12 +428,9 @@ export class ImportPipelineService {
       const usageDate = startOfDay(r.txnDate);
       const isInstallment = isInstallmentPeriod(r.installmentPeriod);
       // 할부 표시 이용일 = 최초구매일의 '일' + (회차−1)개월 → 해당 명세서 월에 표기.
+      // 가계부 transaction_date 도 이 이용일로 통일한다(카드 거래 목록·수동분류와 일치).
       const displayDate = isInstallment
         ? installmentUsageDate(usageDate, r.billingRound)
-        : usageDate;
-      // 집계월(파생 거래)은 할부=청구월, 일시불=이용일 기준(§7.2 회차별 월 집계).
-      const effectiveDate = isInstallment
-        ? new Date(`${meta.statementYm}-01T00:00:00Z`)
         : usageDate;
 
       // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조).
@@ -488,7 +485,7 @@ export class ImportPipelineService {
         pending++;
         continue;
       }
-      months.add(effectiveDate.toISOString().slice(0, 7));
+      months.add(displayDate.toISOString().slice(0, 7));
 
       const tx = await this.prisma.transaction.create({
         data: {
@@ -498,8 +495,8 @@ export class ImportPipelineService {
           paymentMethodId,
           description: r.merchantName,
           amount,
-          transactionDate: effectiveDate,
-          settledDate: meta.billingDate ?? effectiveDate,
+          transactionDate: displayDate,
+          settledDate: meta.billingDate ?? displayDate,
           status: 'settled',
         },
       });
