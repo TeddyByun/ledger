@@ -505,7 +505,8 @@ export class StatementTxnService {
     let updated = 0;
     for (const c of rows) {
       const amount = Number(c.principal) + Number(c.fee);
-      if (c.isCanceled === 'Y' || amount <= 0) continue;
+      // 취소 건만 제외. 미리입금/할인(마이너스)·청구할인(0원) 조정행도 사용자가 분류 가능.
+      if (c.isCanceled === 'Y') continue;
       const day = startOfDay(c.txnDate);
       if (c.transactionId) {
         await this.prisma.transaction.update({
