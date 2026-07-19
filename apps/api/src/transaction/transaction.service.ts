@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
+import { excludeCategoryCodes } from '../common/exclude-category.js';
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -159,11 +160,12 @@ export class TransactionService {
     } as Prisma.TransactionUncheckedCreateInput;
   }
 
-  /** 분류코드가 대분류면 소분류까지 포함해 검색. */
+  /** 분류코드가 대분류면 소분류까지 포함해 검색. '분류제외' 분류는 항상 숨김. */
   private async buildWhere(
     query: TransactionQueryDto,
   ): Promise<Prisma.TransactionWhereInput> {
     const where: Prisma.TransactionWhereInput = {};
+    const and: Prisma.TransactionWhereInput[] = [];
     if (query.type) where.type = query.type;
     if (query.paymentMethodId) where.paymentMethodId = query.paymentMethodId;
     if (query.methodType) {
@@ -179,6 +181,10 @@ export class TransactionService {
       where.categoryCode = { in: codes };
     }
 
+    // '분류제외' 분류는 전체 거래/합계에서 항상 제외
+    const excluded = await excludeCategoryCodes(this.prisma);
+    if (excluded.length > 0) and.push({ categoryCode: { notIn: excluded } });
+
     if (query.from || query.to) {
       where.transactionDate = {
         ...(query.from && { gte: new Date(query.from) }),
@@ -192,6 +198,7 @@ export class TransactionService {
         { memo: { contains: query.q, mode: 'insensitive' } },
       ];
     }
+    if (and.length > 0) where.AND = and;
     return where;
   }
 }

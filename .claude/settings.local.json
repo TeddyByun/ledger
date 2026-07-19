@@ -27,7 +27,13 @@
       "Bash(curl -s -o /dev/null -w \"preview %{http_code}\\\\n\" localhost:3000/neumorphic.html)",
       "Edit(/.claude/skills/neumorphic-theme/**)",
       "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select count\\(*\\) filter \\(where category_code='-'\\) as dash, count\\(*\\) filter \\(where category_code is null\\) as isnull, count\\(*\\) filter \\(where category_code=''\\) as empty from transaction;\")",
-      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select code,name from category where code='-';\")"
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select code,name from category where code='-';\")",
+      "Bash(sed -n '/model Transaction /,/^}/p' prisma/schema.prisma)",
+      "Bash(sed -n '/enum ExcludeReason/,/^}/p' prisma/schema.prisma)",
+      "Bash(sed -n '/enum TransactionStatus/,/^}/p' prisma/schema.prisma)",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select status, count\\(*\\) from transaction group by status;\")",
+      "Bash(PGOPTIONS=--search_path=ledger psql postgresql://ledger:ledger@localhost:5432/ledger -c ' *)",
+      "Bash(curl -s -X POST localhost:4000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"teddiyaki@gmail.com\",\"password\":\"xpfldntm\"}')"
     ],
     "additionalDirectories": [
       "/home/coder/ledger/prisma"
