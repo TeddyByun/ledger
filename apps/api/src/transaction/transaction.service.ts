@@ -58,6 +58,160 @@ export class TransactionService {
     return { items, page: { nextCursor, hasNext } };
   }
 
+  /**
+   * 전체 거래(통합) — 은행·카드 원천을 합쳐 조회. 미분류(연결 거래 없음)도 포함.
+   * 은행/카드 목록과 동일 데이터. '분류제외'·이체/카드대금(exclude_reason)·취소는 제외.
+   * 정렬: 날짜 desc. offset/limit 페이지네이션. 합계도 함께 반환.
+   */
+  async findUnified(query: TransactionQueryDto) {
+    const excluded = new Set(await excludeCategoryCodes(this.prisma));
+    const pmIds = parseIdList(query.paymentMethodIds, query.paymentMethodId);
+    const wantBank = !query.methodType || query.methodType === 'bank';
+    const wantCard = !query.methodType || query.methodType === 'card';
+
+    // 분류 필터(대분류→하위 포함)
+    let catCodes: Set<string> | null = null;
+    if (query.categoryCode && query.categoryCode !== '-') {
+      const children = await this.prisma.category.findMany({
+        where: { parentCode: query.categoryCode },
+        select: { code: true },
+      });
+      catCodes = new Set([query.categoryCode, ...children.map((c) => c.code)]);
+    }
+
+    const bankDate =
+      query.from || query.to
+        ? {
+            ...(query.from && { gte: new Date(`${query.from}T00:00:00.000Z`) }),
+            ...(query.to && { lte: new Date(`${query.to}T23:59:59.999Z`) }),
+          }
+        : undefined;
+    const cardDate =
+      query.from || query.to
+        ? {
+            ...(query.from && { gte: new Date(query.from) }),
+            ...(query.to && { lte: new Date(query.to) }),
+          }
+        : undefined;
+    const pmFilter =
+      pmIds.length === 1 ? pmIds[0] : pmIds.length > 1 ? { in: pmIds } : undefined;
+
+    const [banks, cards] = await Promise.all([
+      wantBank
+        ? this.prisma.bankTransaction.findMany({
+            where: {
+              excludeReason: null,
+              ...(bankDate && { txnAt: bankDate }),
+              ...(pmFilter !== undefined && { paymentMethodId: pmFilter }),
+            },
+            include: {
+              paymentMethod: { select: { name: true, methodType: true } },
+              transaction: { select: { categoryCode: true, category: { select: { name: true } } } },
+            },
+          })
+        : Promise.resolve([]),
+      wantCard
+        ? this.prisma.cardTransaction.findMany({
+            where: {
+              isCanceled: 'N',
+              ...(cardDate && { txnDate: cardDate }),
+              ...(pmFilter !== undefined && { paymentMethodId: pmFilter }),
+            },
+            include: {
+              paymentMethod: { select: { name: true, methodType: true } },
+              transaction: { select: { categoryCode: true, category: { select: { name: true } } } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    interface Row {
+      id: string;
+      date: string;
+      source: 'bank' | 'card';
+      paymentMethodName: string;
+      type: 'income' | 'expense';
+      amount: number;
+      description: string | null;
+      categoryCode: string | null;
+      categoryName: string | null;
+    }
+    const rows: Row[] = [];
+    for (const b of banks) {
+      const isIncome = Number(b.deposit) > 0;
+      const amount = isIncome ? Number(b.deposit) : Number(b.withdrawal);
+      if (amount <= 0) continue;
+      rows.push({
+        id: `bank-${b.id}`,
+        date: b.txnAt.toISOString(),
+        source: 'bank',
+        paymentMethodName: b.paymentMethod.name,
+        type: isIncome ? 'income' : 'expense',
+        amount,
+        description: b.description,
+        categoryCode: b.transaction?.categoryCode ?? null,
+        categoryName: b.transaction?.category?.name ?? null,
+      });
+    }
+    for (const c of cards) {
+      const amount = Number(c.principal) + Number(c.fee);
+      if (amount <= 0) continue;
+      rows.push({
+        id: `card-${c.id}`,
+        date: c.txnDate.toISOString(),
+        source: 'card',
+        paymentMethodName: c.paymentMethod.name,
+        type: 'expense',
+        amount,
+        description: c.merchantName,
+        categoryCode: c.transaction?.categoryCode ?? null,
+        categoryName: c.transaction?.category?.name ?? null,
+      });
+    }
+
+    const q = query.q?.trim().toLowerCase();
+    const filtered = rows.filter((r) => {
+      if (r.categoryCode && excluded.has(r.categoryCode)) return false; // 집계제외 숨김
+      if (query.type && r.type !== query.type) return false;
+      if (query.categoryCode === '-' && r.categoryCode) return false; // 미분류만
+      if (catCodes && !(r.categoryCode && catCodes.has(r.categoryCode))) return false;
+      if (q && !(r.description ?? '').toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? 1 : -1));
+
+    let incomeTotal = 0;
+    let expenseTotal = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
+    for (const r of filtered) {
+      if (r.type === 'income') {
+        incomeTotal += r.amount;
+        incomeCount++;
+      } else {
+        expenseTotal += r.amount;
+        expenseCount++;
+      }
+    }
+
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? 50;
+    const items = filtered.slice(offset, offset + limit);
+    return {
+      items,
+      summary: {
+        incomeTotal,
+        expenseTotal,
+        net: incomeTotal - expenseTotal,
+        incomeCount,
+        expenseCount,
+        count: filtered.length,
+      },
+      page: { offset, limit, hasNext: offset + limit < filtered.length, total: filtered.length },
+    };
+  }
+
   /** 필터 조건에 대한 수입/지출 합계·건수 (은행+카드 통합). */
   async summary(query: TransactionQueryDto) {
     const where = await this.buildWhere(query);

@@ -4,7 +4,24 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { MultiSelect } from '@/components/MultiSelect';
-import type { Transaction, CursorPage, PaymentMethod, Category } from '@/lib/types';
+import type { PaymentMethod, Category } from '@/lib/types';
+
+interface UnifiedRow {
+  id: string;
+  date: string; // ISO
+  source: 'bank' | 'card';
+  paymentMethodName: string;
+  type: 'income' | 'expense';
+  amount: number;
+  description: string | null;
+  categoryCode: string | null;
+  categoryName: string | null;
+}
+interface UnifiedResponse {
+  items: UnifiedRow[];
+  summary: Summary;
+  page: { offset: number; limit: number; hasNext: boolean; total: number };
+}
 
 interface Filters {
   from: string;
@@ -61,9 +78,11 @@ function filterParams(f: Filters): URLSearchParams {
   return p;
 }
 
+const PAGE = 50;
+
 export function AllTransactions() {
-  const [items, setItems] = useState<Transaction[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [items, setItems] = useState<UnifiedRow[]>([]);
+  const [offset, setOffset] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,24 +94,22 @@ export function AllTransactions() {
   const [applied, setApplied] = useState<Filters>(withDefaults);
   const [summary, setSummary] = useState<Summary | null>(null);
 
-  const load = useCallback(async (reset: boolean, f: Filters, cur: string | null) => {
+  const load = useCallback(async (reset: boolean, f: Filters, off: number) => {
     const p = filterParams(f);
-    p.set('limit', '50');
-    if (!reset && cur) p.set('cursor', cur);
-    const res = await api.get<CursorPage<Transaction>>(`/transactions?${p.toString()}`);
+    p.set('limit', String(PAGE));
+    p.set('offset', String(off));
+    const res = await api.get<UnifiedResponse>(`/transactions/unified?${p.toString()}`);
     setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-    setCursor(res.page.nextCursor);
+    setSummary(res.summary);
     setHasNext(res.page.hasNext);
+    setOffset(res.page.offset);
   }, []);
 
   // 적용된 필터가 바뀌면 목록·합계 재조회
   useEffect(() => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      load(true, applied, null),
-      api.get<Summary>(`/transactions/summary?${filterParams(applied).toString()}`).then(setSummary),
-    ])
+    load(true, applied, 0)
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, [applied, load]);
@@ -112,8 +129,7 @@ export function AllTransactions() {
     setApplied(d);
   };
 
-  const src = (t: Transaction) =>
-    t.paymentMethod?.methodType === 'card' ? '카드' : t.paymentMethod?.methodType === 'bank' ? '은행' : '—';
+  const src = (r: UnifiedRow) => (r.source === 'card' ? '카드' : '은행');
 
   return (
     <>
@@ -201,6 +217,7 @@ export function AllTransactions() {
                 onChange={(e) => setDraft({ ...draft, categoryCode: e.target.value })}
               >
                 <option value="">전체 분류</option>
+                <option value="-">미분류 (-)</option>
                 {catOptions.map((c) => (
                   <option key={c.code} value={c.code}>
                     {c.depth === 2 ? '　└ ' : ''}
@@ -293,19 +310,23 @@ export function AllTransactions() {
               ) : (
                 items.map((t) => (
                   <tr key={t.id}>
-                    <td className="date">{t.transactionDate.slice(0, 10)}</td>
+                    <td className="date">{t.date.slice(0, 10)}</td>
                     <td>
                       <span className="pill plain">{src(t)}</span>
                     </td>
                     <td className="muted" style={{ whiteSpace: 'nowrap' }}>
-                      {t.paymentMethod?.name ?? '—'}
+                      {t.paymentMethodName}
                     </td>
                     <td>
-                      <span className="tag">{t.category?.name ?? t.categoryCode}</span>
+                      {t.categoryName ? (
+                        <span className="tag">{t.categoryName}</span>
+                      ) : (
+                        <span className="muted">미분류</span>
+                      )}
                     </td>
                     <td>{t.description ?? '(내용 없음)'}</td>
                     <td className={`money ${t.type === 'income' ? 'inc' : 'exp'}`}>
-                      {t.type === 'income' ? '+' : '−'}₩{won(Number(t.amount ?? 0))}
+                      {t.type === 'income' ? '+' : '−'}₩{won(t.amount)}
                     </td>
                   </tr>
                 ))
@@ -313,9 +334,12 @@ export function AllTransactions() {
             </tbody>
           </table>
           <div className="tfoot">
-            <span>{items.length}건 표시</span>
+            <span>
+              {items.length}건 표시
+              {summary && summary.count > items.length ? ` / 총 ${summary.count.toLocaleString()}건` : ''}
+            </span>
             {hasNext && (
-              <button className="btn sm" onClick={() => load(false, applied, cursor)}>
+              <button className="btn sm" onClick={() => load(false, applied, offset + PAGE)}>
                 더 보기
               </button>
             )}
