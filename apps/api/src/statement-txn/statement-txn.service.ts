@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
 import { ClassifierService } from '../ingestion/classification/classifier.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
+import { parseIdList } from '../common/parse-ids.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
 import { UpdateBankTxnDto } from './dto/update-bank-txn.dto.js';
 
@@ -668,7 +669,9 @@ export class StatementTxnService {
     q: StatementTxnQueryDto,
   ): Promise<Prisma.BankTransactionWhereInput> {
     const where: Prisma.BankTransactionWhereInput = {};
-    if (q.paymentMethodId) where.paymentMethodId = q.paymentMethodId;
+    const pmIds = parseIdList(q.paymentMethodIds, q.paymentMethodId);
+    if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
+    else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
     if (q.txnType) where.txnTypeRaw = q.txnType;
     if (q.from || q.to) {
       where.txnAt = {
@@ -694,7 +697,9 @@ export class StatementTxnService {
     q: StatementTxnQueryDto,
   ): Promise<Prisma.CardTransactionWhereInput> {
     const where: Prisma.CardTransactionWhereInput = {};
-    if (q.paymentMethodId) where.paymentMethodId = q.paymentMethodId;
+    const pmIds = parseIdList(q.paymentMethodIds, q.paymentMethodId);
+    if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
+    else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
     if (q.from || q.to) {
       where.txnDate = {
         ...(q.from && { gte: new Date(`${q.from}T00:00:00.000Z`) }),

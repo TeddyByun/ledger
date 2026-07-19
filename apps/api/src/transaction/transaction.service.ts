@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
+import { parseIdList } from '../common/parse-ids.js';
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -167,7 +168,9 @@ export class TransactionService {
     const where: Prisma.TransactionWhereInput = {};
     const and: Prisma.TransactionWhereInput[] = [];
     if (query.type) where.type = query.type;
-    if (query.paymentMethodId) where.paymentMethodId = query.paymentMethodId;
+    const pmIds = parseIdList(query.paymentMethodIds, query.paymentMethodId);
+    if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
+    else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
     if (query.methodType) {
       where.paymentMethod = { is: { methodType: query.methodType } };
     }

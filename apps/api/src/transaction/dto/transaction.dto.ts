@@ -91,6 +91,11 @@ export class TransactionQueryDto {
   @IsOptional()
   paymentMethodId?: number;
 
+  @ApiPropertyOptional({ description: '결제수단 ID 다중(콤마구분). 지정 시 paymentMethodId 대신 사용' })
+  @IsString()
+  @IsOptional()
+  paymentMethodIds?: string;
+
   @ApiPropertyOptional({ enum: MethodType, description: '원천: 은행(bank)/카드(card)' })
   @IsEnum(MethodType)
   @IsOptional()
