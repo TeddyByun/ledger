@@ -34,6 +34,12 @@ export class TransactionController {
     return this.service.summary(query);
   }
 
+  @Get('unified')
+  @ApiOperation({ summary: '전체 거래(통합) — 은행+카드 원천, 미분류 포함' })
+  findUnified(@Query() query: TransactionQueryDto) {
+    return this.service.findUnified(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '거래 단건 조회' })
   findOne(@Param('id', ParseIntPipe) id: number) {
