@@ -189,8 +189,15 @@ export function CardTransactions() {
     setApplied(withDefaults());
   };
 
+  // '집계제외'(및 하위)는 수입 유형이지만 카드 지출에도 지정 가능해야 함
+  const excludeRootCodes = cats.filter((c) => c.name === '집계제외').map((c) => c.code);
   const catOptions = [...cats]
-    .filter((c) => c.type === 'expense')
+    .filter(
+      (c) =>
+        c.type === 'expense' ||
+        c.name === '집계제외' ||
+        (!!c.parentCode && excludeRootCodes.includes(c.parentCode)),
+    )
     .sort((a, b) => a.code.localeCompare(b.code));
   const allChecked = items.length > 0 && items.every((c) => selected.has(c.id));
   const toggleAll = () =>
