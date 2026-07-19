@@ -28,6 +28,12 @@ export class TransactionController {
     return this.service.findMany(query);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: '거래 합계 — 수입/지출/순액 (필터 동일)' })
+  summary(@Query() query: TransactionQueryDto) {
+    return this.service.summary(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '거래 단건 조회' })
   findOne(@Param('id', ParseIntPipe) id: number) {

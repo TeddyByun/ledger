@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/views/Dashboard';
 import { BankTransactions } from '@/views/BankTransactions';
 import { CardTransactions } from '@/views/CardTransactions';
+import { AllTransactions } from '@/views/AllTransactions';
 import { PaymentMethods } from '@/views/PaymentMethods';
 import { Cards } from '@/views/Cards';
 import { Family } from '@/views/Family';
@@ -13,6 +14,7 @@ import { Categories } from '@/views/Categories';
 
 export type View =
   | 'dashboard'
+  | 'all-transactions'
   | 'bank-transactions'
   | 'card-transactions'
   | 'imports'
@@ -28,6 +30,7 @@ export function Shell() {
       <Sidebar view={view} onNavigate={setView} />
       <div className="main">
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
+        {view === 'all-transactions' && <AllTransactions />}
         {view === 'bank-transactions' && <BankTransactions />}
         {view === 'card-transactions' && <CardTransactions />}
         {view === 'imports' && <Imports />}

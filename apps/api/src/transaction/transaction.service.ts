@@ -56,6 +56,39 @@ export class TransactionService {
     return { items, page: { nextCursor, hasNext } };
   }
 
+  /** 필터 조건에 대한 수입/지출 합계·건수 (은행+카드 통합). */
+  async summary(query: TransactionQueryDto) {
+    const where = await this.buildWhere(query);
+    const grouped = await this.prisma.transaction.groupBy({
+      by: ['type'],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    let incomeTotal = 0;
+    let expenseTotal = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
+    for (const g of grouped) {
+      const amt = Number(g._sum.amount ?? 0);
+      if (g.type === 'income') {
+        incomeTotal = amt;
+        incomeCount = g._count._all;
+      } else {
+        expenseTotal = amt;
+        expenseCount = g._count._all;
+      }
+    }
+    return {
+      incomeTotal,
+      expenseTotal,
+      net: incomeTotal - expenseTotal,
+      incomeCount,
+      expenseCount,
+      count: incomeCount + expenseCount,
+    };
+  }
+
   private encodeCursor(date: Date, id: number): string {
     const d = date.toISOString().slice(0, 10);
     return Buffer.from(JSON.stringify({ d, id })).toString('base64url');
@@ -133,6 +166,9 @@ export class TransactionService {
     const where: Prisma.TransactionWhereInput = {};
     if (query.type) where.type = query.type;
     if (query.paymentMethodId) where.paymentMethodId = query.paymentMethodId;
+    if (query.methodType) {
+      where.paymentMethod = { is: { methodType: query.methodType } };
+    }
 
     if (query.categoryCode) {
       const children = await this.prisma.category.findMany({

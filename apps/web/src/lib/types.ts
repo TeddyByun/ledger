@@ -78,7 +78,7 @@ export interface Transaction {
   transactionDate: string;
   status: 'settled' | 'pending' | 'info';
   category?: { name: string } | null;
-  paymentMethod?: { name: string } | null;
+  paymentMethod?: { name: string; methodType?: 'bank' | 'card' } | null;
   counterparty?: { name: string } | null;
 }
 

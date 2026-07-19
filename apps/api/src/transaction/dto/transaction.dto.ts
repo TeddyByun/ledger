@@ -15,7 +15,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { TransactionStatus, TransactionType } from '@ledger/shared';
+import { MethodType, TransactionStatus, TransactionType } from '@ledger/shared';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -90,6 +90,11 @@ export class TransactionQueryDto {
   @IsInt()
   @IsOptional()
   paymentMethodId?: number;
+
+  @ApiPropertyOptional({ enum: MethodType, description: '원천: 은행(bank)/카드(card)' })
+  @IsEnum(MethodType)
+  @IsOptional()
+  methodType?: 'bank' | 'card';
 
   @ApiPropertyOptional({ example: '2026-03-01', description: '기간 시작(포함)' })
   @Matches(DATE_RE)
