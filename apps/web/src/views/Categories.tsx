@@ -15,6 +15,8 @@ interface CatForm {
 }
 
 const TYPE_LABEL: Record<TxType, string> = { expense: '지출', income: '수입' };
+/** 공통(집계제외) 분류명 — 수입/지출과 별도 섹션으로 분리 표시 */
+const COMMON_NAME = '집계제외';
 
 export function Categories() {
   const [cats, setCats] = useState<Category[]>([]);
@@ -65,17 +67,26 @@ export function Categories() {
       cats
         .filter((c) => c.parentCode === code)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const isCommon = (r: Category) => r.name === COMMON_NAME;
     const byType = (t: TxType) =>
       roots
-        .filter((r) => r.type === t)
+        .filter((r) => r.type === t && !isCommon(r))
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
         .map((r) => ({ root: r, children: childrenOf(r.code) }));
-    return { expense: byType('expense'), income: byType('income') };
+    const common = roots
+      .filter(isCommon)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      .map((r) => ({ root: r, children: childrenOf(r.code) }));
+    return { expense: byType('expense'), income: byType('income'), common };
   }, [cats]);
 
   const parentName = (code: string | null | undefined) =>
     code ? cats.find((c) => c.code === code)?.name ?? code : null;
   const childCount = (code: string) => cats.filter((c) => c.parentCode === code).length;
+  // 공통(집계제외) 분류 여부 — 대분류 또는 그 하위
+  const commonRootCodes = cats.filter((c) => c.name === COMMON_NAME).map((c) => c.code);
+  const isCommonCat = (c: Category) =>
+    c.name === COMMON_NAME || (!!c.parentCode && commonRootCodes.includes(c.parentCode));
 
   const parentsWithKids = [...tree.expense, ...tree.income]
     .filter((x) => x.children.length > 0)
@@ -223,8 +234,34 @@ export function Categories() {
                     전체 접기
                   </button>
                 </div>
-                {(['expense', 'income'] as TxType[]).map((t) => (
-                  <div key={t} style={{ marginBottom: 10 }}>
+                {[
+                  {
+                    key: 'expense',
+                    label: '지출 분류',
+                    color: 'var(--expense)',
+                    groups: tree.expense,
+                    addType: 'expense' as TxType | undefined,
+                  },
+                  {
+                    key: 'income',
+                    label: '수입 분류',
+                    color: 'var(--income)',
+                    groups: tree.income,
+                    addType: 'income' as TxType | undefined,
+                  },
+                  ...(tree.common.length > 0
+                    ? [
+                        {
+                          key: 'common',
+                          label: '공통 분류',
+                          color: 'var(--brand-ink)',
+                          groups: tree.common,
+                          addType: undefined as TxType | undefined,
+                        },
+                      ]
+                    : []),
+                ].map((sec) => (
+                  <div key={sec.key} style={{ marginBottom: 10 }}>
                     <div
                       style={{
                         display: 'flex',
@@ -233,19 +270,19 @@ export function Categories() {
                         padding: '10px 8px 6px',
                       }}
                     >
-                      <b style={{ fontSize: 13, color: t === 'income' ? 'var(--income)' : 'var(--expense)' }}>
-                        {TYPE_LABEL[t]} 분류
-                      </b>
-                      <button className="btn ghost sm" onClick={() => startCreateTop(t)}>
-                        + 대분류
-                      </button>
+                      <b style={{ fontSize: 13, color: sec.color }}>{sec.label}</b>
+                      {sec.addType && (
+                        <button className="btn ghost sm" onClick={() => startCreateTop(sec.addType!)}>
+                          + 대분류
+                        </button>
+                      )}
                     </div>
-                    {tree[t].length === 0 ? (
+                    {sec.groups.length === 0 ? (
                       <div className="muted" style={{ fontSize: 12, padding: '4px 8px 8px' }}>
                         분류가 없습니다.
                       </div>
                     ) : (
-                      tree[t].map(({ root, children }) => {
+                      sec.groups.map(({ root, children }) => {
                         const hasKids = children.length > 0;
                         const open = hasKids && !collapsed.has(root.code);
                         return (
@@ -337,7 +374,10 @@ export function Categories() {
             {mode === 'view' && selected ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ fontSize: 18, fontWeight: 700 }}>{selected.name}</div>
-                <Info label="유형" value={TYPE_LABEL[selected.type]} />
+                <Info
+                  label="유형"
+                  value={isCommonCat(selected) ? '공통' : TYPE_LABEL[selected.type]}
+                />
                 <Info label="구분" value={selected.parentCode ? '소분류' : '대분류'} />
                 {selected.parentCode && (
                   <Info label="상위 분류" value={parentName(selected.parentCode) ?? '—'} />
@@ -364,7 +404,8 @@ export function Categories() {
                   <div className="field">
                     <label>유형 · 구분</label>
                     <div style={{ fontSize: 14, padding: '2px 0' }}>
-                      {TYPE_LABEL[selected.type]} · {selected.parentCode ? '소분류' : '대분류'}
+                      {isCommonCat(selected) ? '공통' : TYPE_LABEL[selected.type]} ·{' '}
+                      {selected.parentCode ? '소분류' : '대분류'}
                     </div>
                   </div>
                 )}
