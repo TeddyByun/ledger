@@ -5,6 +5,7 @@ import type { View } from '@/components/Shell';
 
 const NAV: { view: View; label: string; group: string }[] = [
   { view: 'dashboard', label: '대시보드', group: '집계' },
+  { view: 'all-transactions', label: '전체 거래', group: '거래내역' },
   { view: 'bank-transactions', label: '은행 거래', group: '거래내역' },
   { view: 'card-transactions', label: '카드 거래', group: '거래내역' },
   { view: 'family', label: '가족 관리', group: '관리' },
