@@ -33,7 +33,10 @@
       "Bash(sed -n '/enum TransactionStatus/,/^}/p' prisma/schema.prisma)",
       "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select status, count\\(*\\) from transaction group by status;\")",
       "Bash(PGOPTIONS=--search_path=ledger psql postgresql://ledger:ledger@localhost:5432/ledger -c ' *)",
-      "Bash(curl -s -X POST localhost:4000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"teddiyaki@gmail.com\",\"password\":\"xpfldntm\"}')"
+      "Bash(curl -s -X POST localhost:4000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"teddiyaki@gmail.com\",\"password\":\"xpfldntm\"}')",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select code,name,type from category where name='분류제외';\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"update category set name='집계제외' where name='분류제외';\")",
+      "Bash(PGOPTIONS=\"--search_path=ledger\" psql \"postgresql://ledger:ledger@localhost:5432/ledger\" -c \"select code,name,type from category where name='집계제외';\")"
     ],
     "additionalDirectories": [
       "/home/coder/ledger/prisma"
