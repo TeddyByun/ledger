@@ -19,6 +19,18 @@ const BANK_ALIASES: FieldAliasMap = {
   branch: ['거래점', '거래점명', '취급점'],
 };
 
+/**
+ * 금액 셀에서 끝의 괄호 주석을 분리한다. 예: "100,000(41)" → { amount:100000, note:"(41)" }
+ * 괄호가 없으면 note=null. 금액 없으면 0.
+ */
+function splitAmountNote(raw: string | undefined): { amount: number; note: string | null } {
+  const s = (raw ?? '').trim();
+  const m = s.match(/(\([^)]*\))\s*$/);
+  const note = m ? m[1]!.trim() : null;
+  const amountStr = m ? s.slice(0, m.index).trim() : s;
+  return { amount: parseAmount(amountStr) ?? 0, note };
+}
+
 /** 은행 명세서 파서 (Hana 등) — 헤더 기반 컬럼 매핑. */
 export class GenericBankParser implements StatementParser {
   constructor(public readonly issuer: Issuer) {}
@@ -34,11 +46,17 @@ export class GenericBankParser implements StatementParser {
       const txnAt = parseDateTime(cell(row, columns, 'txnAt'));
       if (!txnAt) continue; // 합계/공백 행 skip
 
-      const withdrawal = parseAmount(cell(row, columns, 'withdrawal')) ?? 0;
-      const deposit = parseAmount(cell(row, columns, 'deposit')) ?? 0;
+      // 일부 계좌(예: 청약)는 금액 뒤에 '(납부회차)'가 붙는다 → 금액만 파싱하고
+      // 괄호 부분은 적요(내용) 뒤에 그대로 이어붙인다. 예: "100,000(41)"
+      const wSplit = splitAmountNote(cell(row, columns, 'withdrawal'));
+      const dSplit = splitAmountNote(cell(row, columns, 'deposit'));
+      const withdrawal = wSplit.amount;
+      const deposit = dSplit.amount;
       const balanceRaw = cell(row, columns, 'balance');
       const balance = balanceRaw === '-' ? null : parseAmount(balanceRaw);
-      const description = (cell(row, columns, 'description') ?? '').trim() || null;
+      const notes = [dSplit.note, wSplit.note].filter((s): s is string => !!s);
+      const baseDesc = (cell(row, columns, 'description') ?? '').trim();
+      const description = [baseDesc, ...notes].filter(Boolean).join(' ') || null;
       const txnTypeRaw = (cell(row, columns, 'txnTypeRaw') ?? '').trim() || null;
       const branch = (cell(row, columns, 'branch') ?? '').trim() || null;
 
