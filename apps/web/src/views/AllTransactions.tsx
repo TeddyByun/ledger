@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
+import { MultiSelect } from '@/components/MultiSelect';
 import type { Transaction, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
 interface Filters {
@@ -10,7 +11,7 @@ interface Filters {
   to: string;
   type: string; // '' | 'income' | 'expense'
   methodType: string; // '' | 'bank' | 'card'
-  paymentMethodId: string;
+  paymentMethodIds: string[];
   categoryCode: string;
   q: string;
 }
@@ -19,7 +20,7 @@ const EMPTY: Filters = {
   to: '',
   type: '',
   methodType: '',
-  paymentMethodId: '',
+  paymentMethodIds: [],
   categoryCode: '',
   q: '',
 };
@@ -54,7 +55,7 @@ function filterParams(f: Filters): URLSearchParams {
   if (f.to) p.set('to', monthEnd(f.to));
   if (f.type) p.set('type', f.type);
   if (f.methodType) p.set('methodType', f.methodType);
-  if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
+  if (f.paymentMethodIds.length) p.set('paymentMethodIds', f.paymentMethodIds.join(','));
   if (f.categoryCode) p.set('categoryCode', f.categoryCode);
   if (f.q) p.set('q', f.q);
   return p;
@@ -174,7 +175,7 @@ export function AllTransactions() {
                 className="select"
                 value={draft.methodType}
                 onChange={(e) =>
-                  setDraft({ ...draft, methodType: e.target.value, paymentMethodId: '' })
+                  setDraft({ ...draft, methodType: e.target.value, paymentMethodIds: [] })
                 }
               >
                 <option value="">전체 원천</option>
@@ -184,18 +185,13 @@ export function AllTransactions() {
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>결제수단</label>
-              <select
-                className="select"
-                value={draft.paymentMethodId}
-                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
-              >
-                <option value="">전체 결제수단</option>
-                {pmOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 결제수단"
+                minWidth={170}
+                options={pmOptions.map((p) => ({ value: String(p.id), label: p.name }))}
+                selected={draft.paymentMethodIds}
+                onChange={(v) => setDraft({ ...draft, paymentMethodIds: v })}
+              />
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>분류</label>

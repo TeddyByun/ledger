@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { useSort, SortTh } from '@/components/sortable';
+import { MultiSelect } from '@/components/MultiSelect';
 import type { BankTxn, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
 interface Filters {
-  paymentMethodId: string;
+  paymentMethodIds: string[];
   from: string;
   to: string;
   txnType: string;
@@ -15,7 +16,7 @@ interface Filters {
   q: string;
 }
 const EMPTY: Filters = {
-  paymentMethodId: '',
+  paymentMethodIds: [],
   from: '',
   to: '',
   txnType: '',
@@ -48,7 +49,7 @@ interface BankSummary {
 /** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용. 기간은 년월 → 일자 변환 */
 function filterParams(f: Filters): URLSearchParams {
   const p = new URLSearchParams();
-  if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
+  if (f.paymentMethodIds.length) p.set('paymentMethodIds', f.paymentMethodIds.join(','));
   if (f.from) p.set('from', `${f.from}-01`);
   if (f.to) p.set('to', monthEnd(f.to));
   if (f.txnType) p.set('txnType', f.txnType);
@@ -304,18 +305,13 @@ export function BankTransactions() {
             </div>
             <div className="field" style={{ minWidth: 180 }}>
               <label>계좌</label>
-              <select
-                className="select"
-                value={draft.paymentMethodId}
-                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
-              >
-                <option value="">전체 계좌</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 계좌"
+                minWidth={180}
+                options={accounts.map((a) => ({ value: String(a.id), label: a.name }))}
+                selected={draft.paymentMethodIds}
+                onChange={(v) => setDraft({ ...draft, paymentMethodIds: v })}
+              />
             </div>
             <div className="field" style={{ minWidth: 150 }}>
               <label>구분</label>

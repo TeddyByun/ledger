@@ -12,6 +12,11 @@ export class StatementTxnQueryDto {
   @IsOptional()
   paymentMethodId?: number;
 
+  @ApiPropertyOptional({ description: '결제수단 ID 다중(콤마구분). 지정 시 paymentMethodId 대신 사용' })
+  @IsString()
+  @IsOptional()
+  paymentMethodIds?: string;
+
   @ApiPropertyOptional({ description: '분류 코드 (대분류면 하위까지 포함)' })
   @IsString()
   @IsOptional()

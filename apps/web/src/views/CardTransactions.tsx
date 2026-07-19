@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { useSort, SortTh } from '@/components/sortable';
+import { MultiSelect } from '@/components/MultiSelect';
 import type { CardTxn, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
 interface Filters {
-  paymentMethodId: string;
+  paymentMethodIds: string[];
   from: string;
   to: string;
   installment: string; // '' 전체 | 'yes' 할부 | 'no' 일시불
@@ -15,7 +16,7 @@ interface Filters {
   q: string;
 }
 const EMPTY: Filters = {
-  paymentMethodId: '',
+  paymentMethodIds: [],
   from: '',
   to: '',
   installment: '',
@@ -57,7 +58,7 @@ function monthEnd(ym: string): string {
 /** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용. 기간은 년월 → 일자 변환 */
 function filterParams(f: Filters): URLSearchParams {
   const p = new URLSearchParams();
-  if (f.paymentMethodId) p.set('paymentMethodId', f.paymentMethodId);
+  if (f.paymentMethodIds.length) p.set('paymentMethodIds', f.paymentMethodIds.join(','));
   if (f.from) p.set('from', `${f.from}-01`);
   if (f.to) p.set('to', monthEnd(f.to));
   if (f.installment) p.set('installment', f.installment);
@@ -251,19 +252,16 @@ export function CardTransactions() {
             </div>
             <div className="field" style={{ minWidth: 180 }}>
               <label>카드</label>
-              <select
-                className="select"
-                value={draft.paymentMethodId}
-                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
-              >
-                <option value="">전체 카드</option>
-                {cards.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.cardNo ? ` (${c.cardNo})` : ''}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 카드"
+                minWidth={180}
+                options={cards.map((c) => ({
+                  value: String(c.id),
+                  label: `${c.name}${c.cardNo ? ` (${c.cardNo})` : ''}`,
+                }))}
+                selected={draft.paymentMethodIds}
+                onChange={(v) => setDraft({ ...draft, paymentMethodIds: v })}
+              />
             </div>
             <div className="field" style={{ minWidth: 120 }}>
               <label>할부</label>
