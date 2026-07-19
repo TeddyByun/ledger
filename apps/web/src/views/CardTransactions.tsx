@@ -231,22 +231,6 @@ export function CardTransactions() {
             }}
             style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}
           >
-            <div className="field" style={{ minWidth: 180 }}>
-              <label>카드</label>
-              <select
-                className="select"
-                value={draft.paymentMethodId}
-                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
-              >
-                <option value="">전체 카드</option>
-                {cards.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.cardNo ? ` (${c.cardNo})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="field">
               <label>기간 (년월)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -264,6 +248,22 @@ export function CardTransactions() {
                   onChange={(e) => setDraft({ ...draft, to: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="field" style={{ minWidth: 180 }}>
+              <label>카드</label>
+              <select
+                className="select"
+                value={draft.paymentMethodId}
+                onChange={(e) => setDraft({ ...draft, paymentMethodId: e.target.value })}
+              >
+                <option value="">전체 카드</option>
+                {cards.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.cardNo ? ` (${c.cardNo})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field" style={{ minWidth: 120 }}>
               <label>할부</label>
