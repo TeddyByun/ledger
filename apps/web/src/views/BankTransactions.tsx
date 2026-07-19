@@ -232,6 +232,10 @@ export function BankTransactions() {
   };
 
   const catOptions = [...cats].sort((a, b) => a.code.localeCompare(b.code));
+  // '집계제외'(및 하위)는 수입/지출 유형과 무관하게 항상 선택 가능해야 함
+  const excludeRootCodes = cats.filter((c) => c.name === '집계제외').map((c) => c.code);
+  const isExcludeCat = (c: Category) =>
+    c.name === '집계제외' || (!!c.parentCode && excludeRootCodes.includes(c.parentCode));
   const allChecked = items.length > 0 && items.every((b) => selected.has(b.id));
   const toggleAll = () =>
     setSelected(allChecked ? new Set() : new Set(items.map((b) => b.id)));
@@ -461,7 +465,9 @@ export function BankTransactions() {
                   const isEditing = editId === b.id;
                   // 방향(출금=지출, 입금=수입)에 맞는 분류만 선택지로
                   const rowType = w > 0 ? 'expense' : 'income';
-                  const editCatOptions = catOptions.filter((c) => c.type === rowType);
+                  const editCatOptions = catOptions.filter(
+                    (c) => c.type === rowType || isExcludeCat(c),
+                  );
                   return (
                     <tr key={b.id} className={selected.has(b.id) ? 'row-sel' : ''}>
                       <td style={{ textAlign: 'center' }}>
