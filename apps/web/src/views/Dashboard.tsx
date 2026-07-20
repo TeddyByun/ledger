@@ -80,7 +80,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
     <>
       <header className="topbar">
         <span className="crumb">
-          집계 / <b>대시보드</b>
+          집계 / <b>거래 추이 그래프</b>
         </span>
         <div className="spacer" />
         <select
@@ -99,7 +99,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
       <main className="page">
         <div className="page-head">
           <div className="titles">
-            <h1>대시보드</h1>
+            <h1>거래 추이 그래프</h1>
             <p>{year}년 계좌·카드·분류별 월별 추이입니다.</p>
           </div>
         </div>
