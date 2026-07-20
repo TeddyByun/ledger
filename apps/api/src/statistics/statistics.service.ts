@@ -147,6 +147,75 @@ export class StatisticsService {
   }
 
   /**
+   * 결제수단별 월별 지출 추이 (롤링 N개월). 결제수단 하나당 차트 하나(소형 다중)용.
+   * '집계제외' 분류는 제외. 지출만 집계.
+   */
+  async paymentTrend(months = 12) {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
+    const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const excluded = await excludeCategoryCodes(this.prisma);
+    const txns = await this.prisma.transaction.findMany({
+      where: {
+        type: 'expense',
+        transactionDate: { gte: start, lt: endExclusive },
+        ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
+      },
+      select: {
+        amount: true,
+        transactionDate: true,
+        paymentMethod: { select: { id: true, name: true, methodType: true } },
+      },
+    });
+
+    const ymList: string[] = [];
+    const idx = new Map<string, number>();
+    for (let i = 0; i < months; i++) {
+      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      idx.set(ym, i);
+      ymList.push(ym);
+    }
+
+    const map = new Map<
+      number,
+      { name: string; methodType: string; values: number[] }
+    >();
+    for (const t of txns) {
+      const pm = t.paymentMethod;
+      if (!pm) continue;
+      const d = t.transactionDate;
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const i = idx.get(ym);
+      if (i === undefined) continue;
+      let e = map.get(pm.id);
+      if (!e) {
+        e = {
+          name: pm.name,
+          methodType: pm.methodType,
+          values: new Array(months).fill(0) as number[],
+        };
+        map.set(pm.id, e);
+      }
+      e.values[i] = (e.values[i] ?? 0) + Number(t.amount ?? 0);
+    }
+
+    const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+    const items = [...map.entries()]
+      .map(([id, v]) => ({
+        id,
+        name: v.name,
+        methodType: v.methodType,
+        values: v.values,
+        total: sum(v.values),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    return { months: ymList, items };
+  }
+
+  /**
    * 대시보드용 — 올해 월별(1~12) 집계.
    *  - 계좌별 수입/지출
    *  - 카드별 지출

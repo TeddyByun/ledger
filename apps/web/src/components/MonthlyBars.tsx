@@ -17,9 +17,12 @@ export interface BarSeries {
 export function MonthlyBars({
   series,
   height = 108,
+  months,
 }: {
   series: BarSeries[];
   height?: number;
+  /** 롤링 기간용 'YYYY-MM' 배열. 없으면 1~12월(달력 연도)로 표기. */
+  months?: string[];
 }) {
   const W = 300;
   const H = height;
@@ -55,7 +58,7 @@ export function MonthlyBars({
               rx={2}
               fill={s.color}
             >
-              <title>{`${mi + 1}월 · ${s.label} ₩${won(v)}`}</title>
+              <title>{`${months?.[mi] ?? `${mi + 1}월`} · ${s.label} ₩${won(v)}`}</title>
             </rect>
           );
         });
@@ -69,7 +72,7 @@ export function MonthlyBars({
           textAnchor="middle"
           fill="var(--muted)"
         >
-          {mi + 1}
+          {months?.[mi] ? Number(months[mi]!.split('-')[1]) : mi + 1}
         </text>
       ))}
     </svg>
