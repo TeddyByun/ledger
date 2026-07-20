@@ -25,11 +25,11 @@ export class StatisticsController {
   }
 
   @Get('payment-trend')
-  @ApiOperation({ summary: '결제수단별 월별 지출 추이 (롤링 N개월)' })
-  @ApiQuery({ name: 'months', required: false, example: 12 })
-  paymentTrend(@Query('months') months?: string) {
-    const m = months ? Math.min(24, Math.max(1, Number(months))) : 12;
-    return this.stats.paymentTrend(m);
+  @ApiOperation({ summary: '결제수단별 월별 지출 추이 (기간 지정, 기본 올해)' })
+  @ApiQuery({ name: 'from', required: false, example: '2026-01', description: 'YYYY-MM(포함)' })
+  @ApiQuery({ name: 'to', required: false, example: '2026-07', description: 'YYYY-MM(포함)' })
+  paymentTrend(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.stats.paymentTrend(from, to);
   }
 
   @Get('monthly')

@@ -31,7 +31,9 @@ export function MonthlyBars({
   const chartH = H - padT - padB;
   const baseY = H - padB;
   const max = Math.max(1, ...series.flatMap((s) => s.values));
-  const groupW = W / 12;
+  // 기간 길이 = months 우선, 없으면 시리즈 값 길이(기본 12)
+  const slots = months?.length ?? Math.max(1, ...series.map((s) => s.values.length), 12);
+  const groupW = W / slots;
   const n = series.length;
   const gap = 2;
   const innerPad = 4;
@@ -42,7 +44,7 @@ export function MonthlyBars({
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" style={{ display: 'block' }}>
       {/* 기준선 */}
       <line x1={0} y1={baseY} x2={W} y2={baseY} stroke="var(--line)" strokeWidth={1} />
-      {Array.from({ length: 12 }, (_, mi) => {
+      {Array.from({ length: slots }, (_, mi) => {
         const gx = mi * groupW + innerPad;
         return series.map((s, si) => {
           const v = s.values[mi] ?? 0;
@@ -63,7 +65,7 @@ export function MonthlyBars({
           );
         });
       })}
-      {Array.from({ length: 12 }, (_, mi) => (
+      {Array.from({ length: slots }, (_, mi) => (
         <text
           key={`t${mi}`}
           x={mi * groupW + groupW / 2}

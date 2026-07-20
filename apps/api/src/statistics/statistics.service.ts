@@ -147,13 +147,37 @@ export class StatisticsService {
   }
 
   /**
-   * 결제수단별 월별 지출 추이 (롤링 N개월). 결제수단 하나당 차트 하나(소형 다중)용.
-   * '집계제외' 분류는 제외. 지출만 집계.
+   * 결제수단별 월별 지출 추이. from/to 는 'YYYY-MM'(양끝 포함).
+   * 기본은 올해 1월 ~ 이번 달. '집계제외' 분류는 제외하고 지출만 집계.
    */
-  async paymentTrend(months = 12) {
+  async paymentTrend(from?: string, to?: string) {
+    const YM = /^\d{4}-\d{2}$/;
     const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
-    const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const curY = now.getUTCFullYear();
+    const curM = now.getUTCMonth() + 1;
+    const f = from && YM.test(from) ? from : `${curY}-01`;
+    const t = to && YM.test(to) ? to : `${curY}-${String(curM).padStart(2, '0')}`;
+
+    const parse = (s: string) => {
+      const [yy, mm] = s.split('-');
+      return { y: Number(yy), m: Number(mm) };
+    };
+    const a = parse(f);
+    const b = parse(t);
+    let start = new Date(Date.UTC(a.y, a.m - 1, 1));
+    let endExclusive = new Date(Date.UTC(b.y, b.m, 1)); // to 월의 다음 달 1일
+    if (endExclusive <= start) {
+      // 뒤집혀 들어오면 교환
+      const tmp = start;
+      start = new Date(Date.UTC(b.y, b.m - 1, 1));
+      endExclusive = new Date(Date.UTC(tmp.getUTCFullYear(), tmp.getUTCMonth() + 1, 1));
+    }
+    // 개월 수 산정(과도한 범위 방지: 최대 60개월)
+    let months =
+      (endExclusive.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      (endExclusive.getUTCMonth() - start.getUTCMonth());
+    months = Math.max(1, Math.min(60, months));
+    endExclusive = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, 1));
 
     const excluded = await excludeCategoryCodes(this.prisma);
     const txns = await this.prisma.transaction.findMany({
