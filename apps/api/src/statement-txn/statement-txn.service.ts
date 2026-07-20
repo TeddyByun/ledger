@@ -505,8 +505,9 @@ export class StatementTxnService {
     let updated = 0;
     for (const c of rows) {
       const amount = Number(c.principal) + Number(c.fee);
-      // 취소 건만 제외. 미리입금/할인(마이너스)·청구할인(0원) 조정행도 사용자가 분류 가능.
-      if (c.isCanceled === 'Y') continue;
+      // 사용자가 명시적으로 선택한 행은 모두 분류 허용 —
+      // 취소(환불), 미리입금/할인(마이너스), 포인트사용/청구할인(0원) 조정행 포함.
+      // 금액은 결제금액(원금+수수료) 그대로 반영: 환불·할인은 음수라 지출에서 차감된다.
       const day = startOfDay(c.txnDate);
       if (c.transactionId) {
         await this.prisma.transaction.update({
