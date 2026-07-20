@@ -179,7 +179,39 @@ export class TransactionService {
       return true;
     });
 
-    filtered.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? 1 : -1));
+    // 정렬 스펙 'col:dir,...' (화이트리스트 외 무시). 기본 = 날짜 내림차순.
+    const SORT_KEY: Record<string, (r: Row) => string | number> = {
+      date: (r) => r.date,
+      source: (r) => r.source,
+      payment: (r) => r.paymentMethodName,
+      category: (r) => r.categoryName ?? '',
+      description: (r) => r.description ?? '',
+      amount: (r) => (r.type === 'income' ? r.amount : -r.amount),
+      type: (r) => r.type,
+    };
+    const spec = (query.sort ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => {
+        const [col, dir] = s.split(':');
+        return { col: col ?? '', desc: (dir ?? 'asc') === 'desc' };
+      })
+      .filter((s) => SORT_KEY[s.col]);
+    const order = spec.length > 0 ? spec : [{ col: 'date', desc: true }];
+
+    filtered.sort((a, b) => {
+      for (const { col, desc } of order) {
+        const get = SORT_KEY[col]!;
+        const av = get(a);
+        const bv = get(b);
+        if (av !== bv) {
+          const cmp = av < bv ? -1 : 1;
+          return desc ? -cmp : cmp;
+        }
+      }
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0; // 안정화
+    });
 
     let incomeTotal = 0;
     let expenseTotal = 0;
