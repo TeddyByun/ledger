@@ -2,6 +2,9 @@
    (design/mockups/neumorphic.html · .claude/skills/neumorphic-theme 기반)
    의미색 유지: 수입=파랑 --income · 지출=빨강 --expense (가독성 우선) */
 :root {
+  /* 브라우저 네이티브 위젯(월/날짜 선택 팝업, 달력 아이콘, 스크롤바, select 목록)도
+     다크로 렌더링. 미지정 시 라이트로 그려져 팝업이 깨져 보인다. */
+  color-scheme: dark;
   --canvas:#1b1832; --surface:#241f42; --surface-2:#1e1a3a; --surface-3:#2a2550;
   --ink:#ECEAFB; --ink-2:#BBB5E4; --muted:#8B84BE; --faint:#655E92;
   --line:#322c58; --line-2:#3d3668;
