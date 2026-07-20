@@ -14,6 +14,11 @@
   --grad:linear-gradient(135deg,var(--brand-a),var(--brand-b));
   /* 의미색 (극성 + 상태) */
   --income:#5E9BF0; --income-soft:#1b2748; --expense:#F26D5B; --expense-soft:#3a2033;
+  /* 분류(categorical) 8색 — 고정 순서, 절대 순환 사용 금지. 9번째는 '기타'(회색)로 접음.
+     다크 표면(#241f42) 기준 검증 통과: 명도대역/채도/CVD/대비 전항목 PASS */
+  --c1:#3987e5; --c2:#008300; --c3:#d55181; --c4:#c98500;
+  --c5:#199e70; --c6:#d95926; --c7:#9085e9; --c8:#e66767;
+  --c-other:#7d77a8;
   --exclude:#8C978F; --good:#34D399; --warn:#FBBF24; --warn-soft:#2c2413;
   /* 뉴모피즘 그림자 (볼록/오목) */
   --nm-out:-6px -6px 16px rgba(255,255,255,.045), 8px 8px 22px rgba(0,0,0,.5);
