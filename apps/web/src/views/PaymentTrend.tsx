@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { won } from '@/lib/format';
-import { MonthlyBars } from '@/components/MonthlyBars';
 import { GroupedBarChart } from '@/components/GroupedBarChart';
 
 interface PmRow {
@@ -13,16 +11,17 @@ interface PmRow {
   values: number[];
   total: number;
 }
+interface CardGroup {
+  key: string;
+  name: string; // 발급사 (현대카드/삼성카드/하나카드/신한카드 …)
+  values: number[];
+  total: number;
+}
 interface PaymentTrendData {
   months: string[]; // 'YYYY-MM'
   items: PmRow[];
+  cardGroups: CardGroup[];
 }
-
-const GRID: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-  gap: 14,
-};
 
 /** 기본 기간 = 올해 1월 ~ 이번 달 */
 function thisYearRange(): { from: string; to: string } {
@@ -58,7 +57,7 @@ export function PaymentTrend() {
   const months = data?.months ?? [];
   const items = data?.items ?? [];
   const banks = items.filter((i) => i.methodType === 'bank');
-  const cards = items.filter((i) => i.methodType === 'card');
+  const cardGroups = data?.cardGroups ?? [];
 
   const search = () => setApplied(draft);
   const reset = () => {
@@ -164,57 +163,31 @@ export function PaymentTrend() {
               )}
             </div>
 
-            {/* 카드 — 카드별 개별 차트 */}
+            {/* 카드 — 발급사 그룹별 비교 */}
             <div style={{ marginBottom: 22 }}>
               <div style={{ marginBottom: 10 }}>
                 <h2 style={{ fontSize: 16, margin: 0 }}>카드</h2>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  카드별 월별 지출(결제금액)
+                  월마다 카드사별 막대가 나란히 표시됩니다(결제금액 기준, 같은 카드사 합산).
                 </div>
               </div>
-              {cards.length === 0 ? (
+              {cardGroups.length === 0 ? (
                 <div className="card">
                   <div className="empty">
                     <p>카드 지출이 없습니다.</p>
                   </div>
                 </div>
               ) : (
-                <div style={GRID}>
-                  {cards.map((p) => (
-                    <div key={p.id} className="card" style={{ padding: 14 }}>
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'baseline',
-                          gap: 8,
-                          marginBottom: 6,
-                        }}
-                      >
-                        <b
-                          style={{
-                            fontSize: 13.5,
-                            minWidth: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {p.name}
-                        </b>
-                        <span
-                          className="money"
-                          style={{ fontSize: 12, whiteSpace: 'nowrap', color: 'var(--expense)' }}
-                        >
-                          −₩{won(p.total)}
-                        </span>
-                      </div>
-                      <MonthlyBars
-                        months={months}
-                        series={[{ label: '지출', color: 'var(--expense)', values: p.values }]}
-                      />
-                    </div>
-                  ))}
+                <div className="card">
+                  <GroupedBarChart
+                    months={months}
+                    series={cardGroups.map((g) => ({
+                      key: g.key,
+                      name: g.name,
+                      values: g.values,
+                    }))}
+                    unitLabel="지출"
+                  />
                 </div>
               )}
             </div>
