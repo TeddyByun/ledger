@@ -189,7 +189,9 @@ export class StatisticsService {
       select: {
         amount: true,
         transactionDate: true,
-        paymentMethod: { select: { id: true, name: true, methodType: true } },
+        paymentMethod: {
+          select: { id: true, name: true, methodType: true, issuer: true },
+        },
       },
     });
 
@@ -206,6 +208,8 @@ export class StatisticsService {
       number,
       { name: string; methodType: string; values: number[] }
     >();
+    // 카드는 발급사(현대/삼성/하나/신한 …)로 묶어 비교
+    const cardGroup = new Map<string, number[]>();
     for (const t of txns) {
       const pm = t.paymentMethod;
       if (!pm) continue;
@@ -213,6 +217,17 @@ export class StatisticsService {
       const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
       const i = idx.get(ym);
       if (i === undefined) continue;
+
+      if (pm.methodType === 'card') {
+        const g = (pm.issuer ?? '').trim() || '기타';
+        let gv = cardGroup.get(g);
+        if (!gv) {
+          gv = new Array(months).fill(0) as number[];
+          cardGroup.set(g, gv);
+        }
+        gv[i] = (gv[i] ?? 0) + Number(t.amount ?? 0);
+      }
+
       let e = map.get(pm.id);
       if (!e) {
         e = {
@@ -236,7 +251,11 @@ export class StatisticsService {
       }))
       .sort((a, b) => b.total - a.total);
 
-    return { months: ymList, items };
+    const cardGroups = [...cardGroup.entries()]
+      .map(([name, values]) => ({ key: `issuer:${name}`, name, values, total: sum(values) }))
+      .sort((a, b) => b.total - a.total);
+
+    return { months: ymList, items, cardGroups };
   }
 
   /**
