@@ -28,6 +28,7 @@ export class StatisticsService {
   async monthlyTrend(months = 12) {
     const TOP_INCOME = 3;
     const TOP_EXPENSE = 5;
+    const TOP_PAYMENT = 8;
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
     const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
@@ -39,7 +40,13 @@ export class StatisticsService {
           transactionDate: { gte: start, lt: endExclusive },
           ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
         },
-        select: { type: true, amount: true, transactionDate: true, categoryCode: true },
+        select: {
+          type: true,
+          amount: true,
+          transactionDate: true,
+          categoryCode: true,
+          paymentMethod: { select: { id: true, name: true } },
+        },
       }),
       this.prisma.category.findMany({ select: { code: true, name: true, parentCode: true } }),
     ]);
@@ -65,6 +72,8 @@ export class StatisticsService {
     const zeros = () => new Array(months).fill(0) as number[];
     const cell = new Map<string, { name: string; type: 'income' | 'expense'; values: number[] }>();
     const keyOf = (type: string, code: string) => `${type}:${code}`;
+    // 결제수단 × 월 지출 누적 (하단 차트용)
+    const payCell = new Map<number, { name: string; values: number[] }>();
 
     for (const t of txns) {
       const d = t.transactionDate;
@@ -85,6 +94,16 @@ export class StatisticsService {
         cell.set(k, e);
       }
       e.values[i] = (e.values[i] ?? 0) + amt;
+
+      // 결제수단별 지출
+      if (t.type === 'expense' && t.paymentMethod) {
+        let p = payCell.get(t.paymentMethod.id);
+        if (!p) {
+          p = { name: t.paymentMethod.name, values: zeros() };
+          payCell.set(t.paymentMethod.id, p);
+        }
+        p.values[i] = (p.values[i] ?? 0) + amt;
+      }
     }
 
     // 유형별 상위 N개 + 나머지는 '기타'로 합산
@@ -108,7 +127,23 @@ export class StatisticsService {
       }
     }
 
-    return { months: buckets, series };
+    // 결제수단별 월 지출 — 상위 TOP_PAYMENT개 + 나머지는 '기타'
+    const payList = [...payCell.entries()]
+      .map(([id, v]) => ({ key: `pm:${id}`, name: v.name, values: v.values, total: sum(v.values) }))
+      .sort((a, b) => b.total - a.total);
+    const paymentSeries: { key: string; name: string; values: number[] }[] = payList
+      .slice(0, TOP_PAYMENT)
+      .map((s) => ({ key: s.key, name: s.name, values: s.values }));
+    const payRest = payList.slice(TOP_PAYMENT);
+    if (payRest.length > 0) {
+      const other = zeros();
+      for (const r of payRest) {
+        for (let i = 0; i < months; i++) other[i] = (other[i] ?? 0) + (r.values[i] ?? 0);
+      }
+      paymentSeries.push({ key: 'pm:__other__', name: '기타', values: other });
+    }
+
+    return { months: buckets, series, paymentSeries };
   }
 
   /**

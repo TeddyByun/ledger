@@ -1,6 +1,7 @@
 'use client';
 
 import { won } from '@/lib/format';
+import { compact, niceCeil, colorOf as colorForKey, splitYm } from '@/components/chart-utils';
 
 export interface TrendMonth {
   ym: string; // 'YYYY-MM'
@@ -14,39 +15,7 @@ export interface TrendSeries {
   values: number[]; // 월 순서
 }
 
-/** 금액 축 라벨용 압축 표기: 30,000,000 → 3,000만, 120,000,000 → 1.2억 */
-function compact(n: number): string {
-  if (n === 0) return '0';
-  if (n >= 1e8) {
-    const v = n / 1e8;
-    return `${v % 1 === 0 ? v : v.toFixed(1)}억`;
-  }
-  if (n >= 1e4) return `${Math.round(n / 1e4).toLocaleString()}만`;
-  return n.toLocaleString();
-}
-
-function niceCeil(v: number): number {
-  if (v <= 0) return 1;
-  const p = Math.pow(10, Math.floor(Math.log10(v)));
-  const f = v / p;
-  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
-  return nf * p;
-}
-
-/** 고정 순서 분류 색상 — 순환하지 않고, 초과분은 '기타'(회색). */
-const CAT_COLORS = [
-  'var(--c1)',
-  'var(--c2)',
-  'var(--c3)',
-  'var(--c4)',
-  'var(--c5)',
-  'var(--c6)',
-  'var(--c7)',
-  'var(--c8)',
-];
-function colorOf(s: TrendSeries, i: number): string {
-  return s.key.endsWith('__other__') ? 'var(--c-other)' : CAT_COLORS[i % CAT_COLORS.length]!;
-}
+const colorOf = (s: TrendSeries, i: number) => colorForKey(s.key, i);
 
 /**
  * 최근 N개월 월별 수입·지출 누적 막대차트.
@@ -83,10 +52,7 @@ export function TrendChart({
   const gap = 3;
   const barW = Math.max(3, (groupW - innerPad * 2 - gap) / 2);
   const y = (v: number) => baseY - (plotH * v) / top;
-  const ymOf = (s: string) => {
-    const [yy, mm] = s.split('-');
-    return { year: yy ?? '', month: Number(mm) };
-  };
+  const ymOf = splitYm;
 
   // 색 인덱스는 유형별로 0부터 — 수입/지출이 서로 다른 색을 갖도록 전체 순서로 부여
   const colorIdx = new Map<string, number>();
