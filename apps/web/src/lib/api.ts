@@ -3,7 +3,9 @@
  * 1) NEXT_PUBLIC_API_BASE 가 있으면 그대로 사용.
  * 2) code-server 프록시(.../absproxy/3000 또는 .../proxy/3000) 아래면 같은 베이스에서
  *    :4000 API 프록시 경로를 유도 → .../proxy/4000/api/v1
- * 3) 그 외(로컬 직접 실행)는 localhost:4000.
+ * 3) 그 외(일반 도메인·로컬)는 같은 오리진의 /api/v1.
+ *    next.config.mjs 의 rewrites 가 이를 API 서버로 프록시한다.
+ *    (브라우저의 localhost 를 가리키지 않도록 절대 http://localhost 로 두지 말 것)
  */
 let _base: string | null = null;
 function getBase(): string {
@@ -19,6 +21,8 @@ function getBase(): string {
       _base = origin + m[1] + '/proxy/4000/api/v1';
       return _base;
     }
+    _base = origin + '/api/v1';
+    return _base;
   }
   _base = 'http://localhost:4000/api/v1';
   return _base;
