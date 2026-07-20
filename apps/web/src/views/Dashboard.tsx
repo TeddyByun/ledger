@@ -72,8 +72,6 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
       .catch(() => setTrend(null));
   }, []);
 
-  const banks = data?.bank ?? [];
-  const cards = data?.card ?? [];
   const cats = data?.category ?? [];
 
   return (
@@ -100,7 +98,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
         <div className="page-head">
           <div className="titles">
             <h1>월별 거래 추이</h1>
-            <p>{year}년 계좌·카드·분류별 월별 추이입니다.</p>
+            <p>최근 12개월 수입·지출과 결제수단별 지출, {year}년 분류별 지출 추이입니다.</p>
           </div>
         </div>
 
@@ -122,57 +120,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
           </div>
         ) : (
           <>
-            {/* 1. 계좌별 월별 수입·지출 */}
-            <Section
-              title="계좌별 월별 수입·지출"
-              sub="각 은행 계좌의 올해 월별 수입과 지출"
-              legend={[
-                { label: '수입', color: 'var(--income)' },
-                { label: '지출', color: 'var(--expense)' },
-              ]}
-              empty={banks.length === 0}
-              emptyMsg="은행 거래가 없습니다. 은행 명세서를 업로드하세요."
-            >
-              <div style={GRID}>
-                {banks.map((b) => (
-                  <ChartCard
-                    key={b.id}
-                    title={b.name}
-                    stat={
-                      <>
-                        <span style={{ color: 'var(--income)' }}>+₩{won(sum(b.income))}</span>{' '}
-                        <span style={{ color: 'var(--expense)' }}>−₩{won(sum(b.expense))}</span>
-                      </>
-                    }
-                    series={[
-                      { label: '수입', color: 'var(--income)', values: b.income },
-                      { label: '지출', color: 'var(--expense)', values: b.expense },
-                    ]}
-                  />
-                ))}
-              </div>
-            </Section>
-
-            {/* 2. 카드별 월별 지출 */}
-            <Section
-              title="카드별 월별 지출"
-              sub="각 카드의 올해 월별 지출(결제금액)"
-              empty={cards.length === 0}
-              emptyMsg="카드 거래가 없습니다. 카드 명세서를 업로드하세요."
-            >
-              <div style={GRID}>
-                {cards.map((c) => (
-                  <ChartCard
-                    key={c.id}
-                    title={c.name}
-                    stat={<span style={{ color: 'var(--expense)' }}>−₩{won(c.total)}</span>}
-                    series={[{ label: '지출', color: 'var(--expense)', values: c.expense }]}
-                  />
-                ))}
-              </div>
-            </Section>
-
-            {/* 3. 분류별 월별 지출 */}
+            {/* 1. 분류별 월별 지출 */}
             <Section
               title="분류별 월별 지출"
               sub="대분류별 올해 월별 지출"
@@ -303,6 +251,3 @@ function ChartCard({
   );
 }
 
-function sum(a: number[]): number {
-  return a.reduce((x, y) => x + y, 0);
-}

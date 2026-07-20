@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/views/Dashboard';
+import { PaymentTrend } from '@/views/PaymentTrend';
 import { BankTransactions } from '@/views/BankTransactions';
 import { CardTransactions } from '@/views/CardTransactions';
 import { AllTransactions } from '@/views/AllTransactions';
@@ -14,6 +15,7 @@ import { Categories } from '@/views/Categories';
 
 export type View =
   | 'dashboard'
+  | 'payment-trend'
   | 'all-transactions'
   | 'bank-transactions'
   | 'card-transactions'
@@ -30,6 +32,7 @@ export function Shell() {
       <Sidebar view={view} onNavigate={setView} />
       <div className="main">
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
+        {view === 'payment-trend' && <PaymentTrend />}
         {view === 'all-transactions' && <AllTransactions />}
         {view === 'bank-transactions' && <BankTransactions />}
         {view === 'card-transactions' && <CardTransactions />}
