@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 import type { View } from '@/components/Shell';
 
 const NAV: { view: View; label: string; group: string }[] = [
-  { view: 'dashboard', label: '거래 추이 그래프', group: '집계' },
+  { view: 'dashboard', label: '월별 거래 추이', group: '집계' },
   { view: 'all-transactions', label: '전체 거래', group: '거래내역' },
   { view: 'bank-transactions', label: '은행 거래', group: '거래내역' },
   { view: 'card-transactions', label: '카드 거래', group: '거래내역' },
