@@ -81,7 +81,10 @@ export function MultiSelect({
             position: 'absolute',
             top: 'calc(100% + 4px)',
             left: 0,
-            right: 0,
+            // 트리거 너비에 묶이지 않고 항목 전체가 보이도록 내용에 맞춰 확장
+            minWidth: '100%',
+            width: 'max-content',
+            maxWidth: 'min(420px, 90vw)',
             zIndex: 20,
             background: 'var(--surface)',
             borderRadius: 'var(--r)',

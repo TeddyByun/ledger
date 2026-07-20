@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { MultiSelect } from '@/components/MultiSelect';
+import { useSort, SortTh } from '@/components/sortable';
 import type { PaymentMethod, Category } from '@/lib/types';
 
 interface UnifiedRow {
@@ -93,26 +94,31 @@ export function AllTransactions() {
   const [draft, setDraft] = useState<Filters>(withDefaults);
   const [applied, setApplied] = useState<Filters>(withDefaults);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const { sort, toggle, param: sortParam } = useSort([{ col: 'date', dir: 'desc' }]);
 
-  const load = useCallback(async (reset: boolean, f: Filters, off: number) => {
-    const p = filterParams(f);
-    p.set('limit', String(PAGE));
-    p.set('offset', String(off));
-    const res = await api.get<UnifiedResponse>(`/transactions/unified?${p.toString()}`);
-    setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
-    setSummary(res.summary);
-    setHasNext(res.page.hasNext);
-    setOffset(res.page.offset);
-  }, []);
+  const load = useCallback(
+    async (reset: boolean, f: Filters, off: number, sp: string) => {
+      const p = filterParams(f);
+      p.set('limit', String(PAGE));
+      p.set('offset', String(off));
+      if (sp) p.set('sort', sp);
+      const res = await api.get<UnifiedResponse>(`/transactions/unified?${p.toString()}`);
+      setItems((prev) => (reset ? res.items : [...prev, ...res.items]));
+      setSummary(res.summary);
+      setHasNext(res.page.hasNext);
+      setOffset(res.page.offset);
+    },
+    [],
+  );
 
-  // 적용된 필터가 바뀌면 목록·합계 재조회
+  // 적용된 필터·정렬이 바뀌면 목록·합계 재조회
   useEffect(() => {
     setLoading(true);
     setError(null);
-    load(true, applied, 0)
+    load(true, applied, 0, sortParam)
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
-  }, [applied, load]);
+  }, [applied, sortParam, load]);
 
   useEffect(() => {
     api.get<PaymentMethod[]>('/payment-methods').then(setPms).catch(() => {});
@@ -283,12 +289,14 @@ export function AllTransactions() {
           <table className="tbl">
             <thead>
               <tr>
-                <th>날짜</th>
-                <th>원천</th>
-                <th>결제수단</th>
-                <th>분류</th>
-                <th>내용</th>
-                <th style={{ textAlign: 'right' }}>금액</th>
+                <SortTh col="date" sort={sort} onSort={toggle}>날짜</SortTh>
+                <SortTh col="source" sort={sort} onSort={toggle}>원천</SortTh>
+                <SortTh col="payment" sort={sort} onSort={toggle}>결제수단</SortTh>
+                <SortTh col="category" sort={sort} onSort={toggle}>분류</SortTh>
+                <SortTh col="description" sort={sort} onSort={toggle}>내용</SortTh>
+                <SortTh col="amount" sort={sort} onSort={toggle} align="right">
+                  금액
+                </SortTh>
               </tr>
             </thead>
             <tbody>
@@ -339,7 +347,10 @@ export function AllTransactions() {
               {summary && summary.count > items.length ? ` / 총 ${summary.count.toLocaleString()}건` : ''}
             </span>
             {hasNext && (
-              <button className="btn sm" onClick={() => load(false, applied, offset + PAGE)}>
+              <button
+                className="btn sm"
+                onClick={() => load(false, applied, offset + PAGE, sortParam)}
+              >
                 더 보기
               </button>
             )}

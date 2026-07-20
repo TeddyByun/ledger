@@ -121,6 +121,13 @@ export class TransactionQueryDto {
   @IsOptional()
   cursor?: string;
 
+  @ApiPropertyOptional({
+    description: "정렬 스펙(우선순위 순): 'col:dir,col:dir' 예) 'date:desc,amount:asc'",
+  })
+  @IsString()
+  @IsOptional()
+  sort?: string;
+
   @ApiPropertyOptional({ default: 0, minimum: 0, description: '오프셋(통합 목록 페이지네이션)' })
   @Type(() => Number)
   @IsInt()
