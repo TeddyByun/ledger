@@ -23,20 +23,34 @@ export class StatisticsService {
   /**
    * 최근 N개월(기본 12) 월별 수입·지출 추이. (달력 연도가 아닌 롤링 기간)
    * 거래(transaction)에서 직접 집계. 이번 달 포함, 과거 방향으로 N개월.
+   * 대분류별 구성(누적 막대용)도 함께 반환 — 상위 N개만 색을 주고 나머지는 '기타'.
    */
   async monthlyTrend(months = 12) {
+    const TOP_INCOME = 3;
+    const TOP_EXPENSE = 5;
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
     const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
     const excluded = await excludeCategoryCodes(this.prisma);
-    const txns = await this.prisma.transaction.findMany({
-      where: {
-        transactionDate: { gte: start, lt: endExclusive },
-        ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
-      },
-      select: { type: true, amount: true, transactionDate: true },
-    });
+    const [txns, cats] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          transactionDate: { gte: start, lt: endExclusive },
+          ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
+        },
+        select: { type: true, amount: true, transactionDate: true, categoryCode: true },
+      }),
+      this.prisma.category.findMany({ select: { code: true, name: true, parentCode: true } }),
+    ]);
+
+    // 리프 분류 → 대분류(code,name)
+    const byCode = new Map(cats.map((c) => [c.code, c]));
+    const topOf = new Map<string, { code: string; name: string }>();
+    for (const c of cats) {
+      const top = (c.parentCode ? byCode.get(c.parentCode) : null) ?? c;
+      topOf.set(c.code, { code: top.code, name: top.name });
+    }
 
     const buckets: { ym: string; income: number; expense: number }[] = [];
     const idx = new Map<string, number>();
@@ -46,6 +60,11 @@ export class StatisticsService {
       idx.set(ym, i);
       buckets.push({ ym, income: 0, expense: 0 });
     }
+
+    // 유형별 대분류 × 월 누적
+    const zeros = () => new Array(months).fill(0) as number[];
+    const cell = new Map<string, { name: string; type: 'income' | 'expense'; values: number[] }>();
+    const keyOf = (type: string, code: string) => `${type}:${code}`;
 
     for (const t of txns) {
       const d = t.transactionDate;
@@ -57,9 +76,39 @@ export class StatisticsService {
       const amt = Number(t.amount ?? 0);
       if (t.type === 'income') b.income += amt;
       else b.expense += amt;
+
+      const top = topOf.get(t.categoryCode) ?? { code: t.categoryCode, name: t.categoryCode };
+      const k = keyOf(t.type, top.code);
+      let e = cell.get(k);
+      if (!e) {
+        e = { name: top.name, type: t.type as 'income' | 'expense', values: zeros() };
+        cell.set(k, e);
+      }
+      e.values[i] = (e.values[i] ?? 0) + amt;
     }
 
-    return { months: buckets };
+    // 유형별 상위 N개 + 나머지는 '기타'로 합산
+    const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+    const series: { key: string; name: string; type: 'income' | 'expense'; values: number[] }[] = [];
+    for (const type of ['income', 'expense'] as const) {
+      const list = [...cell.entries()]
+        .filter(([, v]) => v.type === type)
+        .map(([k, v]) => ({ key: k, name: v.name, type, values: v.values, total: sum(v.values) }))
+        .sort((a, b) => b.total - a.total);
+      const cap = type === 'income' ? TOP_INCOME : TOP_EXPENSE;
+      const keep = list.slice(0, cap);
+      const rest = list.slice(cap);
+      for (const s of keep) series.push({ key: s.key, name: s.name, type, values: s.values });
+      if (rest.length > 0) {
+        const other = zeros();
+        for (const r of rest) {
+          for (let i = 0; i < months; i++) other[i] = (other[i] ?? 0) + (r.values[i] ?? 0);
+        }
+        series.push({ key: `${type}:__other__`, name: '기타', type, values: other });
+      }
+    }
+
+    return { months: buckets, series };
   }
 
   /**

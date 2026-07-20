@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { MonthlyBars, Legend, type BarSeries } from '@/components/MonthlyBars';
-import { TrendChart, type TrendMonth } from '@/components/TrendChart';
+import { TrendChart, type TrendMonth, type TrendSeries } from '@/components/TrendChart';
 import type { View } from '@/components/Shell';
 
 interface BankRow {
@@ -45,6 +45,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [trend, setTrend] = useState<TrendMonth[] | null>(null);
+  const [trendSeries, setTrendSeries] = useState<TrendSeries[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -58,8 +59,11 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
   // 최근 12개월 추이는 연도 선택과 무관 — 최초 1회만 로드
   useEffect(() => {
     api
-      .get<{ months: TrendMonth[] }>('/stats/monthly-trend?months=12')
-      .then((d) => setTrend(d.months))
+      .get<{ months: TrendMonth[]; series: TrendSeries[] }>('/stats/monthly-trend?months=12')
+      .then((d) => {
+        setTrend(d.months);
+        setTrendSeries(d.series ?? []);
+      })
       .catch(() => setTrend(null));
   }, []);
 
@@ -98,16 +102,12 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
         {/* 0. 최근 12개월 월별 수입·지출 (롤링) */}
         <Section
           title="월별 수입·지출 (최근 12개월)"
-          sub="최근 12개월간 월별 총수입과 총지출"
-          legend={[
-            { label: '수입', color: 'var(--income)' },
-            { label: '지출', color: 'var(--expense)' },
-          ]}
+          sub="월마다 왼쪽=수입, 오른쪽=지출. 각 막대는 분류별로 누적되며 전체 높이가 그 달 총액입니다."
           empty={!trend || trend.every((m) => m.income === 0 && m.expense === 0)}
           emptyMsg={trend ? '집계할 거래가 없습니다.' : '불러오는 중…'}
         >
           <div className="card">
-            {trend && <TrendChart data={trend} />}
+            {trend && <TrendChart data={trend} series={trendSeries} />}
           </div>
         </Section>
 
