@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { TrendChart, type TrendMonth, type TrendSeries } from '@/components/TrendChart';
 import { StackedBarChart, type StackSeries } from '@/components/StackedBarChart';
+import { GroupedBarChart } from '@/components/GroupedBarChart';
+import { buildColorMap } from '@/components/chart-utils';
 import type { View } from '@/components/Shell';
 
 /** 기본 기간 = 올해 1월 ~ 이번 달 */
@@ -57,6 +59,11 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
 
   const range =
     trend && trend.length > 0 ? `${trend[0]!.ym} ~ ${trend[trend.length - 1]!.ym}` : '올해';
+
+  // 분류 색을 한 번만 배정해 두 차트(누적/비교)가 같은 분류에 같은 색을 쓰게 한다.
+  // '기타'는 회색이고 팔레트 슬롯을 소비하지 않아 8색을 넘겨 순환하지 않는다.
+  const catColors = buildColorMap(trendSeries.map((s) => s.key));
+  const expenseSeries = trendSeries.filter((s) => s.type === 'expense');
 
   return (
     <>
@@ -127,7 +134,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
               emptyMsg="집계할 거래가 없습니다."
             >
               <div className="card">
-                {trend && <TrendChart data={trend} series={trendSeries} />}
+                {trend && <TrendChart data={trend} series={trendSeries} colors={catColors} />}
               </div>
             </Section>
 
@@ -143,6 +150,29 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
                   <StackedBarChart
                     months={trend.map((m) => m.ym)}
                     series={paymentSeries}
+                    unitLabel="지출"
+                  />
+                )}
+              </div>
+            </Section>
+
+            {/* 3. 대분류별 월별 지출 비교 (그룹 막대) */}
+            <Section
+              title="대분류별 월별 지출 비교"
+              sub="월마다 대분류 막대가 나란히 표시되어 분류 간 지출 규모를 비교할 수 있습니다."
+              empty={!trend || expenseSeries.length === 0}
+              emptyMsg="집계할 지출이 없습니다."
+            >
+              <div className="card">
+                {trend && (
+                  <GroupedBarChart
+                    months={trend.map((m) => m.ym)}
+                    series={expenseSeries.map((s) => ({
+                      key: s.key,
+                      name: s.name,
+                      values: s.values,
+                    }))}
+                    colors={catColors}
                     unitLabel="지출"
                   />
                 )}
