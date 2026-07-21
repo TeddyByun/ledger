@@ -44,3 +44,6 @@ apps/api/_merchants.mjs
 # 업로드 원본 저장(개인 금융정보) — 커밋 금지
 apps/api/uploads/
 uploads/
+
+# PM2 런타임 로그
+.pm2-logs/
