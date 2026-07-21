@@ -19,12 +19,16 @@ export function GroupedBarChart({
   series,
   height = 300,
   unitLabel = '지출',
+  colors,
 }: {
   months: string[];
   series: GroupSeries[];
   height?: number;
   unitLabel?: string;
+  /** key→색 맵. 주면 그대로 쓰고(차트 간 색 일치), 없으면 순서대로 배정. */
+  colors?: Record<string, string>;
 }) {
+  const colorFor = (k: string, i: number) => colors?.[k] ?? colorOf(k, i);
   const W = 720;
   const H = height;
   const padL = 60;
@@ -81,7 +85,7 @@ export function GroupedBarChart({
                     width={barW}
                     height={Math.max(0.5, h)}
                     rx={2}
-                    fill={colorOf(s.key, si)}
+                    fill={colorFor(s.key, si)}
                   >
                     <title>{`${ym} · ${s.name} · ${unitLabel} ₩${won(v)}`}</title>
                   </rect>
@@ -114,7 +118,7 @@ export function GroupedBarChart({
                 width: 11,
                 height: 11,
                 borderRadius: 3,
-                background: colorOf(s.key, si),
+                background: colorFor(s.key, si),
                 display: 'inline-block',
               }}
             />

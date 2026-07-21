@@ -41,6 +41,26 @@ export function colorOf(key: string, i: number): string {
   return key.endsWith('__other__') ? 'var(--c-other)' : CAT_COLORS[i % CAT_COLORS.length]!;
 }
 
+/**
+ * 시리즈 key 목록 → key별 색 맵.
+ * '기타'(__other__)는 회색이고 **팔레트 슬롯을 소비하지 않는다**.
+ * 이렇게 해야 색이 8슬롯을 넘어 순환(다른 항목이 같은 색)하는 일이 없다.
+ * 여러 차트에 같은 맵을 넘기면 같은 항목이 화면 전체에서 같은 색을 갖는다.
+ */
+export function buildColorMap(keys: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  let slot = 0;
+  for (const k of keys) {
+    if (k.endsWith('__other__')) {
+      map[k] = 'var(--c-other)';
+      continue;
+    }
+    map[k] = CAT_COLORS[slot % CAT_COLORS.length]!;
+    slot++;
+  }
+  return map;
+}
+
 /** 'YYYY-MM' → { year, month } */
 export function splitYm(s: string): { year: string; month: number } {
   const [yy, mm] = s.split('-');

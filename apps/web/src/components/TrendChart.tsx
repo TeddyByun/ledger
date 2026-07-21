@@ -15,7 +15,7 @@ export interface TrendSeries {
   values: number[]; // 월 순서
 }
 
-const colorOf = (s: TrendSeries, i: number) => colorForKey(s.key, i);
+
 
 /**
  * 최근 N개월 월별 수입·지출 누적 막대차트.
@@ -26,11 +26,15 @@ export function TrendChart({
   data,
   series,
   height = 320,
+  colors,
 }: {
   data: TrendMonth[];
   series: TrendSeries[];
   height?: number;
+  /** key→색 맵. 주면 그대로 쓰고(차트 간 색 일치), 없으면 순서대로 배정. */
+  colors?: Record<string, string>;
 }) {
+  const colorOf = (s: TrendSeries, i: number) => colors?.[s.key] ?? colorForKey(s.key, i);
   const W = 720;
   const H = height;
   const padL = 60;
