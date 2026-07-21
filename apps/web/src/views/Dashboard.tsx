@@ -128,7 +128,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
           <>
             {/* 1. 월별 수입·지출 (분류별 누적) */}
             <Section
-              title="월별 수입·지출 (최근 12개월)"
+              title="월별 수입·지출"
               sub="월마다 왼쪽=수입, 오른쪽=지출. 각 막대는 분류별로 누적되며 전체 높이가 그 달 총액입니다."
               empty={!trend || trend.every((m) => m.income === 0 && m.expense === 0)}
               emptyMsg="집계할 거래가 없습니다."
@@ -140,7 +140,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
 
             {/* 2. 결제수단별 월별 지출 (누적) */}
             <Section
-              title="결제수단별 월별 지출 (최근 12개월)"
+              title="결제수단별 월별 지출"
               sub="월별 총지출을 결제수단(계좌·카드)별로 누적. 막대 전체 높이가 그 달 총지출입니다."
               empty={!trend || paymentSeries.length === 0}
               emptyMsg="집계할 지출이 없습니다."
