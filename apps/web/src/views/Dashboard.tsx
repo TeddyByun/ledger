@@ -1,33 +1,62 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { TrendChart, type TrendMonth, type TrendSeries } from '@/components/TrendChart';
 import { StackedBarChart, type StackSeries } from '@/components/StackedBarChart';
 import type { View } from '@/components/Shell';
+
+/** 기본 기간 = 올해 1월 ~ 이번 달 */
+function thisYearRange(): { from: string; to: string } {
+  const d = new Date();
+  const y = d.getFullYear();
+  return { from: `${y}-01`, to: `${y}-${String(d.getMonth() + 1).padStart(2, '0')}` };
+}
 
 export function Dashboard(_props: { onNavigate: (v: View) => void }) {
   const [trend, setTrend] = useState<TrendMonth[] | null>(null);
   const [trendSeries, setTrendSeries] = useState<TrendSeries[]>([]);
   const [paymentSeries, setPaymentSeries] = useState<StackSeries[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api
-      .get<{ months: TrendMonth[]; series: TrendSeries[]; paymentSeries: StackSeries[] }>(
-        '/stats/monthly-trend?months=12',
-      )
-      .then((d) => {
-        setTrend(d.months);
-        setTrendSeries(d.series ?? []);
-        setPaymentSeries(d.paymentSeries ?? []);
-      })
-      .catch(() => setTrend(null))
-      .finally(() => setLoading(false));
+  const [draft, setDraft] = useState(thisYearRange);
+  const [applied, setApplied] = useState(thisYearRange);
+
+  const load = useCallback(async (f: { from: string; to: string }) => {
+    const p = new URLSearchParams();
+    if (f.from) p.set('from', f.from);
+    if (f.to) p.set('to', f.to);
+    const d = await api.get<{
+      months: TrendMonth[];
+      series: TrendSeries[];
+      paymentSeries: StackSeries[];
+    }>(`/stats/monthly-trend?${p.toString()}`);
+    setTrend(d.months);
+    setTrendSeries(d.series ?? []);
+    setPaymentSeries(d.paymentSeries ?? []);
   }, []);
 
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    load(applied)
+      .catch((e) => {
+        setTrend(null);
+        setError((e as Error).message);
+      })
+      .finally(() => setLoading(false));
+  }, [applied, load]);
+
+  const search = () => setApplied(draft);
+  const reset = () => {
+    const d = thisYearRange();
+    setDraft(d);
+    setApplied(d);
+  };
+
   const range =
-    trend && trend.length > 0 ? `${trend[0]!.ym} ~ ${trend[trend.length - 1]!.ym}` : '최근 12개월';
+    trend && trend.length > 0 ? `${trend[0]!.ym} ~ ${trend[trend.length - 1]!.ym}` : '올해';
 
   return (
     <>
@@ -40,9 +69,49 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
         <div className="page-head">
           <div className="titles">
             <h1>월별 거래 추이</h1>
-            <p>최근 12개월({range}) 수입·지출과 결제수단별 지출 추이입니다.</p>
+            <p>{range} 수입·지출과 결제수단별 지출 추이입니다. 기본은 올해입니다.</p>
           </div>
         </div>
+
+        {/* 기간 선택 */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              search();
+            }}
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}
+          >
+            <div className="field">
+              <label>기간 (년월)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  className="input"
+                  type="month"
+                  value={draft.from}
+                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+                />
+                <span className="muted">~</span>
+                <input
+                  className="input"
+                  type="month"
+                  value={draft.to}
+                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn primary" type="submit">
+                검색
+              </button>
+              <button className="btn ghost" type="button" onClick={reset}>
+                올해로 초기화
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {error && <div className="error-banner">{error}</div>}
 
         {loading ? (
           <div className="card">

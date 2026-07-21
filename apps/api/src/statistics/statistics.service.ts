@@ -21,17 +21,52 @@ export class StatisticsService {
   }
 
   /**
-   * 최근 N개월(기본 12) 월별 수입·지출 추이. (달력 연도가 아닌 롤링 기간)
-   * 거래(transaction)에서 직접 집계. 이번 달 포함, 과거 방향으로 N개월.
-   * 대분류별 구성(누적 막대용)도 함께 반환 — 상위 N개만 색을 주고 나머지는 '기타'.
+   * 'YYYY-MM' from/to(양끝 포함) → 조회 구간. 기본은 올해 1월 ~ 이번 달.
+   * 뒤집혀 들어오면 교환하고, 과도한 범위는 60개월로 자른다. (추이 조회 공통)
    */
-  async monthlyTrend(months = 12) {
+  private resolveMonthRange(from?: string, to?: string) {
+    const YM = /^\d{4}-\d{2}$/;
+    const now = new Date();
+    const curY = now.getUTCFullYear();
+    const curM = now.getUTCMonth() + 1;
+    const f = from && YM.test(from) ? from : `${curY}-01`;
+    const t = to && YM.test(to) ? to : `${curY}-${String(curM).padStart(2, '0')}`;
+
+    const parse = (s: string) => {
+      const [yy, mm] = s.split('-');
+      return { y: Number(yy), m: Number(mm) };
+    };
+    let a = parse(f);
+    let b = parse(t);
+    if (b.y * 12 + b.m < a.y * 12 + a.m) [a, b] = [b, a];
+
+    const start = new Date(Date.UTC(a.y, a.m - 1, 1));
+    let months = (b.y - a.y) * 12 + (b.m - a.m) + 1;
+    months = Math.max(1, Math.min(60, months));
+    const endExclusive = new Date(Date.UTC(a.y, a.m - 1 + months, 1));
+
+    const ymList: string[] = [];
+    const idx = new Map<string, number>();
+    for (let i = 0; i < months; i++) {
+      const d = new Date(Date.UTC(a.y, a.m - 1 + i, 1));
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      idx.set(ym, i);
+      ymList.push(ym);
+    }
+    return { start, endExclusive, months, ymList, idx };
+  }
+
+  /**
+   * 월별 수입·지출 추이. from/to 는 'YYYY-MM'(양끝 포함), 기본은 올해.
+   * 거래(transaction)에서 직접 집계.
+   * 대분류별 구성(누적 막대용)과 결제수단별 지출도 함께 반환 —
+   * 상위 N개만 색을 주고 나머지는 '기타'로 접는다.
+   */
+  async monthlyTrend(from?: string, to?: string) {
     const TOP_INCOME = 3;
     const TOP_EXPENSE = 5;
     const TOP_PAYMENT = 8;
-    const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1));
-    const endExclusive = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const { start, endExclusive, months, ymList, idx } = this.resolveMonthRange(from, to);
 
     const excluded = await excludeCategoryCodes(this.prisma);
     const [txns, cats] = await Promise.all([
@@ -59,14 +94,7 @@ export class StatisticsService {
       topOf.set(c.code, { code: top.code, name: top.name });
     }
 
-    const buckets: { ym: string; income: number; expense: number }[] = [];
-    const idx = new Map<string, number>();
-    for (let i = 0; i < months; i++) {
-      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
-      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      idx.set(ym, i);
-      buckets.push({ ym, income: 0, expense: 0 });
-    }
+    const buckets = ymList.map((ym) => ({ ym, income: 0, expense: 0 }));
 
     // 유형별 대분류 × 월 누적
     const zeros = () => new Array(months).fill(0) as number[];
@@ -151,33 +179,7 @@ export class StatisticsService {
    * 기본은 올해 1월 ~ 이번 달. '집계제외' 분류는 제외하고 지출만 집계.
    */
   async paymentTrend(from?: string, to?: string) {
-    const YM = /^\d{4}-\d{2}$/;
-    const now = new Date();
-    const curY = now.getUTCFullYear();
-    const curM = now.getUTCMonth() + 1;
-    const f = from && YM.test(from) ? from : `${curY}-01`;
-    const t = to && YM.test(to) ? to : `${curY}-${String(curM).padStart(2, '0')}`;
-
-    const parse = (s: string) => {
-      const [yy, mm] = s.split('-');
-      return { y: Number(yy), m: Number(mm) };
-    };
-    const a = parse(f);
-    const b = parse(t);
-    let start = new Date(Date.UTC(a.y, a.m - 1, 1));
-    let endExclusive = new Date(Date.UTC(b.y, b.m, 1)); // to 월의 다음 달 1일
-    if (endExclusive <= start) {
-      // 뒤집혀 들어오면 교환
-      const tmp = start;
-      start = new Date(Date.UTC(b.y, b.m - 1, 1));
-      endExclusive = new Date(Date.UTC(tmp.getUTCFullYear(), tmp.getUTCMonth() + 1, 1));
-    }
-    // 개월 수 산정(과도한 범위 방지: 최대 60개월)
-    let months =
-      (endExclusive.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-      (endExclusive.getUTCMonth() - start.getUTCMonth());
-    months = Math.max(1, Math.min(60, months));
-    endExclusive = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, 1));
+    const { start, endExclusive, months, ymList, idx } = this.resolveMonthRange(from, to);
 
     const excluded = await excludeCategoryCodes(this.prisma);
     const txns = await this.prisma.transaction.findMany({
@@ -194,15 +196,6 @@ export class StatisticsService {
         },
       },
     });
-
-    const ymList: string[] = [];
-    const idx = new Map<string, number>();
-    for (let i = 0; i < months; i++) {
-      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
-      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-      idx.set(ym, i);
-      ymList.push(ym);
-    }
 
     const map = new Map<
       number,
