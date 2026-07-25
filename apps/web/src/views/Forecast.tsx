@@ -7,6 +7,7 @@ import type { View } from '@/components/Shell';
 
 interface Contribution {
   kind: string;
+  group: 'fixed' | 'certain' | 'estimated';
   label: string;
   categoryCode?: string;
   predicted: number;
@@ -152,54 +153,102 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
               </div>
             </div>
 
-            {/* 규칙별 기여 */}
-            <div className="card">
-              <div className="card-head">
-                <h3>규칙별 예측 내역</h3>
-                <span className="sub">이미 발생분은 실제값, 미발생분은 예측</span>
-              </div>
-              <div className="tbl-wrap" style={{ boxShadow: 'none' }}>
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>규칙</th>
-                      <th>항목</th>
-                      <th style={{ textAlign: 'right' }}>예상</th>
-                      <th style={{ textAlign: 'right' }}>발생</th>
-                      <th style={{ textAlign: 'right' }}>남음</th>
-                      <th>근거 · 신뢰</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.contributions.map((c, i) => (
-                      <tr key={i}>
-                        <td>
-                          <span className="pill plain">{KIND_LABEL[c.kind] ?? c.kind}</span>
-                        </td>
-                        <td>
-                          <b>{c.label}</b>
-                        </td>
-                        <td className="money">₩{won(c.predicted)}</td>
-                        <td className="money muted">{c.occurred > 0 ? `₩${won(c.occurred)}` : '—'}</td>
-                        <td className="money" style={{ color: c.remaining > 0 ? 'var(--expense)' : 'var(--muted)' }}>
-                          {c.remaining > 0 ? `₩${won(c.remaining)}` : '—'}
-                        </td>
-                        <td className="muted" style={{ fontSize: 12 }}>
-                          {c.basis} · {CONF_LABEL[c.confidence] ?? c.confidence}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="callout" style={{ marginTop: 14 }}>
-                정기지출·대출/적금 만기는 <b>관리 &gt; 정기지출</b>에서 추천을 확정하거나 직접
-                설정하면 예측이 더 정확해집니다.
-              </div>
+            {/* 3개 리스트: 고정 확정 / 반드시 발생 / 대략 예측 */}
+            <ContribSection
+              title="고정 비용 (확정)"
+              sub="정기지출·할부·대출/적금 등 금액이 확정된 항목"
+              accent="var(--c4)"
+              rows={data.contributions.filter((c) => c.group === 'fixed')}
+            />
+            <ContribSection
+              title="반드시 발생하는 비용 (비고정)"
+              sub="공과금처럼 매월 꼭 나가지만 금액은 변동하는 항목 (전년 동월·최근 추세 기준)"
+              accent="var(--c6)"
+              rows={data.contributions.filter((c) => c.group === 'certain')}
+            />
+            <ContribSection
+              title="대략적 예측 (변동·경조사)"
+              sub="과거 지출로 추정한 항목 — 실제와 차이가 있을 수 있습니다"
+              accent="var(--c1)"
+              rows={data.contributions.filter((c) => c.group === 'estimated')}
+            />
+
+            <div className="callout">
+              정기지출·대출/적금 만기는 <b>관리 &gt; 정기지출</b>에서 추천을 확정하거나 직접
+              설정하면 예측이 더 정확해집니다.
             </div>
           </>
         )}
       </main>
     </>
+  );
+}
+
+function ContribSection({
+  title,
+  sub,
+  accent,
+  rows,
+}: {
+  title: string;
+  sub: string;
+  accent: string;
+  rows: Contribution[];
+}) {
+  if (rows.length === 0) return null;
+  const predicted = rows.reduce((s, c) => s + c.predicted, 0);
+  const remaining = rows.reduce((s, c) => s + c.remaining, 0);
+  return (
+    <div className="card" style={{ marginBottom: 18, borderLeft: `3px solid ${accent}` }}>
+      <div className="card-head">
+        <h3>{title}</h3>
+        <span className="sub">{sub}</span>
+        <div className="r">
+          <span className="money" style={{ fontSize: 13 }}>
+            예상 합계 <b style={{ color: 'var(--expense)' }}>₩{won(predicted)}</b>
+            {remaining > 0 && (
+              <span className="muted" style={{ fontSize: 12 }}> · 남음 ₩{won(remaining)}</span>
+            )}
+          </span>
+        </div>
+      </div>
+      <div className="tbl-wrap" style={{ boxShadow: 'none' }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>항목</th>
+              <th style={{ textAlign: 'right' }}>예상</th>
+              <th style={{ textAlign: 'right' }}>발생</th>
+              <th style={{ textAlign: 'right' }}>남음</th>
+              <th>근거 · 신뢰</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c, i) => (
+              <tr key={i}>
+                <td>
+                  <span className="pill plain">{KIND_LABEL[c.kind] ?? c.kind}</span>
+                </td>
+                <td>
+                  <b>{c.label}</b>
+                </td>
+                <td className="money">₩{won(c.predicted)}</td>
+                <td className="money muted">{c.occurred > 0 ? `₩${won(c.occurred)}` : '—'}</td>
+                <td
+                  className="money"
+                  style={{ color: c.remaining > 0 ? 'var(--expense)' : 'var(--muted)' }}
+                >
+                  {c.remaining > 0 ? `₩${won(c.remaining)}` : '—'}
+                </td>
+                <td className="muted" style={{ fontSize: 12 }}>
+                  {c.basis} · {CONF_LABEL[c.confidence] ?? c.confidence}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

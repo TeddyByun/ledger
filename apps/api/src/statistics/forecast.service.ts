@@ -294,6 +294,15 @@ export class ForecastService {
 
     contributions.sort((a, b) => b.predicted - a.predicted);
 
+    // 그룹: fixed(고정 확정) / certain(비고정·반드시 발생) / estimated(대략 예측)
+    const groupOf = (kind: string): 'fixed' | 'certain' | 'estimated' =>
+      ['R3', 'R4', 'R6', 'R7'].includes(kind)
+        ? 'fixed'
+        : kind === 'R2'
+          ? 'certain'
+          : 'estimated';
+    const contribOut = contributions.map((c) => ({ ...c, group: groupOf(c.kind) }));
+
     return {
       ym: tym,
       total: Math.round(total),
@@ -308,7 +317,7 @@ export class ForecastService {
       abc: { A: Math.round(A), B: Math.round(B), C: Math.round(C) },
       progress: { day: dayToday, days: daysInMonth },
       prev: { ym: prevYm, actual: Math.round(prevActual) },
-      contributions,
+      contributions: contribOut,
     };
   }
 }
