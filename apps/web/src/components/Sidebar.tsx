@@ -6,6 +6,7 @@ import type { View } from '@/components/Shell';
 const NAV: { view: View; label: string; group: string }[] = [
   { view: 'dashboard', label: '월별 거래 추이', group: '집계' },
   { view: 'payment-trend', label: '월별 결제수단별 지출 추이', group: '집계' },
+  { view: 'forecast', label: '예상 지출', group: '집계' },
   { view: 'all-transactions', label: '전체 거래', group: '거래내역' },
   { view: 'bank-transactions', label: '은행 거래', group: '거래내역' },
   { view: 'card-transactions', label: '카드 거래', group: '거래내역' },
@@ -13,6 +14,7 @@ const NAV: { view: View; label: string; group: string }[] = [
   { view: 'cards', label: '카드 관리', group: '관리' },
   { view: 'payment-methods', label: '결제수단', group: '관리' },
   { view: 'categories', label: '분류 관리', group: '관리' },
+  { view: 'recurring-expenses', label: '정기지출', group: '관리' },
   { view: 'imports', label: '명세서 업로드', group: '관리' },
 ];
 

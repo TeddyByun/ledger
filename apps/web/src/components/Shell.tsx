@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { Dashboard } from '@/views/Dashboard';
 import { PaymentTrend } from '@/views/PaymentTrend';
+import { Forecast } from '@/views/Forecast';
 import { BankTransactions } from '@/views/BankTransactions';
 import { CardTransactions } from '@/views/CardTransactions';
 import { AllTransactions } from '@/views/AllTransactions';
@@ -12,10 +13,12 @@ import { Cards } from '@/views/Cards';
 import { Family } from '@/views/Family';
 import { Imports } from '@/views/Imports';
 import { Categories } from '@/views/Categories';
+import { RecurringExpenses } from '@/views/RecurringExpenses';
 
 export type View =
   | 'dashboard'
   | 'payment-trend'
+  | 'forecast'
   | 'all-transactions'
   | 'bank-transactions'
   | 'card-transactions'
@@ -23,6 +26,7 @@ export type View =
   | 'cards'
   | 'family'
   | 'categories'
+  | 'recurring-expenses'
   | 'payment-methods';
 
 export function Shell() {
@@ -33,6 +37,7 @@ export function Shell() {
       <div className="main">
         {view === 'dashboard' && <Dashboard onNavigate={setView} />}
         {view === 'payment-trend' && <PaymentTrend />}
+        {view === 'forecast' && <Forecast onNavigate={setView} />}
         {view === 'all-transactions' && <AllTransactions />}
         {view === 'bank-transactions' && <BankTransactions />}
         {view === 'card-transactions' && <CardTransactions />}
@@ -40,6 +45,7 @@ export function Shell() {
         {view === 'cards' && <Cards />}
         {view === 'family' && <Family />}
         {view === 'categories' && <Categories />}
+        {view === 'recurring-expenses' && <RecurringExpenses />}
         {view === 'payment-methods' && <PaymentMethods />}
       </div>
     </div>
