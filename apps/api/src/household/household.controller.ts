@@ -11,6 +11,7 @@ import {
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { HouseholdService } from './household.service.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
+import { CurrentUser, type AuthUser } from '../auth/decorators/current-user.decorator.js';
 import {
   CreateMemberDto,
   RenameHouseholdDto,
@@ -45,8 +46,8 @@ export class HouseholdController {
   @Post('members')
   @Roles('owner', 'member')
   @ApiOperation({ summary: '가족 구성원 등록' })
-  createMember(@Body() dto: CreateMemberDto) {
-    return this.service.createMember(dto);
+  createMember(@Body() dto: CreateMemberDto, @CurrentUser() user: AuthUser) {
+    return this.service.createMember(dto, user.role);
   }
 
   @Patch('members/:id')
@@ -55,8 +56,9 @@ export class HouseholdController {
   updateMember(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateMemberDto,
+    @CurrentUser() user: AuthUser,
   ) {
-    return this.service.updateMember(id, dto);
+    return this.service.updateMember(id, dto, user.role);
   }
 
   @Delete('members/:id')

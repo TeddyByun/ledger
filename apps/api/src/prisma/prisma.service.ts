@@ -18,6 +18,10 @@ const SCOPED_MODELS = new Set<string>([
   'InstallmentPlan',
   'ImportJob',
   'RecurringExpense',
+  'MonthlySummary',
+  'MonthlyCategoryStat',
+  'MonthlySourceStat',
+  'MonthlyPaymentStat',
 ]);
 
 /** where 를 갖는(또는 주입 대상) 액션. */

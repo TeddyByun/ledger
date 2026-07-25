@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TransactionType } from '@ledger/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { requireTenant } from '../common/tenant/tenant-context.js';
 import {
   EXCLUDE_CATEGORY_NAME,
   excludeCategoryCodes,
@@ -17,7 +18,8 @@ export class StatisticsService {
   }
 
   getSummary(ym: string) {
-    return this.prisma.monthlySummary.findUnique({ where: { ym } });
+    // 복합 PK(household_id, ym) — findUnique 대신 findFirst 로 테넌트 미들웨어가 스코프.
+    return this.prisma.monthlySummary.findFirst({ where: { ym } });
   }
 
   /**
@@ -392,6 +394,7 @@ export class StatisticsService {
    */
   async rebuild(ym: string) {
     this.assertYm(ym);
+    const householdId = requireTenant().householdId; // create 입력 타입 충족(미들웨어도 주입)
     const from = new Date(`${ym}-01T00:00:00Z`);
     const to = new Date(from);
     to.setUTCMonth(to.getUTCMonth() + 1);
@@ -455,17 +458,11 @@ export class StatisticsService {
     const typeTotals: Record<string, number> = { income: incomeTotal, expense: expenseTotal };
 
     await this.prisma.$transaction([
-      // 전체 요약
-      this.prisma.monthlySummary.upsert({
-        where: { ym },
-        update: {
-          incomeTotal,
-          expenseTotal,
-          netAmount: incomeTotal - expenseTotal,
-          incomeCount,
-          expenseCount,
-        },
-        create: {
+      // 전체 요약 — 복합 PK(household_id, ym)라 삭제 후 재삽입(테넌트 미들웨어가 스코프)
+      this.prisma.monthlySummary.deleteMany({ where: { ym } }),
+      this.prisma.monthlySummary.create({
+        data: {
+          householdId,
           ym,
           incomeTotal,
           expenseTotal,
@@ -478,6 +475,7 @@ export class StatisticsService {
       this.prisma.monthlyCategoryStat.deleteMany({ where: { ym } }),
       this.prisma.monthlyCategoryStat.createMany({
         data: [...catMap.entries()].map(([categoryCode, v]) => ({
+          householdId,
           ym,
           categoryCode,
           type: v.type as TransactionType,
@@ -491,6 +489,7 @@ export class StatisticsService {
       this.prisma.monthlySourceStat.deleteMany({ where: { ym } }),
       this.prisma.monthlySourceStat.createMany({
         data: [...srcMap.entries()].map(([counterpartyId, v]) => ({
+          householdId,
           ym,
           counterpartyId,
           amountTotal: v.amount,
@@ -500,6 +499,7 @@ export class StatisticsService {
       this.prisma.monthlyPaymentStat.deleteMany({ where: { ym } }),
       this.prisma.monthlyPaymentStat.createMany({
         data: [...payMap.entries()].map(([paymentMethodId, v]) => ({
+          householdId,
           ym,
           paymentMethodId,
           methodType: v.methodType as 'bank' | 'card',

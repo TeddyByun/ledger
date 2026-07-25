@@ -58,7 +58,7 @@ export class AuthService {
       where: { email: dto.email },
       include: { household: true },
     });
-    if (!member || !member.passwordHash || !member.isActive) {
+    if (!member || !member.passwordHash || !member.isActive || member.useYn !== 'Y') {
       throw new UnauthorizedException('INVALID_CREDENTIALS');
     }
     const ok = await argon2.verify(member.passwordHash, dto.password);
