@@ -17,6 +17,7 @@ const SCOPED_MODELS = new Set<string>([
   'CardTransaction',
   'InstallmentPlan',
   'ImportJob',
+  'RecurringExpense',
 ]);
 
 /** where 를 갖는(또는 주입 대상) 액션. */

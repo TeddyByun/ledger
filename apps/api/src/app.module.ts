@@ -16,6 +16,7 @@ import { CounterpartyModule } from './counterparty/counterparty.module.js';
 import { TransactionModule } from './transaction/transaction.module.js';
 import { StatementTxnModule } from './statement-txn/statement-txn.module.js';
 import { StatisticsModule } from './statistics/statistics.module.js';
+import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module.js';
 import { IngestionModule } from './ingestion/ingestion.module.js';
 
 @Module({
@@ -42,6 +43,7 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     TransactionModule,
     StatementTxnModule,
     StatisticsModule,
+    RecurringExpenseModule,
     IngestionModule,
   ],
   controllers: [HealthController],

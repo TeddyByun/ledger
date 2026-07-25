@@ -67,6 +67,18 @@ enum MemberRole {
   viewer
 }
 
+// 정기지출 주기 — 예측 규칙 엔진 (EXPENSE_FORECAST_DESIGN §4)
+enum RecurringCadence {
+  monthly // R4: 매월 정액 (구독·월세·보험·통신)
+  annual // R6: 연 1~2회 특정 월 (자동차세·연회비·명절)
+  schedule // R7: 만기까지 매월 (대출 원리금·정기적금)
+}
+
+enum RecurringSource {
+  auto // 추천에서 확정
+  manual // 수기 추가
+}
+
 // ─────────────────────────────────────────────
 // 계정 · 가구 (인증/멀티테넌시) — AUTH_DESIGN §3
 // ─────────────────────────────────────────────
@@ -87,6 +99,7 @@ model Household {
   importJobs       ImportJob[]
 
   @@map("household")
+  recurringExpenses RecurringExpense[]
 }
 
 /// 가족 구성원 = 사람. 지출 명의(본인/배우자/자녀) + 선택적 로그인(email/passwordHash 있으면 앱 사용자).
@@ -175,6 +188,7 @@ model PaymentMethod {
 
   @@unique([householdId, name])
   @@map("payment_method")
+  recurringExpenses RecurringExpense[]
 }
 
 model Category {
@@ -195,6 +209,7 @@ model Category {
 
   @@index([parentCode])
   @@map("category")
+  recurringExpenses RecurringExpense[]
 }
 
 model Counterparty {
@@ -476,6 +491,35 @@ model MonthlyPaymentStat {
 // ─────────────────────────────────────────────
 // 적재 잡 (업로드 파이프라인 상태 추적)
 // ─────────────────────────────────────────────
+// 정기지출(사용자 확정) — 예측 규칙 R4/R6/R7. 추천 후보는 미저장(매번 계산).
+model RecurringExpense {
+  id              Int              @id @default(autoincrement())
+  householdId     Int              @map("household_id")
+  label           String
+  categoryCode    String           @map("category_code")
+  paymentMethodId Int?             @map("payment_method_id")
+  amount          Decimal          @db.Decimal(15, 2)
+  cadence         RecurringCadence @default(monthly)
+  months          Int[]            @default([]) // annual/custom 발생 월(1~12)
+  startYm         String?          @map("start_ym") @db.Char(7) // schedule 시작 년월
+  endYm           String?          @map("end_ym") @db.Char(7) // 만기 년월(R7). 지나면 예측 종료
+  dayOfMonth      Int?             @map("day_of_month") // 예상 청구일
+  matchKey        String?          @map("match_key") // 자동 매칭 키(fuzzyKey)
+  source          RecurringSource  @default(manual)
+  isActive        YesNo            @default(Y) @map("is_active") // 체크 상태 = 예측 포함
+  memo            String?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  household     Household     @relation(fields: [householdId], references: [id])
+  category      Category      @relation(fields: [categoryCode], references: [code])
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  @@index([householdId, isActive])
+  @@index([householdId, categoryCode])
+  @@map("recurring_expense")
+}
+
 model ImportJob {
   id              String          @id
   householdId     Int             @map("household_id")

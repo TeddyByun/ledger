@@ -2,11 +2,22 @@ import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { MethodType, TransactionType } from '@ledger/shared';
 import { StatisticsService } from './statistics.service.js';
+import { ForecastService } from './forecast.service.js';
 
 @ApiTags('statistics')
 @Controller('stats')
 export class StatisticsController {
-  constructor(private readonly stats: StatisticsService) {}
+  constructor(
+    private readonly stats: StatisticsService,
+    private readonly forecastSvc: ForecastService,
+  ) {}
+
+  @Get('forecast')
+  @ApiOperation({ summary: '예상 지출 — 규칙 엔진(정기/할부/공과/경조/변동)' })
+  @ApiQuery({ name: 'ym', required: false, example: '2026-07' })
+  forecast(@Query('ym') ym?: string) {
+    return this.forecastSvc.forecast(ym);
+  }
 
   @Get('dashboard')
   @ApiOperation({ summary: '대시보드 — 올해 월별 계좌/카드/분류 집계' })
