@@ -10,6 +10,7 @@ interface AccessPayload {
   hid: number;
   role: MemberRole;
   email?: string;
+  sadm?: boolean;
 }
 
 /** Access 토큰(Bearer) 검증 → req.user 로 { userId, householdId, role } 주입. */
@@ -29,6 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       householdId: payload.hid,
       role: payload.role,
       email: payload.email,
+      isSuperAdmin: payload.sadm === true,
     };
   }
 }

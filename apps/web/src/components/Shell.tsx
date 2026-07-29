@@ -14,6 +14,7 @@ import { Family } from '@/views/Family';
 import { Imports } from '@/views/Imports';
 import { Categories } from '@/views/Categories';
 import { RecurringExpenses } from '@/views/RecurringExpenses';
+import { AdminHouseholds } from '@/views/AdminHouseholds';
 
 export type View =
   | 'dashboard'
@@ -27,7 +28,8 @@ export type View =
   | 'family'
   | 'categories'
   | 'recurring-expenses'
-  | 'payment-methods';
+  | 'payment-methods'
+  | 'admin-households';
 
 export function Shell() {
   const [view, setView] = useState<View>('dashboard');
@@ -47,6 +49,7 @@ export function Shell() {
         {view === 'categories' && <Categories />}
         {view === 'recurring-expenses' && <RecurringExpenses />}
         {view === 'payment-methods' && <PaymentMethods />}
+        {view === 'admin-households' && <AdminHouseholds />}
       </div>
     </div>
   );

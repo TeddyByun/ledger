@@ -7,6 +7,7 @@ export interface AuthUser {
   householdId: number;
   role: MemberRole;
   email?: string;
+  isSuperAdmin?: boolean;
 }
 
 /** 컨트롤러에서 현재 사용자 주입: `@CurrentUser() user: AuthUser` */

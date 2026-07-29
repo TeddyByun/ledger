@@ -18,6 +18,7 @@ import { StatementTxnModule } from './statement-txn/statement-txn.module.js';
 import { StatisticsModule } from './statistics/statistics.module.js';
 import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module.js';
 import { IngestionModule } from './ingestion/ingestion.module.js';
+import { AdminModule } from './admin/admin.module.js';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { IngestionModule } from './ingestion/ingestion.module.js';
     StatisticsModule,
     RecurringExpenseModule,
     IngestionModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -12,7 +12,12 @@ import { SignupDto, LoginDto } from './dto/auth.dto.js';
 export interface SessionResult {
   accessToken: string;
   refresh: { token: string; expiresAt: Date };
-  user: { id: number; email: string | null; displayName: string | null };
+  user: {
+    id: number;
+    email: string | null;
+    displayName: string | null;
+    isSuperAdmin: boolean;
+  };
   household: { id: number; name: string; role: MemberRole };
 }
 
@@ -86,11 +91,17 @@ export class AuthService {
       hid: member.householdId,
       role: member.role,
       email: member.email ?? undefined,
+      sadm: member.isSuperAdmin || undefined,
     });
     return {
       accessToken,
       refresh: { token: rotated.token, expiresAt: rotated.expiresAt },
-      user: { id: member.id, email: member.email, displayName: member.name },
+      user: {
+        id: member.id,
+        email: member.email,
+        displayName: member.name,
+        isSuperAdmin: member.isSuperAdmin,
+      },
       household: {
         id: member.household.id,
         name: member.household.name,
@@ -114,6 +125,7 @@ export class AuthService {
       id: member.id,
       email: member.email,
       displayName: member.name,
+      isSuperAdmin: member.isSuperAdmin,
       households: [
         {
           id: member.household.id,
@@ -135,6 +147,7 @@ export class AuthService {
       hid: household.id,
       role,
       email: member.email ?? undefined,
+      sadm: member.isSuperAdmin || undefined,
     });
     const refresh = await this.tokens.issueRefresh(
       member.id,
@@ -144,7 +157,12 @@ export class AuthService {
     return {
       accessToken,
       refresh,
-      user: { id: member.id, email: member.email, displayName: member.name },
+      user: {
+        id: member.id,
+        email: member.email,
+        displayName: member.name,
+        isSuperAdmin: member.isSuperAdmin,
+      },
       household: { id: household.id, name: household.name, role },
     };
   }

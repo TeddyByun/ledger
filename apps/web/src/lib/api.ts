@@ -34,7 +34,12 @@ export const setAccessToken = (t: string | null) => {
 };
 
 export interface Session {
-  user: { id: number; email: string; displayName: string | null };
+  user: {
+    id: number;
+    email: string;
+    displayName: string | null;
+    isSuperAdmin?: boolean;
+  };
   household: { id: number; name: string; role: string };
 }
 

@@ -123,6 +123,7 @@ model HouseholdMember {
   passwordHash String?    @map("password_hash")
   role         MemberRole @default(member)
   isActive     Boolean    @default(true) @map("is_active")
+  isSuperAdmin Boolean    @default(false) @map("is_super_admin") // 전체 운영(플랫폼) 관리자 — 가구 경계를 넘어 전체 조회
   lastLoginAt  DateTime?  @map("last_login_at")
 
   createdAt DateTime @default(now()) @map("created_at")

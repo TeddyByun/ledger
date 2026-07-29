@@ -10,6 +10,7 @@ export interface AccessClaims {
   hid: number;
   role: MemberRole;
   email?: string;
+  sadm?: boolean; // 전체 운영(플랫폼) 관리자
 }
 
 /** 초 단위로 '15m' / '30d' / '3600' 같은 표기를 파싱. */

@@ -3,7 +3,9 @@
 import { useAuth } from '@/lib/auth';
 import type { View } from '@/components/Shell';
 
-const NAV: { view: View; label: string; group: string }[] = [
+type NavItem = { view: View; label: string; group: string };
+
+const NAV: NavItem[] = [
   { view: 'dashboard', label: '월별 거래 추이', group: '집계' },
   { view: 'payment-trend', label: '월별 결제수단별 지출 추이', group: '집계' },
   { view: 'forecast', label: '예상 지출', group: '집계' },
@@ -18,6 +20,11 @@ const NAV: { view: View; label: string; group: string }[] = [
   { view: 'imports', label: '명세서 업로드', group: '관리' },
 ];
 
+/** 전체 운영(플랫폼) 관리자에게만 노출되는 메뉴. */
+const ADMIN_NAV: NavItem[] = [
+  { view: 'admin-households', label: '가구 관리', group: '운영 관리자' },
+];
+
 export function Sidebar({
   view,
   onNavigate,
@@ -28,6 +35,7 @@ export function Sidebar({
   const { session, logout } = useAuth();
   const hh = session?.household;
   const user = session?.user;
+  const nav = user?.isSuperAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
 
   let lastGroup = '';
   return (
@@ -47,7 +55,7 @@ export function Sidebar({
         </div>
       </div>
 
-      {NAV.map((item) => {
+      {nav.map((item) => {
         const showLabel = item.group !== lastGroup;
         lastGroup = item.group;
         return (
