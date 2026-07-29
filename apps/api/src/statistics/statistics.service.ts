@@ -3,7 +3,7 @@ import { TransactionType } from '@ledger/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import {
-  EXCLUDE_CATEGORY_NAME,
+  EXCLUDE_CATEGORY_NAMES,
   excludeCategoryCodes,
 } from '../common/exclude-category.js';
 
@@ -380,8 +380,10 @@ export class StatisticsService {
       topOf.set(c.code, { code: top.code, name: top.name });
     }
 
-    // '분류제외' 분류(대분류+소분류)는 집계에서 제외
-    const excludeRoots = cats.filter((c) => c.name === EXCLUDE_CATEGORY_NAME).map((c) => c.code);
+    // '분류 제외' 분류(대분류+소분류)는 집계에서 제외
+    const excludeRoots = cats
+      .filter((c) => EXCLUDE_CATEGORY_NAMES.includes(c.name))
+      .map((c) => c.code);
     const excludeSet = new Set<string>(excludeRoots);
     for (const c of cats) {
       if (c.parentCode && excludeRoots.includes(c.parentCode)) excludeSet.add(c.code);

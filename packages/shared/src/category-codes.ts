@@ -62,6 +62,8 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '1101', parentCode: '11', name: '도서·학술', type: E, depth: 2, sortOrder: 1 },
   { code: '1102', parentCode: '11', name: '강의·콘텐츠', type: E, depth: 2, sortOrder: 2 },
   // (여가 대분류 12 폐지 — 구독·디지털은 생활 0507, 취미·문화는 생활 0505 여가·취미·문화로 통합)
+  // 집계 제외용 특수 분류(지출)
+  { code: '18', parentCode: null, name: '분류 제외', type: E, depth: 1, sortOrder: 12 },
 ];
 
 /** 수입 분류 (수기 시트의 수입 항목 기반, 13~ 코드대 사용) */
@@ -71,6 +73,8 @@ export const INCOME_CATEGORIES: CategorySeed[] = [
   { code: '15', parentCode: null, name: '캐시백/환급', type: TransactionType.INCOME, depth: 1, sortOrder: 3 },
   { code: '16', parentCode: null, name: '이자', type: TransactionType.INCOME, depth: 1, sortOrder: 4 },
   { code: '17', parentCode: null, name: '기타수입', type: TransactionType.INCOME, depth: 1, sortOrder: 5 },
+  // 집계 제외용 특수 분류(수입)
+  { code: '19', parentCode: null, name: '분류 제외', type: TransactionType.INCOME, depth: 1, sortOrder: 6 },
 ];
 
 export const ALL_CATEGORIES: CategorySeed[] = [
