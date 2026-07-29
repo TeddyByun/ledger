@@ -27,3 +27,12 @@ export function requireTenant(): TenantContext {
   }
   return ctx;
 }
+
+/**
+ * 테넌트 스코프를 벗어나 콜백을 실행한다(전체 운영 관리자의 가구 경계 초월 작업 전용).
+ * AsyncLocalStorage.exit 로 현재 스토어를 비워 getTenant()=undefined → Prisma 미들웨어의
+ * householdId 자동 주입을 건너뛴다. 반드시 명시적 where/data 로 대상 가구를 지정할 것.
+ */
+export function runWithoutTenant<T>(fn: () => T): T {
+  return tenantStorage.exit(fn);
+}
