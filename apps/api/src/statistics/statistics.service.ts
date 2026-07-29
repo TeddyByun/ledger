@@ -136,6 +136,79 @@ export class StatisticsService {
       }
     }
 
+    // ── 미분류: 원천(은행/카드) 중 아직 transaction 으로 확정되지 않은 금액 ──
+    // 총액이 과소 계상되지 않도록 '미분류' 분류로 합산해 버킷·시리즈·결제수단에 반영한다.
+    const [ubank, ucard] = await Promise.all([
+      this.prisma.bankTransaction.findMany({
+        where: {
+          transactionId: null,
+          excludeReason: null, // 이체·카드대금(제외) 제외
+          txnAt: { gte: start, lt: endExclusive },
+        },
+        select: {
+          withdrawal: true,
+          deposit: true,
+          txnAt: true,
+          paymentMethodId: true,
+          paymentMethod: { select: { name: true } },
+        },
+      }),
+      this.prisma.cardTransaction.findMany({
+        where: {
+          transactionId: null,
+          isCanceled: 'N',
+          txnDate: { gte: start, lt: endExclusive },
+        },
+        select: {
+          principal: true,
+          fee: true,
+          txnDate: true,
+          paymentMethodId: true,
+          paymentMethod: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    const unclExpense = zeros();
+    const unclIncome = zeros();
+    const addPay = (pmId: number, name: string | undefined, i: number, amt: number) => {
+      let p = payCell.get(pmId);
+      if (!p) {
+        p = { name: name ?? '기타', values: zeros() };
+        payCell.set(pmId, p);
+      }
+      p.values[i] = (p.values[i] ?? 0) + amt;
+    };
+    for (const b of ubank) {
+      const d = b.txnAt;
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const i = idx.get(ym);
+      if (i === undefined) continue;
+      const w = Number(b.withdrawal ?? 0);
+      const dep = Number(b.deposit ?? 0);
+      const bkt = buckets[i];
+      if (w > 0) {
+        unclExpense[i] = (unclExpense[i] ?? 0) + w;
+        if (bkt) bkt.expense += w;
+        addPay(b.paymentMethodId, b.paymentMethod?.name, i, w);
+      } else if (dep > 0) {
+        unclIncome[i] = (unclIncome[i] ?? 0) + dep;
+        if (bkt) bkt.income += dep;
+      }
+    }
+    for (const c of ucard) {
+      const d = c.txnDate;
+      const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const i = idx.get(ym);
+      if (i === undefined) continue;
+      const amt = Number(c.principal ?? 0) + Number(c.fee ?? 0);
+      if (amt <= 0) continue; // 환불·0원 조정행 제외
+      unclExpense[i] = (unclExpense[i] ?? 0) + amt;
+      const bkt = buckets[i];
+      if (bkt) bkt.expense += amt;
+      addPay(c.paymentMethodId, c.paymentMethod?.name, i, amt);
+    }
+
     // 유형별 상위 N개 + 나머지는 '기타'로 합산
     const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
     const series: { key: string; name: string; type: 'income' | 'expense'; values: number[] }[] = [];
@@ -155,6 +228,24 @@ export class StatisticsService {
         }
         series.push({ key: `${type}:__other__`, name: '기타', type, values: other });
       }
+    }
+
+    // 미분류는 상위 N 제한과 무관하게 항상 별도 분류로 노출(총액 = 분류합 유지)
+    if (sum(unclIncome) > 0) {
+      series.push({
+        key: 'income:__unclassified__',
+        name: '미분류',
+        type: 'income',
+        values: unclIncome,
+      });
+    }
+    if (sum(unclExpense) > 0) {
+      series.push({
+        key: 'expense:__unclassified__',
+        name: '미분류',
+        type: 'expense',
+        values: unclExpense,
+      });
     }
 
     // 결제수단별 월 지출 — 상위 TOP_PAYMENT개 + 나머지는 '기타'

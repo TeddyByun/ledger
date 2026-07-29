@@ -36,8 +36,9 @@ export const CAT_COLORS = [
   'var(--c8)',
 ];
 
-/** key 가 '__other__' 로 끝나면 회색, 아니면 고정 슬롯 색. */
+/** key 가 '__other__'→회색, '__unclassified__'→미분류색, 아니면 고정 슬롯 색. */
 export function colorOf(key: string, i: number): string {
+  if (key.endsWith('__unclassified__')) return 'var(--c-unclassified)';
   return key.endsWith('__other__') ? 'var(--c-other)' : CAT_COLORS[i % CAT_COLORS.length]!;
 }
 
@@ -51,6 +52,10 @@ export function buildColorMap(keys: string[]): Record<string, string> {
   const map: Record<string, string> = {};
   let slot = 0;
   for (const k of keys) {
+    if (k.endsWith('__unclassified__')) {
+      map[k] = 'var(--c-unclassified)'; // 미분류 — 팔레트 슬롯 미소비
+      continue;
+    }
     if (k.endsWith('__other__')) {
       map[k] = 'var(--c-other)';
       continue;
