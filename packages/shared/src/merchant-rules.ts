@@ -34,8 +34,8 @@ const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priorit
   { patterns: ['대학서적', '학술정보', '서점', '교보문고', '영풍문고', '알라딘'], categoryCode: '1101', priority: 20 },
   { patterns: ['팬딩', '인프런', '클래스101', '탈잉'], categoryCode: '1102', priority: 22 },
   // ── 여가: 구독·디지털 ──
-  { patterns: ['구글페이먼트', '구글플레이', 'GOODNOTES', 'PADDLE', '앱스토어', '넷플릭스', '유튜브', '스포티파이', '스팀'], categoryCode: '1201', priority: 24 },
-  { patterns: ['CGV', '롯데시네마', '메가박스', '영화', '노래방', 'PC방', '볼링', '헬스', '필라테스'], categoryCode: '1202', priority: 26 },
+  { patterns: ['구글페이먼트', '구글플레이', 'GOODNOTES', 'PADDLE', '앱스토어', '넷플릭스', '유튜브', '스포티파이', '스팀'], categoryCode: '0507', priority: 24 },
+  { patterns: ['CGV', '롯데시네마', '메가박스', '영화', '노래방', 'PC방', '볼링', '헬스', '필라테스'], categoryCode: '0505', priority: 26 },
   // ── 생활: 생활용품(마트보다 먼저 — 다이소 등) ──
   { patterns: ['다이소', '올리브영', '무인양품', '이케아', '생활용품'], categoryCode: '0504', priority: 30 },
   // ── 생활: 식료품·마트 ──

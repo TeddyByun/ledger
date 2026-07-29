@@ -38,8 +38,9 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '0502', parentCode: '05', name: '카페·간식', type: E, depth: 2, sortOrder: 2 },
   { code: '0503', parentCode: '05', name: '식료품·마트', type: E, depth: 2, sortOrder: 3 },
   { code: '0504', parentCode: '05', name: '생활용품', type: E, depth: 2, sortOrder: 4 },
-  { code: '0505', parentCode: '05', name: 'ATM 출금', type: E, depth: 2, sortOrder: 5 },
-  { code: '0506', parentCode: '05', name: '기타', type: E, depth: 2, sortOrder: 6 },
+  { code: '0505', parentCode: '05', name: '여가·취미·문화', type: E, depth: 2, sortOrder: 5 },
+  { code: '0507', parentCode: '05', name: '구독·디지털', type: E, depth: 2, sortOrder: 6 },
+  { code: '0506', parentCode: '05', name: '기타', type: E, depth: 2, sortOrder: 7 },
   // 06 통신
   { code: '06', parentCode: null, name: '통신', type: E, depth: 1, sortOrder: 6 },
   // 07 건강
@@ -61,10 +62,7 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '11', parentCode: null, name: '교육', type: E, depth: 1, sortOrder: 11 },
   { code: '1101', parentCode: '11', name: '도서·학술', type: E, depth: 2, sortOrder: 1 },
   { code: '1102', parentCode: '11', name: '강의·콘텐츠', type: E, depth: 2, sortOrder: 2 },
-  // 12 여가
-  { code: '12', parentCode: null, name: '여가', type: E, depth: 1, sortOrder: 12 },
-  { code: '1201', parentCode: '12', name: '구독·디지털', type: E, depth: 2, sortOrder: 1 },
-  { code: '1202', parentCode: '12', name: '취미·문화', type: E, depth: 2, sortOrder: 2 },
+  // (여가 대분류 12 폐지 — 구독·디지털은 생활 0507, 취미·문화는 생활 0505 여가·취미·문화로 통합)
 ];
 
 /** 수입 분류 (수기 시트의 수입 항목 기반, 13~ 코드대 사용) */
