@@ -257,3 +257,56 @@ AuthModule
 - **권한 범위(scope)**: 최소권한 `drive.file`(앱이 만든 파일만 접근) 권장 — 사용자의 다른 드라이브 파일엔 접근 불가.
 - **흐름**: 설정 화면에서 "구글 드라이브 연결" → OAuth 동의 → refresh token 저장 → 이후 업로드 파일을 가구 전용 폴더에 저장, `import_job`엔 Drive fileId만 기록.
 - 세부(연결 단위·기존 시트 읽기 여부·폴더 구조)는 별도 설계로 확정.
+
+---
+
+## 12. 전체 운영 관리자 (플랫폼 Admin) — as-built (2026-07)
+
+> 기존 역할(owner/member/viewer)은 **전부 가구 단위**라 가구 경계를 넘는 "전체 운영자"가 없었다. 가구와 **직교하는** 플랫폼 관리자 플래그를 도입한다. (V2 재설계 `DATABASE_V2_DESIGN §3` 의 코드성 접근과 달리, as-built 는 `household_member` 의 boolean 플래그로 최소 구현.)
+
+### 12.1 데이터 모델
+- `household_member.is_super_admin BOOLEAN NOT NULL DEFAULT false` — 마이그레이션 `20260729000000_member_super_admin`.
+- **역할과 독립**: owner 여부와 무관하게 `is_super_admin` 만으로 전역 권한 판정. 가구 스코프(테넌시)는 그대로 유지되며, 전역 권한은 **별도 전용 라우트**(`/admin/*`)에서만 발동한다.
+
+### 12.2 토큰·컨텍스트 전파
+- Access 토큰 클레임에 `sadm?: boolean` 추가(참이면 슈퍼관리자). false 는 클레임 생략(`member.isSuperAdmin || undefined`).
+- `JwtStrategy.validate` → `AuthUser.isSuperAdmin` 주입. 로그인/refresh/`/auth/me` **세션 응답의 `user.isSuperAdmin`** 로 프런트에 전파.
+
+### 12.3 인가 — SuperAdminGuard
+- `SuperAdminGuard`: 전역 `JwtAuthGuard` 이후 실행, `req.user.isSuperAdmin === true` 아니면 **403 `SUPER_ADMIN_ONLY`**.
+- `@UseGuards(SuperAdminGuard)` 를 `AdminController` 에 부착.
+
+### 12.4 신규 엔드포인트
+| 메서드 | 경로 | 설명 | 인증 |
+|--------|------|------|:----:|
+| GET | `/admin/households` | **전체 가구 목록**(가구별 구성원·거래 건수 집계). 가구 경계 초월. | super_admin |
+
+- 구현 요점: `Household` 는 **테넌시 스코프 대상이 아니므로**(`SCOPED_MODELS` 제외) `findMany` 가 전체를 반환하고, `include`/`_count` 는 미들웨어 스코핑을 타지 않아 가구별 집계도 전역으로 계산된다.
+
+### 12.5 프런트
+- 사이드바 **"운영 관리자 › 가구 관리"** 메뉴 — `session.user.isSuperAdmin` 일 때만 노출.
+- `AdminHouseholds` 화면: 가구 카드(가구명·생성일·구성원 수·거래 건수 + 구성원 목록, 운영관리자/비활성 배지).
+
+---
+
+## 13. 보안 강화 반영 — as-built (2026-07, security review 07d221e)
+
+보안 리뷰 5건을 반영. AUTH_DESIGN 의 원칙(§8)을 구현 수준에서 강제한 항목들:
+
+| # | 취약점 | 조치 |
+|---|--------|------|
+| 1 | `passwordHash` 등 민감정보 API 노출 | 구성원 응답을 `MEMBER_PUBLIC` select 로 고정(passwordHash 제외). |
+| 2 | member 가 owner 비번 변경·자기 역할 승격 | `assertCredentialPermission` — 비owner 가 email/password/role 설정 시 **403 `OWNER_ONLY_CREDENTIALS`**. |
+| 3 | 소프트삭제/비활성 구성원 로그인 | 로그인 시 `!passwordHash || !isActive || useYn≠'Y'` 거부. 비번 변경·삭제 시 `refresh_token` 폐기(`$transaction`). |
+| 4 | `monthly_*` 집계 가구 미스코프(교차 조회 위험) | 4개 집계 테이블에 `household_id` + 복합 PK + FK 추가, `SCOPED_MODELS` 등록. |
+| 5 | `@Roles` 미지정 라우트에서 viewer 쓰기 가능 | `RolesGuard` 기본 정책 — `@Roles` 없고 `user.role==='viewer'` 이면 비읽기(POST/PATCH/PUT/DELETE) **403 `READ_ONLY`**. 공개(@Public·무유저) 라우트는 무관. |
+
+> **RolesGuard 판정 순서**: `@Roles(...)` 명시 → 해당 역할만 허용. 미지정 → viewer 는 읽기(GET/HEAD/OPTIONS)만. (§4.2 표를 구현 기본값으로 승격.)
+
+---
+
+## 14. 운영 메모 — 마이그레이션 이력 추적 (2026-07)
+
+- `_prisma_migrations` 추적 테이블이 소실됐던 이력이 있어(DB 초기화 사고), 실제 스키마는 온전하나 Prisma 가 "전부 미적용"으로 오인하던 상태였다.
+- 조치: 드리프트 없음 확인 후 `prisma migrate resolve --applied <name>` 로 13개 마이그레이션을 **베이스라인**(비파괴). 이후 `migrate status` = "up to date".
+- 원칙: 공유 DB 에 `db push`/`migrate reset`/DROP **금지**. 스키마 변경은 마이그레이션 파일 + `migrate deploy`(또는 신규 컬럼은 idempotent `ADD COLUMN IF NOT EXISTS`).

@@ -7,6 +7,266 @@
 
 ---
 
+## 0. 현행 스키마 ERD (as-built, 2026-07)
+
+> 이하 §1~ 는 원본 스프레드시트 기반의 **최초 설계(V1) 유도 과정**이다. 이 §0 은 그 이후 멀티테넌시·인증·예측·집계까지 반영된 **실제 구현 스키마**(`apps/api/prisma/schema.prisma` = 정본, 테이블 20개)를 요약한다. 미래 재설계 제안은 `DATABASE_V2_DESIGN.md`(`_mt/_ct/_tt` 규칙, 미구현) 참조.
+
+### 0.1 테이블 인벤토리 (20개)
+
+| 도메인 | 테이블 | 비고 |
+|--------|--------|------|
+| 계정·가구 | `household` | 테넌트 루트. **테넌시 스코프 제외**(가구 자체) |
+| | `household_member` | 사람=구성원 + 선택적 로그인(email/password_hash/role). `is_super_admin`(전체 운영자) |
+| | `refresh_token` / `password_reset_token` | 세션 회전 / 비번 재설정 |
+| 마스터 | `payment_method` | 은행/카드. UK(household_id,name) |
+| | `category` | 코드성 트리(self parent). **전역**(가구 무스코프) |
+| | `counterparty` | 거래 상대. UK(household_id,name) |
+| 거래 | `transaction` | 수입/지출 통합(정규화 거래) |
+| | `bank_transaction` | 은행 원천 적재 → transaction 1:1 |
+| | `card_statement` / `card_transaction` | 카드 명세서 / 명세 상세 → transaction 1:1 |
+| | `installment_plan` | 할부 원거래(청구건이 참조) |
+| | `bank_txn_type` / `merchant_category_map` | 코드성 / 자동분류 규칙. **전역** |
+| 예측 | `recurring_expense` | 정기지출(R4/R6/R7). `is_active`=예측 포함 |
+| 집계 | `monthly_summary` / `monthly_category_stat` / `monthly_source_stat` / `monthly_payment_stat` | 월별 집계. **복합 PK(household_id, ym, …)** |
+| 적재 | `import_job` | 업로드 파이프라인 상태(id=문자열) |
+
+- **테넌시**: `PrismaService.$use` 미들웨어가 `SCOPED_MODELS` 대상에 `household_id` 자동 주입(생성=data, 조회/수정/삭제=where). **제외**: `household`(자기 자신), 코드성(`category`·`bank_txn_type`·`merchant_category_map`). → 전역 슈퍼관리자 조회는 이 스코프 밖 라우트(`/admin/*`)에서 수행.
+
+### 0.2 전체 ERD
+
+```mermaid
+erDiagram
+  %% ── 계정 · 가구 (인증/멀티테넌시) ──
+  household {
+    int id PK
+    string name
+    datetime created_at
+  }
+  household_member {
+    int id PK
+    int household_id FK
+    string name
+    string relation
+    boolean is_self
+    string use_yn
+    string email UK "nullable=로그인 사용자"
+    string password_hash
+    enum role "owner|member|viewer"
+    boolean is_active
+    boolean is_super_admin "전체 운영자"
+    datetime last_login_at
+  }
+  refresh_token {
+    int id PK
+    int member_id FK
+    string token_hash UK
+    string family_id
+    datetime expires_at
+    datetime revoked_at
+  }
+  password_reset_token {
+    int id PK
+    int member_id FK
+    string token_hash UK
+    datetime expires_at
+    datetime used_at
+  }
+
+  %% ── 마스터 ──
+  payment_method {
+    int id PK
+    int household_id FK
+    string name
+    enum method_type "bank|card"
+    string card_no "마스킹"
+    string account_no
+  }
+  category {
+    string code PK
+    string parent_code FK
+    string name
+    enum type "income|expense"
+    int depth
+    enum use_yn
+  }
+  counterparty {
+    int id PK
+    int household_id FK
+    string name
+    string type
+  }
+
+  %% ── 거래 ──
+  transaction {
+    int id PK
+    int household_id FK
+    enum type "income|expense"
+    string category_code FK
+    int counterparty_id FK
+    int payment_method_id FK
+    int member_id FK "지출 명의"
+    decimal amount
+    date transaction_date
+    enum status "settled|pending|info"
+  }
+  bank_txn_type {
+    string code PK
+    string name
+    enum direction "in|out|both"
+  }
+  bank_transaction {
+    int id PK
+    int household_id FK
+    int payment_method_id FK
+    string txn_type_code FK
+    int transaction_id "UK 1:1"
+    decimal withdrawal
+    decimal deposit
+    string dedup_hash
+  }
+  card_statement {
+    int id PK
+    int household_id FK
+    int payment_method_id FK "card"
+    int settle_account_id FK "결제계좌"
+    string statement_ym
+    decimal total_amount
+  }
+  card_transaction {
+    int id PK
+    int household_id FK
+    int statement_id FK
+    int payment_method_id FK
+    int transaction_id "UK 1:1"
+    int installment_plan_id FK
+    string merchant_name
+    decimal usage_amount
+    string dedup_hash
+  }
+  installment_plan {
+    int id PK
+    int household_id FK
+    int payment_method_id FK
+    string merchant_name
+    decimal total_amount
+    int total_months
+  }
+  merchant_category_map {
+    int id PK
+    string pattern
+    enum match_type "contains|exact|regex"
+    string category_code FK
+    int priority
+  }
+
+  %% ── 예측 ──
+  recurring_expense {
+    int id PK
+    int household_id FK
+    string label
+    string category_code FK
+    int payment_method_id FK
+    decimal amount
+    enum cadence "monthly|annual|schedule"
+    string end_ym "만기(R7)"
+    string match_key
+    enum is_active
+  }
+
+  %% ── 월별 집계 (복합 PK) ──
+  monthly_summary {
+    int household_id PK "FK"
+    string ym PK
+    decimal income_total
+    decimal expense_total
+    decimal net_amount
+  }
+  monthly_category_stat {
+    int household_id PK "FK"
+    string ym PK
+    string category_code PK "FK"
+    decimal amount_total
+  }
+  monthly_source_stat {
+    int household_id PK "FK"
+    string ym PK
+    int counterparty_id PK "FK"
+    decimal amount_total
+  }
+  monthly_payment_stat {
+    int household_id PK "FK"
+    string ym PK
+    int payment_method_id PK "FK"
+    decimal income_total
+    decimal expense_total
+  }
+
+  %% ── 적재 ──
+  import_job {
+    string id PK
+    int household_id FK
+    string issuer
+    enum status "queued..completed|failed"
+    string file_key
+  }
+
+  %% ── 관계 ──
+  household ||--o{ household_member : "구성원"
+  household_member ||--o{ refresh_token : "세션"
+  household_member ||--o{ password_reset_token : "재설정"
+  household ||--o{ payment_method : ""
+  household ||--o{ counterparty : ""
+  household ||--o{ transaction : ""
+  household ||--o{ bank_transaction : ""
+  household ||--o{ card_statement : ""
+  household ||--o{ card_transaction : ""
+  household ||--o{ installment_plan : ""
+  household ||--o{ recurring_expense : ""
+  household ||--o{ import_job : ""
+  household ||--o{ monthly_summary : ""
+  household ||--o{ monthly_category_stat : ""
+  household ||--o{ monthly_source_stat : ""
+  household ||--o{ monthly_payment_stat : ""
+
+  category ||--o{ category : "parent(트리)"
+  category ||--o{ transaction : ""
+  category ||--o{ merchant_category_map : ""
+  category ||--o{ recurring_expense : ""
+  category ||--o{ monthly_category_stat : ""
+
+  counterparty ||--o{ transaction : ""
+  counterparty ||--o{ monthly_source_stat : ""
+
+  payment_method ||--o{ transaction : ""
+  payment_method ||--o{ bank_transaction : ""
+  payment_method ||--o{ card_statement : "카드"
+  payment_method ||--o{ card_statement : "결제계좌"
+  payment_method ||--o{ card_transaction : ""
+  payment_method ||--o{ installment_plan : ""
+  payment_method ||--o{ recurring_expense : ""
+  payment_method ||--o{ monthly_payment_stat : ""
+
+  household_member ||--o{ transaction : "명의"
+  bank_txn_type ||--o{ bank_transaction : ""
+  transaction ||--o| bank_transaction : "1:1"
+  transaction ||--o| card_transaction : "1:1"
+  card_statement ||--o{ card_transaction : ""
+  installment_plan ||--o{ card_transaction : "할부청구"
+```
+
+### 0.3 최근 변경 이력 (반영분)
+
+| 시기 | 변경 | 위치 |
+|------|------|------|
+| 2026-07 | 멀티테넌시 — 도메인 테이블 `household_id` 스코프 + `household`/`household_member` 도입 | AUTH_DESIGN §3~4 |
+| 2026-07 | 계정 통합 — `User`/`Membership` → `household_member` 단일화(로그인 필드 nullable) | AUTH_DESIGN 확정 §5 |
+| 2026-07 | 예측 — `recurring_expense`(R4/R6/R7) + forecast 규칙 엔진 | EXPENSE_FORECAST_DESIGN |
+| 2026-07 | 집계 4종 `monthly_*` 가구 스코프(복합 PK+FK) | (보안 리뷰 #4) |
+| 2026-07 | **전체 운영 관리자** — `household_member.is_super_admin` + `SuperAdminGuard` + `GET /admin/households` | AUTH_DESIGN §12 |
+| 2026-07 | 보안 강화 5건(민감정보 노출·권한 상승·소프트삭제 로그인·집계 스코프·viewer 쓰기) | AUTH_DESIGN §13 |
+
+---
+
 ## 1. 원본 데이터 분석
 
 ### 1.1 수입 테이블
