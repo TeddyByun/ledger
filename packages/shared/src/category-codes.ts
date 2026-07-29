@@ -52,10 +52,9 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '0801', parentCode: '08', name: '택시', type: E, depth: 2, sortOrder: 1 },
   { code: '0802', parentCode: '08', name: '대중교통', type: E, depth: 2, sortOrder: 2 },
   { code: '0803', parentCode: '08', name: '통행료·하이패스', type: E, depth: 2, sortOrder: 3 },
-  // 09 차량
-  { code: '09', parentCode: null, name: '차량', type: E, depth: 1, sortOrder: 9 },
-  { code: '0901', parentCode: '09', name: '주유', type: E, depth: 2, sortOrder: 1 },
-  { code: '0902', parentCode: '09', name: '주차·정비', type: E, depth: 2, sortOrder: 2 },
+  { code: '0804', parentCode: '08', name: '주유', type: E, depth: 2, sortOrder: 4 },
+  { code: '0805', parentCode: '08', name: '주차·정비', type: E, depth: 2, sortOrder: 5 },
+  // (차량 대분류 09 폐지 — 주유·주차·정비를 교통 08 하위로 통합)
   // 10 경조사
   { code: '10', parentCode: null, name: '경조사', type: E, depth: 1, sortOrder: 10 },
   // 11 교육

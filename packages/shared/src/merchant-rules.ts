@@ -15,8 +15,8 @@ export interface MerchantRuleSeed {
 /** `contains` 규칙은 pattern을 OR 후보 배열로 정의해 펼친다. priority 작을수록 먼저 매칭. */
 const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priority: number }> = [
   // ── 차량 ──
-  { patterns: ['주유소', '주유', '석유', 'GS칼텍스', 'SK에너지', '오일뱅크', '에스오일'], categoryCode: '0901', priority: 10 },
-  { patterns: ['주차', '세차', '카센터', '정비'], categoryCode: '0902', priority: 12 },
+  { patterns: ['주유소', '주유', '석유', 'GS칼텍스', 'SK에너지', '오일뱅크', '에스오일'], categoryCode: '0804', priority: 10 },
+  { patterns: ['주차', '세차', '카센터', '정비'], categoryCode: '0805', priority: 12 },
   // ── 교통 ──
   { patterns: ['하이패스', '고속도로', '도로공사', '휴게소', '모바일이즐', '이즐'], categoryCode: '0803', priority: 10 },
   { patterns: ['카카오T', '택시', '티머니', '캐시비', '이동의즐거움', '타다'], categoryCode: '0801', priority: 14 },
