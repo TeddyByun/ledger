@@ -20,7 +20,7 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   // 01 대출
   { code: '01', parentCode: null, name: '대출', type: E, depth: 1, sortOrder: 1 },
   { code: '0101', parentCode: '01', name: '이자', type: E, depth: 2, sortOrder: 1 },
-  { code: '0102', parentCode: '01', name: '원금', type: E, depth: 2, sortOrder: 2 },
+  { code: '0102', parentCode: '01', name: '원금+이자', type: E, depth: 2, sortOrder: 2 },
   // 02 투자·저축
   { code: '02', parentCode: null, name: '투자·저축', type: E, depth: 1, sortOrder: 2 },
   { code: '0201', parentCode: '02', name: '투자', type: E, depth: 2, sortOrder: 1 },
@@ -32,12 +32,13 @@ export const EXPENSE_CATEGORIES: CategorySeed[] = [
   { code: '0401', parentCode: '04', name: '관리비', type: E, depth: 2, sortOrder: 1 },
   { code: '0402', parentCode: '04', name: '전기·가스·수도', type: E, depth: 2, sortOrder: 2 },
   { code: '0403', parentCode: '04', name: '월세·임차료', type: E, depth: 2, sortOrder: 3 },
+  { code: '0404', parentCode: '04', name: '세금', type: E, depth: 2, sortOrder: 4 },
   // 05 생활
   { code: '05', parentCode: null, name: '생활', type: E, depth: 1, sortOrder: 5 },
   { code: '0501', parentCode: '05', name: '외식', type: E, depth: 2, sortOrder: 1 },
   { code: '0502', parentCode: '05', name: '카페·간식', type: E, depth: 2, sortOrder: 2 },
-  { code: '0503', parentCode: '05', name: '식료품·마트', type: E, depth: 2, sortOrder: 3 },
-  { code: '0504', parentCode: '05', name: '생활용품', type: E, depth: 2, sortOrder: 4 },
+  { code: '0503', parentCode: '05', name: '오프라인쇼핑·마트', type: E, depth: 2, sortOrder: 3 },
+  { code: '0504', parentCode: '05', name: '온라인쇼핑·마트', type: E, depth: 2, sortOrder: 4 },
   { code: '0505', parentCode: '05', name: '여가·취미·문화', type: E, depth: 2, sortOrder: 5 },
   { code: '0507', parentCode: '05', name: '구독·디지털', type: E, depth: 2, sortOrder: 6 },
   { code: '0506', parentCode: '05', name: '기타', type: E, depth: 2, sortOrder: 7 },
