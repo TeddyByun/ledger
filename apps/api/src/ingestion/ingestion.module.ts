@@ -5,7 +5,7 @@ import { IngestionController } from './ingestion.controller.js';
 import { IngestionService } from './ingestion.service.js';
 import { StorageService } from './storage/storage.service.js';
 import { ParserRegistry } from './parsers/parser.registry.js';
-import { ClassifierService } from './classification/classifier.service.js';
+import { ClassificationModule } from './classification/classification.module.js';
 import { ReconcilerService } from './reconciliation/reconciler.service.js';
 import { ImportPipelineService } from './pipeline/import-pipeline.service.js';
 import { ImportProcessor } from './pipeline/import.processor.js';
@@ -14,6 +14,7 @@ import { IMPORT_QUEUE } from './pipeline/import.queue.js';
 @Module({
   imports: [
     StatisticsModule,
+    ClassificationModule,
     BullModule.registerQueue({ name: IMPORT_QUEUE }),
   ],
   controllers: [IngestionController],
@@ -21,7 +22,6 @@ import { IMPORT_QUEUE } from './pipeline/import.queue.js';
     IngestionService,
     StorageService,
     ParserRegistry,
-    ClassifierService,
     ReconcilerService,
     ImportPipelineService,
     ImportProcessor,

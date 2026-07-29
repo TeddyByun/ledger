@@ -14,6 +14,7 @@ import { Family } from '@/views/Family';
 import { Imports } from '@/views/Imports';
 import { Categories } from '@/views/Categories';
 import { RecurringExpenses } from '@/views/RecurringExpenses';
+import { AutoClassifyKeywords } from '@/views/AutoClassifyKeywords';
 import { AdminHouseholds } from '@/views/AdminHouseholds';
 
 export type View =
@@ -28,6 +29,7 @@ export type View =
   | 'family'
   | 'categories'
   | 'recurring-expenses'
+  | 'classify-keywords'
   | 'payment-methods'
   | 'admin-households';
 
@@ -48,6 +50,7 @@ export function Shell() {
         {view === 'family' && <Family />}
         {view === 'categories' && <Categories />}
         {view === 'recurring-expenses' && <RecurringExpenses />}
+        {view === 'classify-keywords' && <AutoClassifyKeywords />}
         {view === 'payment-methods' && <PaymentMethods />}
         {view === 'admin-households' && <AdminHouseholds />}
       </div>

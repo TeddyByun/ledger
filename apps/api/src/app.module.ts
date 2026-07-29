@@ -19,6 +19,7 @@ import { StatisticsModule } from './statistics/statistics.module.js';
 import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module.js';
 import { IngestionModule } from './ingestion/ingestion.module.js';
 import { AdminModule } from './admin/admin.module.js';
+import { MerchantRuleModule } from './merchant-rule/merchant-rule.module.js';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AdminModule } from './admin/admin.module.js';
     RecurringExpenseModule,
     IngestionModule,
     AdminModule,
+    MerchantRuleModule,
   ],
   controllers: [HealthController],
   providers: [
