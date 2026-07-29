@@ -14,7 +14,7 @@ export interface MerchantRuleSeed {
 
 /** `contains` 규칙은 pattern을 OR 후보 배열로 정의해 펼친다. priority 작을수록 먼저 매칭. */
 const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priority: number }> = [
-  // ── 차량 ──
+  // ── 교통: 주유·주차·정비 ──
   { patterns: ['주유소', '주유', '석유', 'GS칼텍스', 'SK에너지', '오일뱅크', '에스오일'], categoryCode: '0804', priority: 10 },
   { patterns: ['주차', '세차', '카센터', '정비'], categoryCode: '0805', priority: 12 },
   // ── 교통 ──
@@ -27,22 +27,34 @@ const CONTAINS_GROUPS: Array<{ patterns: string[]; categoryCode: string; priorit
   // ── 통신 ──
   { patterns: ['KT통신요금', '통신요금', 'SKT', 'LG유플러스', '유플러스', '알뜰폰', 'SMS이용요금'], categoryCode: '06', priority: 20 },
   // ── 공과금·주거 ──
+  { patterns: ['지방세', '국세', '재산세', '자동차세', '취득세', '주민세', '종합소득세', '세무서', '국세청'], categoryCode: '0404', priority: 18 },
   { patterns: ['아파트관리비', '관리비'], categoryCode: '0401', priority: 20 },
   { patterns: ['전기요금', '한국전력', '도시가스', '수도요금', '상수도'], categoryCode: '0402', priority: 20 },
   { patterns: ['월세', '임차료', '임대료'], categoryCode: '0403', priority: 20 },
   // ── 교육 ──
   { patterns: ['대학서적', '학술정보', '서점', '교보문고', '영풍문고', '알라딘'], categoryCode: '1101', priority: 20 },
   { patterns: ['팬딩', '인프런', '클래스101', '탈잉'], categoryCode: '1102', priority: 22 },
-  // ── 여가: 구독·디지털 ──
+  // ── 생활: 구독·디지털 ──
   { patterns: ['구글페이먼트', '구글플레이', 'GOODNOTES', 'PADDLE', '앱스토어', '넷플릭스', '유튜브', '스포티파이', '스팀'], categoryCode: '0507', priority: 24 },
+  // ── 생활: 여가·취미·문화 ──
   { patterns: ['CGV', '롯데시네마', '메가박스', '영화', '노래방', 'PC방', '볼링', '헬스', '필라테스'], categoryCode: '0505', priority: 26 },
-  // ── 생활: 생활용품(마트보다 먼저 — 다이소 등) ──
-  { patterns: ['다이소', '올리브영', '무인양품', '이케아', '생활용품'], categoryCode: '0504', priority: 30 },
-  // ── 생활: 식료품·마트 ──
+  // ── 생활: 온라인쇼핑·마트 (오프라인 마트보다 먼저 매칭) ──
+  {
+    patterns: [
+      '쿠팡', '지마켓', 'G마켓', '11번가', '옥션', '위메프', '티몬', '컬리', '마켓컬리',
+      'SSG', '무신사', '인터파크', '네이버페이', '네이버파이낸셜', '스마트스토어',
+      '알리익스프레스', '알리익스프', '테무', '오늘의집', '지그재그', '에이블리', '브랜디',
+      '온라인몰', '_온라인',
+    ],
+    categoryCode: '0504',
+    priority: 28,
+  },
+  // ── 생활: 오프라인쇼핑·마트 (마트·편의점·생활용품 매장) ──
   {
     patterns: [
       '마트', '이마트', '코스트코', '지에스25', 'GS25', 'CU', '씨유', '세븐일레븐',
       '이마트24', '식자재', '싱싱마트', '식자재마트', '농협하나로', '홈플러스', '롯데마트',
+      '다이소', '올리브영', '무인양품', '이케아', '백화점', '아울렛', '슈퍼', '편의점',
     ],
     categoryCode: '0503',
     priority: 34,
