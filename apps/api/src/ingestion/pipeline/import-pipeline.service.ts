@@ -337,9 +337,9 @@ export class ImportPipelineService {
       });
     }
 
-    // 2) 대사 — 카드대금/자기이체 제외 표시
+    // 2) 대사 — 카드대금 제외 표시 + 자기이체는 '분류 제외'로 자동 분류
     await this.reconciler.markCardSettlements();
-    await this.reconciler.markSelfTransfers();
+    await this.reconciler.classifySelfTransfers(months);
 
     // 3) 미제외·미분류 행 → 거래 생성
     const staged = await this.prisma.bankTransaction.findMany({

@@ -15,6 +15,7 @@ interface Keyword {
 }
 
 interface AutoResult {
+  classifiedSelfTransfer?: number;
   classifiedByRecurring: number;
   classifiedByHistory: number;
   classifiedByRule: number;
@@ -142,9 +143,12 @@ export function AutoClassifyKeywords() {
         bank.classifiedByHistory +
         card.classifiedByRecurring +
         card.classifiedByHistory;
+      const selfTransfer = bank.classifiedSelfTransfer ?? 0;
       const remaining = bank.remaining + card.remaining;
       setRunMsg(
-        `키워드 규칙으로 ${byRule}건 분류 (그 외 정기지출·이력 ${byOther}건). 남은 미분류 ${remaining}건.`,
+        `키워드 규칙으로 ${byRule}건 분류 (그 외 정기지출·이력 ${byOther}건` +
+          (selfTransfer > 0 ? `, 자기이체 분류제외 ${selfTransfer}건` : '') +
+          `). 남은 미분류 ${remaining}건.`,
       );
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '자동 분류에 실패했습니다.');

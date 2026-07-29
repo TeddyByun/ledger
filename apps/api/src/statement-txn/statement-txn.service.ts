@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
 import { ClassifierService } from '../ingestion/classification/classifier.service.js';
+import { ReconcilerService } from '../ingestion/reconciliation/reconciler.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { recurringKey } from '../common/fuzzy-key.js';
 import { parseIdList } from '../common/parse-ids.js';
@@ -28,6 +29,7 @@ export class StatementTxnService {
     private readonly prisma: PrismaService,
     private readonly stats: StatisticsService,
     private readonly classifier: ClassifierService,
+    private readonly reconciler: ReconcilerService,
   ) {}
 
   // ── 은행 원천 거래 (bank_transaction) ───────────────────
@@ -360,6 +362,10 @@ export class StatementTxnService {
    */
   async autoClassifyBank() {
     const hid = requireTenant().householdId;
+    const months = new Set<string>();
+
+    // 0) 본인 계좌 간 이체 → '분류 제외'로 자동 분류 (당행송금 제외보다 먼저)
+    const selfTransfer = await this.reconciler.classifySelfTransfers(months);
 
     // 1) 제외 처리 — 분류가 필요 없는 이체/카드대금
     const excTransfer = await this.prisma.bankTransaction.updateMany({
@@ -409,7 +415,6 @@ export class StatementTxnService {
     const pending = await this.prisma.bankTransaction.findMany({
       where: { transactionId: null, excludeReason: null },
     });
-    const months = new Set<string>();
     let byRecurring = 0;
     let byHistory = 0;
     let byRule = 0;
@@ -466,6 +471,7 @@ export class StatementTxnService {
 
     for (const ym of months) await this.stats.rebuild(ym);
     return {
+      classifiedSelfTransfer: selfTransfer,
       excludedTransfer: excTransfer.count,
       excludedCard: excCard.count,
       classifiedByRecurring: byRecurring,

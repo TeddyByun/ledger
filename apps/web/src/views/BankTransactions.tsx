@@ -59,6 +59,7 @@ function filterParams(f: Filters): URLSearchParams {
 }
 
 interface AutoResult {
+  classifiedSelfTransfer: number;
   excludedTransfer: number;
   excludedCard: number;
   classifiedByRecurring: number;
@@ -268,6 +269,9 @@ export function BankTransactions() {
         {autoResult && (
           <div className="callout" style={{ marginBottom: 16, fontSize: 13 }}>
             자동 분류 완료 —{' '}
+            {autoResult.classifiedSelfTransfer > 0 && (
+              <>자기이체 분류제외 {autoResult.classifiedSelfTransfer}건, </>
+            )}
             <b>정기지출 {autoResult.classifiedByRecurring}건</b> · 이력{' '}
             {autoResult.classifiedByHistory}건 · 규칙{' '}
             {autoResult.classifiedByRule}건 분류, 이체 제외{' '}
