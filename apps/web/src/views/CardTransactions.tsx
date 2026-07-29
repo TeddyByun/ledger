@@ -76,6 +76,13 @@ function defaultFromMonth(): string {
 /** 기본 필터 — 조회 시작월만 3개월 전으로 채움 */
 const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFromMonth() });
 
+interface AutoResult {
+  classifiedByRecurring: number;
+  classifiedByHistory: number;
+  classifiedByRule: number;
+  remaining: number;
+}
+
 export function CardTransactions() {
   const [items, setItems] = useState<CardTxn[]>([]);
   const [hasNext, setHasNext] = useState(false);
@@ -138,6 +145,28 @@ export function CardTransactions() {
       setError((e as Error).message);
     } finally {
       setBulkBusy(false);
+    }
+  };
+
+  // 일괄 자동 분류
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoResult, setAutoResult] = useState<AutoResult | null>(null);
+  const runAuto = async () => {
+    setAutoBusy(true);
+    setAutoResult(null);
+    setError(null);
+    try {
+      const r = await api.post<AutoResult>('/card-transactions/auto-classify');
+      setAutoResult(r);
+      await load(true, applied, sortParam, 0);
+      api
+        .get<CardSummary>(`/card-transactions/summary?${filterParams(applied)}`)
+        .then(setSummary)
+        .catch(() => {});
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAutoBusy(false);
     }
   };
 
@@ -221,8 +250,22 @@ export function CardTransactions() {
             <button className="btn" onClick={exportXlsx}>
               엑셀 저장
             </button>
+            <button className="btn primary" onClick={runAuto} disabled={autoBusy}>
+              {autoBusy ? '자동 분류 중…' : '자동 분류'}
+            </button>
           </div>
         </div>
+
+        {autoResult && (
+          <div className="callout" style={{ marginBottom: 16, fontSize: 13 }}>
+            자동 분류 완료 —{' '}
+            <b>정기지출 {autoResult.classifiedByRecurring}건</b> · 이력{' '}
+            {autoResult.classifiedByHistory}건 · 규칙{' '}
+            {autoResult.classifiedByRule}건 분류. 남은 미분류{' '}
+            <b>{autoResult.remaining}건</b>은 아래에서 선택 후 분류하면 다음 자동
+            분류 때 같은 가맹점에 적용됩니다.
+          </div>
+        )}
 
         <div className="card" style={{ marginBottom: 16 }}>
           <form

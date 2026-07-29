@@ -71,6 +71,14 @@ export class StatementTxnController {
     sendXlsx(res, buf, '카드거래');
   }
 
+  @Post('card-transactions/auto-classify')
+  @ApiOperation({
+    summary: '카드 미분류 거래 일괄 자동분류 (정기지출/이력/규칙)',
+  })
+  cardAutoClassify() {
+    return this.service.autoClassifyCard();
+  }
+
   @Post('card-transactions/bulk-classify')
   @ApiOperation({ summary: '카드 거래 분류 일괄 변경' })
   cardBulkClassify(@Body() dto: BulkClassifyDto) {

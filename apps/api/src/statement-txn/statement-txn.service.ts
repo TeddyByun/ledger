@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
 import { ClassifierService } from '../ingestion/classification/classifier.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
+import { recurringKey } from '../common/fuzzy-key.js';
 import { parseIdList } from '../common/parse-ids.js';
 import { StatementTxnQueryDto } from './dto/query.dto.js';
 import { UpdateBankTxnDto } from './dto/update-bank-txn.dto.js';
@@ -294,10 +295,68 @@ export class StatementTxnService {
   }
 
   /**
+   * 정기지출(관리>정기지출) 기반 매칭기 로드.
+   * 각 정기지출의 매칭 토큰(match_key 우선, 없으면 label 정규화)을 준비한다.
+   * 거래 내용(정규화)에 토큰이 "포함"되면 그 정기지출의 분류로 자동 분류한다.
+   */
+  private async recurringMatchers(): Promise<
+    { token: string; categoryCode: string; paymentMethodId: number | null }[]
+  > {
+    const recs = await this.prisma.recurringExpense.findMany({
+      where: { isActive: 'Y' },
+      select: {
+        label: true,
+        matchKey: true,
+        categoryCode: true,
+        paymentMethodId: true,
+      },
+    });
+    const out: {
+      token: string;
+      categoryCode: string;
+      paymentMethodId: number | null;
+    }[] = [];
+    for (const r of recs) {
+      const token = (r.matchKey?.trim() || recurringKey(r.label)).trim();
+      if (token.length < 2) continue; // 너무 짧은 토큰은 오탐 방지 위해 제외
+      out.push({
+        token,
+        categoryCode: r.categoryCode,
+        paymentMethodId: r.paymentMethodId,
+      });
+    }
+    // 더 구체적인(긴) 토큰 우선
+    out.sort((a, b) => b.token.length - a.token.length);
+    return out;
+  }
+
+  /** 거래 내용에 정기지출 토큰이 포함되면 해당 분류 코드 반환. 결제수단 지정 시 일치해야 함. */
+  private matchRecurring(
+    matchers: {
+      token: string;
+      categoryCode: string;
+      paymentMethodId: number | null;
+    }[],
+    text: string | null,
+    paymentMethodId: number,
+  ): string | null {
+    const key = recurringKey(text);
+    if (!key) return null;
+    for (const m of matchers) {
+      if (m.paymentMethodId != null && m.paymentMethodId !== paymentMethodId) {
+        continue;
+      }
+      if (key.includes(m.token)) return m.categoryCode;
+    }
+    return null;
+  }
+
+  /**
    * 은행 미분류 거래 일괄 자동 분류.
    *  1) 제외(분류 불필요): 당행송금 → transfer, 카드대금(구분에 '카드') → card_settlement
-   *  2) 이력 학습: 과거 이미 분류된 동일 내용(방향별)의 가장 최근 분류를 그대로 적용
-   *  3) 규칙 보완: 가맹점 규칙(merchant_category_map)으로 마지막 시도
+   *  2) 정기지출 매칭: 관리>정기지출 항목명이 내용에 포함되면 그 분류로 자동 분류
+   *  3) 이력 학습: 과거 이미 분류된 동일 내용(방향별)의 가장 최근 분류를 그대로 적용
+   *  4) 규칙 보완: 가맹점 규칙(merchant_category_map)으로 마지막 시도
    */
   async autoClassifyBank() {
     const hid = requireTenant().householdId;
@@ -346,10 +405,12 @@ export class StatementTxnService {
     }
 
     // 3) 미분류 행 처리
+    const recMatchers = await this.recurringMatchers();
     const pending = await this.prisma.bankTransaction.findMany({
       where: { transactionId: null, excludeReason: null },
     });
     const months = new Set<string>();
+    let byRecurring = 0;
     let byHistory = 0;
     let byRule = 0;
     for (const b of pending) {
@@ -360,8 +421,13 @@ export class StatementTxnService {
       const norm = normKey(b.description);
 
       let code: string | null = null;
-      let source: 'history' | 'rule' | null = null;
-      if (norm) {
+      let source: 'recurring' | 'history' | 'rule' | null = null;
+      // 지출 건에 한해 정기지출 매칭 우선(사용자가 관리에서 지정한 의도)
+      if (isExpense) {
+        code = this.matchRecurring(recMatchers, b.description, b.paymentMethodId);
+        if (code) source = 'recurring';
+      }
+      if (!code && norm) {
         code =
           exactMap.get(`${dir}:${norm}`) ??
           fuzzyMap.get(`${dir}:${fuzzyKey(b.description)}`) ??
@@ -393,7 +459,8 @@ export class StatementTxnService {
         data: { transactionId: tx.id, isClassified: 'Y' },
       });
       months.add(b.txnAt.toISOString().slice(0, 7));
-      if (source === 'history') byHistory++;
+      if (source === 'recurring') byRecurring++;
+      else if (source === 'history') byHistory++;
       else byRule++;
     }
 
@@ -401,9 +468,10 @@ export class StatementTxnService {
     return {
       excludedTransfer: excTransfer.count,
       excludedCard: excCard.count,
+      classifiedByRecurring: byRecurring,
       classifiedByHistory: byHistory,
       classifiedByRule: byRule,
-      remaining: pending.length - byHistory - byRule,
+      remaining: pending.length - byRecurring - byHistory - byRule,
     };
   }
 
@@ -560,6 +628,99 @@ export class StatementTxnService {
     }
     for (const ym of months) await this.stats.rebuild(ym);
     return { deleted: rows.length };
+  }
+
+  /**
+   * 카드 미분류 거래 일괄 자동 분류 (은행과 동일 정책, 가맹점명 기준).
+   *  1) 정기지출 매칭: 관리>정기지출 항목명이 가맹점명에 포함되면 그 분류로
+   *  2) 이력 학습: 과거 분류된 동일 가맹점(정규화)의 가장 최근 분류
+   *  3) 규칙 보완: 가맹점 규칙(merchant_category_map)
+   * 취소·환불(is_canceled='Y')·결제금액 0 이하 조정행은 자동 대상에서 제외(수동 처리).
+   */
+  async autoClassifyCard() {
+    const hid = requireTenant().householdId;
+
+    // 1) 이력 맵 — 가맹점명(정규화) → 최신 분류코드 (exact + fuzzy)
+    const history = await this.prisma.cardTransaction.findMany({
+      where: { transactionId: { not: null } },
+      select: {
+        merchantName: true,
+        transaction: { select: { categoryCode: true } },
+      },
+      orderBy: { txnDate: 'desc' },
+    });
+    const exactMap = new Map<string, string>();
+    const fuzzyMap = new Map<string, string>();
+    for (const h of history) {
+      const code = h.transaction?.categoryCode;
+      if (!code) continue;
+      const norm = normKey(h.merchantName);
+      if (!norm) continue;
+      if (!exactMap.has(norm)) exactMap.set(norm, code);
+      const fk = fuzzyKey(h.merchantName);
+      if (fk && !fuzzyMap.has(fk)) fuzzyMap.set(fk, code);
+    }
+
+    // 2) 미분류 행 처리
+    const recMatchers = await this.recurringMatchers();
+    const pending = await this.prisma.cardTransaction.findMany({
+      where: { transactionId: null, isCanceled: 'N' },
+    });
+    const months = new Set<string>();
+    let byRecurring = 0;
+    let byHistory = 0;
+    let byRule = 0;
+    for (const c of pending) {
+      const amount = Number(c.principal) + Number(c.fee);
+      if (amount <= 0) continue; // 0/음수 조정행은 수동 분류
+      const norm = normKey(c.merchantName);
+
+      let code: string | null = null;
+      let source: 'recurring' | 'history' | 'rule' | null = null;
+      code = this.matchRecurring(recMatchers, c.merchantName, c.paymentMethodId);
+      if (code) source = 'recurring';
+      if (!code && norm) {
+        code =
+          exactMap.get(norm) ?? fuzzyMap.get(fuzzyKey(c.merchantName)) ?? null;
+        if (code) source = 'history';
+      }
+      if (!code) {
+        code = await this.classifier.classify(c.merchantName);
+        if (code) source = 'rule';
+      }
+      if (!code) continue;
+
+      const day = startOfDay(c.txnDate);
+      const tx = await this.prisma.transaction.create({
+        data: {
+          householdId: hid,
+          type: 'expense',
+          categoryCode: code,
+          paymentMethodId: c.paymentMethodId,
+          description: c.merchantName,
+          amount,
+          transactionDate: day,
+          settledDate: day,
+          status: 'settled',
+        },
+      });
+      await this.prisma.cardTransaction.update({
+        where: { id: c.id },
+        data: { transactionId: tx.id, isClassified: 'Y' },
+      });
+      months.add(day.toISOString().slice(0, 7));
+      if (source === 'recurring') byRecurring++;
+      else if (source === 'history') byHistory++;
+      else byRule++;
+    }
+
+    for (const ym of months) await this.stats.rebuild(ym);
+    return {
+      classifiedByRecurring: byRecurring,
+      classifiedByHistory: byHistory,
+      classifiedByRule: byRule,
+      remaining: pending.length - byRecurring - byHistory - byRule,
+    };
   }
 
   // ── 엑셀(xlsx) 내보내기 ──────────────────────────────────
