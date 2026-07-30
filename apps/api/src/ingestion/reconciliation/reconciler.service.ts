@@ -2,11 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { EXCLUDE_CATEGORY_NAMES } from '../../common/exclude-category.js';
 
+/** classifyAsExclusion 이 받는 은행 원천 행의 최소 형태. */
+interface BankRowLite {
+  id: number;
+  householdId: number;
+  paymentMethodId: number;
+  txnAt: Date;
+  withdrawal: unknown;
+  deposit: unknown;
+  description: string | null;
+}
+
 /**
- * 대사(reconciliation) — 은행 원천 중 실지출이 아닌 행을 처리(DATABASE.md §7).
- *  1) 카드대금 결제 출금(타사카드/하나카드) → exclude_reason='card_settlement'
- *  2) 본인 계좌 간 이체(동일 금액·같은 날·본인 명의) → '분류 제외' 분류로 자동 분류
- * 업로드·자동분류 양쪽에서 호출된다.
+ * 대사(reconciliation) — 은행 원천 중 실지출이 아닌 행을 '분류 제외'로 자동 분류(DATABASE.md §7).
+ *  1) 카드대금 결제 출금(타사카드/하나카드) → '분류 제외'
+ *  2) 본인 계좌 간 이체(동일 금액·같은 날·본인 명의) → '분류 제외'
+ * 업로드·자동분류 양쪽에서 호출된다. '분류 제외' 분류가 없으면 exclude_reason 으로 폴백.
  */
 @Injectable()
 export class ReconcilerService {
@@ -24,24 +35,67 @@ export class ReconcilerService {
     };
   }
 
-  /** 카드대금 출금 식별 — 카드 명세서 결제계좌 + 총액 + 결제월로 매칭. */
-  async markCardSettlements(): Promise<number> {
-    // 구분명이 카드결제(타사카드/하나카드/...카드)인 미분류 출금 행
-    const candidates = await this.prisma.bankTransaction.findMany({
+  /** 은행 행 하나를 '분류 제외' 거래로 생성·연결. 생성했으면 true, 코드 없으면 false. */
+  private async classifyAsExclusion(
+    b: BankRowLite,
+    codes: { expense?: string; income?: string },
+    months: Set<string>,
+  ): Promise<boolean> {
+    const isExpense = Number(b.withdrawal) > 0;
+    const amount = isExpense ? Number(b.withdrawal) : Number(b.deposit);
+    const code = isExpense ? codes.expense : codes.income;
+    if (!code) return false;
+    const day = startOfDay(b.txnAt);
+    const tx = await this.prisma.transaction.create({
+      data: {
+        householdId: b.householdId,
+        type: isExpense ? 'expense' : 'income',
+        categoryCode: code,
+        paymentMethodId: b.paymentMethodId,
+        description: b.description,
+        amount,
+        transactionDate: day,
+        settledDate: day,
+        status: 'settled',
+      },
+    });
+    await this.prisma.bankTransaction.update({
+      where: { id: b.id },
+      data: { transactionId: tx.id, isClassified: 'Y' },
+    });
+    months.add(b.txnAt.toISOString().slice(0, 7));
+    return true;
+  }
+
+  /**
+   * 카드대금 결제 출금(구분명에 '카드') → '분류 제외'(지출)로 자동 분류.
+   * 분류된 월을 months 에 추가. 반환값은 처리한 행 수.
+   */
+  async classifyCardSettlements(months: Set<string>): Promise<number> {
+    const rows = await this.prisma.bankTransaction.findMany({
       where: {
         withdrawal: { gt: 0 },
         transactionId: null,
         excludeReason: null,
         txnType: { name: { contains: '카드' } },
       },
-      select: { id: true },
     });
-    if (candidates.length === 0) return 0;
-    const res = await this.prisma.bankTransaction.updateMany({
-      where: { id: { in: candidates.map((c) => c.id) } },
-      data: { excludeReason: 'card_settlement', isClassified: 'Y' },
-    });
-    return res.count;
+    if (rows.length === 0) return 0;
+
+    const codes = await this.exclusionCodes();
+    // '분류 제외'(지출) 분류가 없으면 기존 방식(exclude_reason)으로 폴백
+    if (!codes.expense) {
+      await this.prisma.bankTransaction.updateMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        data: { excludeReason: 'card_settlement', isClassified: 'Y' },
+      });
+      return rows.length;
+    }
+    let count = 0;
+    for (const b of rows) {
+      if (await this.classifyAsExclusion(b, codes, months)) count++;
+    }
+    return count;
   }
 
   /**
@@ -91,30 +145,7 @@ export class ReconcilerService {
 
     let count = 0;
     for (const b of matched) {
-      const isExpense = Number(b.withdrawal) > 0;
-      const amount = isExpense ? Number(b.withdrawal) : Number(b.deposit);
-      const code = isExpense ? codes.expense : codes.income;
-      if (!code) continue;
-      const day = startOfDay(b.txnAt);
-      const tx = await this.prisma.transaction.create({
-        data: {
-          householdId: b.householdId,
-          type: isExpense ? 'expense' : 'income',
-          categoryCode: code,
-          paymentMethodId: b.paymentMethodId,
-          description: b.description,
-          amount,
-          transactionDate: day,
-          settledDate: day,
-          status: 'settled',
-        },
-      });
-      await this.prisma.bankTransaction.update({
-        where: { id: b.id },
-        data: { transactionId: tx.id, isClassified: 'Y' },
-      });
-      months.add(b.txnAt.toISOString().slice(0, 7));
-      count++;
+      if (await this.classifyAsExclusion(b, codes, months)) count++;
     }
     return count;
   }

@@ -364,10 +364,11 @@ export class StatementTxnService {
     const hid = requireTenant().householdId;
     const months = new Set<string>();
 
-    // 0) 본인 계좌 간 이체 → '분류 제외'로 자동 분류 (당행송금 제외보다 먼저)
+    // 0) 카드대금·본인 계좌 간 이체 → '분류 제외'로 자동 분류 (당행송금 제외보다 먼저)
+    const cardSettle = await this.reconciler.classifyCardSettlements(months);
     const selfTransfer = await this.reconciler.classifySelfTransfers(months);
 
-    // 1) 제외 처리 — 분류가 필요 없는 이체/카드대금
+    // 1) 제외 처리 — 분류가 필요 없는 당행송금 이체
     const excTransfer = await this.prisma.bankTransaction.updateMany({
       where: {
         transactionId: null,
@@ -375,15 +376,6 @@ export class StatementTxnService {
         txnType: { name: '당행송금' },
       },
       data: { excludeReason: 'transfer', isClassified: 'Y' },
-    });
-    const excCard = await this.prisma.bankTransaction.updateMany({
-      where: {
-        withdrawal: { gt: 0 },
-        transactionId: null,
-        excludeReason: null,
-        txnType: { name: { contains: '카드' } },
-      },
-      data: { excludeReason: 'card_settlement', isClassified: 'Y' },
     });
 
     // 2) 이력 맵 구성 — 방향(출금/입금)별 정규화 내용 → 최신 분류코드
@@ -471,9 +463,9 @@ export class StatementTxnService {
 
     for (const ym of months) await this.stats.rebuild(ym);
     return {
+      classifiedCardSettlement: cardSettle,
       classifiedSelfTransfer: selfTransfer,
       excludedTransfer: excTransfer.count,
-      excludedCard: excCard.count,
       classifiedByRecurring: byRecurring,
       classifiedByHistory: byHistory,
       classifiedByRule: byRule,

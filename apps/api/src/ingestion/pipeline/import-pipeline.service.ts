@@ -337,8 +337,8 @@ export class ImportPipelineService {
       });
     }
 
-    // 2) 대사 — 카드대금 제외 표시 + 자기이체는 '분류 제외'로 자동 분류
-    await this.reconciler.markCardSettlements();
+    // 2) 대사 — 카드대금·자기이체를 '분류 제외'로 자동 분류
+    await this.reconciler.classifyCardSettlements(months);
     await this.reconciler.classifySelfTransfers(months);
 
     // 3) 미제외·미분류 행 → 거래 생성

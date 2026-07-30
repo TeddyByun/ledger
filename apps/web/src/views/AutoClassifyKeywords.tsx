@@ -15,6 +15,7 @@ interface Keyword {
 }
 
 interface AutoResult {
+  classifiedCardSettlement?: number;
   classifiedSelfTransfer?: number;
   classifiedByRecurring: number;
   classifiedByHistory: number;
@@ -143,11 +144,13 @@ export function AutoClassifyKeywords() {
         bank.classifiedByHistory +
         card.classifiedByRecurring +
         card.classifiedByHistory;
+      const cardSettle = bank.classifiedCardSettlement ?? 0;
       const selfTransfer = bank.classifiedSelfTransfer ?? 0;
+      const excluded = cardSettle + selfTransfer;
       const remaining = bank.remaining + card.remaining;
       setRunMsg(
         `키워드 규칙으로 ${byRule}건 분류 (그 외 정기지출·이력 ${byOther}건` +
-          (selfTransfer > 0 ? `, 자기이체 분류제외 ${selfTransfer}건` : '') +
+          (excluded > 0 ? `, 카드대금·자기이체 분류제외 ${excluded}건` : '') +
           `). 남은 미분류 ${remaining}건.`,
       );
     } catch (e) {
