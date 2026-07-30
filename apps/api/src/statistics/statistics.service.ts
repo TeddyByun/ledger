@@ -6,6 +6,7 @@ import {
   EXCLUDE_CATEGORY_NAMES,
   excludeCategoryCodes,
 } from '../common/exclude-category.js';
+import { excludedPaymentMethodIds } from '../common/exclude-payment.js';
 
 const YM_RE = /^\d{4}-\d{2}$/;
 
@@ -71,11 +72,13 @@ export class StatisticsService {
     const { start, endExclusive, months, ymList, idx } = this.resolveMonthRange(from, to);
 
     const excluded = await excludeCategoryCodes(this.prisma);
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
     const [txns, cats] = await Promise.all([
       this.prisma.transaction.findMany({
         where: {
           transactionDate: { gte: start, lt: endExclusive },
           ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
+          ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
         },
         select: {
           type: true,
@@ -144,6 +147,7 @@ export class StatisticsService {
           transactionId: null,
           excludeReason: null, // 이체·카드대금(제외) 제외
           txnAt: { gte: start, lt: endExclusive },
+          ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
         },
         select: {
           withdrawal: true,
@@ -158,6 +162,7 @@ export class StatisticsService {
           transactionId: null,
           isCanceled: 'N',
           txnDate: { gte: start, lt: endExclusive },
+          ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
         },
         select: {
           principal: true,
@@ -275,11 +280,13 @@ export class StatisticsService {
     const { start, endExclusive, months, ymList, idx } = this.resolveMonthRange(from, to);
 
     const excluded = await excludeCategoryCodes(this.prisma);
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
     const txns = await this.prisma.transaction.findMany({
       where: {
         type: 'expense',
         transactionDate: { gte: start, lt: endExclusive },
         ...(excluded.length > 0 && { categoryCode: { notIn: excluded } }),
+        ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
       },
       select: {
         amount: true,
@@ -354,9 +361,13 @@ export class StatisticsService {
   async dashboard(year: number) {
     const start = new Date(Date.UTC(year, 0, 1));
     const end = new Date(Date.UTC(year + 1, 0, 1));
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
     const [txns, cats] = await Promise.all([
       this.prisma.transaction.findMany({
-        where: { transactionDate: { gte: start, lt: end } },
+        where: {
+          transactionDate: { gte: start, lt: end },
+          ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
+        },
         select: {
           type: true,
           amount: true,
@@ -492,11 +503,13 @@ export class StatisticsService {
     const to = new Date(from);
     to.setUTCMonth(to.getUTCMonth() + 1);
 
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
     const rows = await this.prisma.transaction.findMany({
       where: {
         status: 'settled',
         amount: { not: null },
         transactionDate: { gte: from, lt: to },
+        ...(excludedPm.length > 0 && { paymentMethodId: { notIn: excludedPm } }),
       },
       include: { paymentMethod: true },
     });

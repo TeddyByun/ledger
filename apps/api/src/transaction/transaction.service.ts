@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
+import { excludedPaymentMethodIds } from '../common/exclude-payment.js';
 import { parseIdList } from '../common/parse-ids.js';
 import {
   CreateTransactionDto,
@@ -65,6 +66,7 @@ export class TransactionService {
    */
   async findUnified(query: TransactionQueryDto) {
     const excluded = new Set(await excludeCategoryCodes(this.prisma));
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
     const pmIds = parseIdList(query.paymentMethodIds, query.paymentMethodId);
     const wantBank = !query.methodType || query.methodType === 'bank';
     const wantCard = !query.methodType || query.methodType === 'card';
@@ -103,6 +105,7 @@ export class TransactionService {
               excludeReason: null,
               ...(bankDate && { txnAt: bankDate }),
               ...(pmFilter !== undefined && { paymentMethodId: pmFilter }),
+              ...(excludedPm.length > 0 && { NOT: { paymentMethodId: { in: excludedPm } } }),
             },
             include: {
               paymentMethod: { select: { name: true, methodType: true } },
@@ -116,6 +119,7 @@ export class TransactionService {
               isCanceled: 'N',
               ...(cardDate && { txnDate: cardDate }),
               ...(pmFilter !== undefined && { paymentMethodId: pmFilter }),
+              ...(excludedPm.length > 0 && { NOT: { paymentMethodId: { in: excludedPm } } }),
             },
             include: {
               paymentMethod: { select: { name: true, methodType: true } },
@@ -373,6 +377,10 @@ export class TransactionService {
     // '분류제외' 분류는 전체 거래/합계에서 항상 제외
     const excluded = await excludeCategoryCodes(this.prisma);
     if (excluded.length > 0) and.push({ categoryCode: { notIn: excluded } });
+
+    // 집계 제외 결제수단(투자·저축 등)의 거래도 항상 제외
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
+    if (excludedPm.length > 0) and.push({ paymentMethodId: { notIn: excludedPm } });
 
     if (query.from || query.to) {
       where.transactionDate = {

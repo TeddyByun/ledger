@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { MethodType } from '@ledger/shared';
 
 export class CreatePaymentMethodDto {
@@ -43,6 +43,14 @@ export class CreatePaymentMethodDto {
   @IsString()
   @IsOptional()
   memo?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: '수입·지출 집계에서 제외(투자·저축 계좌 등)',
+  })
+  @IsBoolean()
+  @IsOptional()
+  excludeFromStats?: boolean;
 }
 
 export class UpdatePaymentMethodDto extends PartialType(CreatePaymentMethodDto) {}

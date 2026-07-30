@@ -476,6 +476,8 @@ category ──────┘
 | card_no | VARCHAR(25) | NULL | **카드 식별번호(카드만)** — 전체 번호 입력, **마스킹 저장**(뒤 4자리만 노출). 명세서 라벨과 매핑 키 |
 | account_no | VARCHAR(30) | NULL | 전체 계좌번호 (예: 569-910201-47307) |
 | owner | VARCHAR(30) | NULL | 명의자 (예: 본인, 가족) |
+| memo | VARCHAR(255) | NULL | 비고(연회비·혜택 등) |
+| exclude_from_stats | BOOLEAN | DEFAULT false | **수입·지출 집계 제외** — 투자·저축 계좌 등. 이 결제수단의 거래는 전체 거래·합계·추이·월별 집계에서 빠진다(`common/exclude-payment.ts`). |
 | created_at | DATETIME | DEFAULT now | 생성 시각 |
 
 > **카드 목록 = 물리 카드(번호)별 1행.** 한 명세서에 본인·가족 카드가 섞여 있으면 각 카드를 따로 등록한다.

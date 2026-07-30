@@ -29,6 +29,7 @@ export interface PaymentMethod {
   cardNo: string | null;
   owner: string | null;
   memo: string | null;
+  excludeFromStats?: boolean;
 }
 
 export interface HouseholdMember {

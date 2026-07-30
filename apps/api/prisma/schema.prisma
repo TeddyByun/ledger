@@ -180,6 +180,7 @@ model PaymentMethod {
   accountNo   String?    @map("account_no")
   owner       String?
   memo        String?
+  excludeFromStats Boolean @default(false) @map("exclude_from_stats") // 수입·지출 집계에서 제외
   createdAt   DateTime   @default(now()) @map("created_at")
 
   household           Household            @relation(fields: [householdId], references: [id])
