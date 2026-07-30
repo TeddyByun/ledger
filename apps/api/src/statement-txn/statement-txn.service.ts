@@ -364,21 +364,11 @@ export class StatementTxnService {
     const hid = requireTenant().householdId;
     const months = new Set<string>();
 
-    // 0) 카드대금·본인 계좌 간 이체 → '분류 제외'로 자동 분류 (당행송금 제외보다 먼저)
+    // 0) 카드대금·본인 계좌 간 이체 → '분류 제외'로 자동 분류
     const cardSettle = await this.reconciler.classifyCardSettlements(months);
     const selfTransfer = await this.reconciler.classifySelfTransfers(months);
 
-    // 1) 제외 처리 — 분류가 필요 없는 당행송금 이체
-    const excTransfer = await this.prisma.bankTransaction.updateMany({
-      where: {
-        transactionId: null,
-        excludeReason: null,
-        txnType: { name: '당행송금' },
-      },
-      data: { excludeReason: 'transfer', isClassified: 'Y' },
-    });
-
-    // 2) 이력 맵 구성 — 방향(출금/입금)별 정규화 내용 → 최신 분류코드
+    // 이력 맵 구성 — 방향(출금/입금)별 정규화 내용 → 최신 분류코드
     const history = await this.prisma.bankTransaction.findMany({
       where: { transactionId: { not: null }, description: { not: null } },
       select: {
@@ -402,10 +392,14 @@ export class StatementTxnService {
       if (!fuzzyMap.has(fk)) fuzzyMap.set(fk, code);
     }
 
-    // 3) 미분류 행 처리
+    // 미분류 행 처리 — 명시적 분류 신호(정기지출/이력/키워드)는 당행송금 제외보다 우선.
+    // 이미 'transfer'로 제외된 행도 재분류 대상에 포함(키워드 등록 후 반영되도록).
     const recMatchers = await this.recurringMatchers();
     const pending = await this.prisma.bankTransaction.findMany({
-      where: { transactionId: null, excludeReason: null },
+      where: {
+        transactionId: null,
+        OR: [{ excludeReason: null }, { excludeReason: 'transfer' }],
+      },
     });
     let byRecurring = 0;
     let byHistory = 0;
@@ -453,13 +447,24 @@ export class StatementTxnService {
       });
       await this.prisma.bankTransaction.update({
         where: { id: b.id },
-        data: { transactionId: tx.id, isClassified: 'Y' },
+        // 분류되면 구버전 transfer 제외 표시는 정리
+        data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
       });
       months.add(b.txnAt.toISOString().slice(0, 7));
       if (source === 'recurring') byRecurring++;
       else if (source === 'history') byHistory++;
       else byRule++;
     }
+
+    // 분류되지 않고 남은 당행송금은 '이체'로 제외 처리(키워드/이력에 안 걸린 실제 이체)
+    const excTransfer = await this.prisma.bankTransaction.updateMany({
+      where: {
+        transactionId: null,
+        excludeReason: null,
+        txnType: { name: '당행송금' },
+      },
+      data: { excludeReason: 'transfer', isClassified: 'Y' },
+    });
 
     for (const ym of months) await this.stats.rebuild(ym);
     return {
@@ -469,7 +474,8 @@ export class StatementTxnService {
       classifiedByRecurring: byRecurring,
       classifiedByHistory: byHistory,
       classifiedByRule: byRule,
-      remaining: pending.length - byRecurring - byHistory - byRule,
+      remaining:
+        pending.length - byRecurring - byHistory - byRule - excTransfer.count,
     };
   }
 
