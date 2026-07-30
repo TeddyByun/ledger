@@ -61,7 +61,8 @@ export class ReconcilerService {
     });
     await this.prisma.bankTransaction.update({
       where: { id: b.id },
-      data: { transactionId: tx.id, isClassified: 'Y' },
+      // 분류 제외 거래로 확정하면서 구버전 exclude_reason 표시는 정리
+      data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
     });
     months.add(b.txnAt.toISOString().slice(0, 7));
     return true;
@@ -75,9 +76,10 @@ export class ReconcilerService {
     const rows = await this.prisma.bankTransaction.findMany({
       where: {
         withdrawal: { gt: 0 },
-        transactionId: null,
-        excludeReason: null,
+        transactionId: null, // 아직 거래 미생성
         txnType: { name: { contains: '카드' } },
+        // 미표시(null) + 구버전에서 이미 card_settlement 로 표시된 행 모두 승격
+        OR: [{ excludeReason: null }, { excludeReason: 'card_settlement' }],
       },
     });
     if (rows.length === 0) return 0;
@@ -104,6 +106,20 @@ export class ReconcilerService {
    * 분류된 월을 months 에 추가(호출자가 집계 재계산). 반환값은 분류한 행 수.
    */
   async classifySelfTransfers(months: Set<string>): Promise<number> {
+    const codes = await this.exclusionCodes();
+    let count = 0;
+
+    // (a) 구버전에서 이미 self_transfer 로 표시된 행 → '분류 제외'로 승격
+    if (codes.expense || codes.income) {
+      const marked = await this.prisma.bankTransaction.findMany({
+        where: { transactionId: null, excludeReason: 'self_transfer' },
+      });
+      for (const b of marked) {
+        if (await this.classifyAsExclusion(b, codes, months)) count++;
+      }
+    }
+
+    // (b) 미표시 행에서 새 자기이체 쌍 감지
     const rows = await this.prisma.bankTransaction.findMany({
       where: { transactionId: null, excludeReason: null },
       include: { paymentMethod: true },
@@ -129,9 +145,8 @@ export class ReconcilerService {
         matchedIds.add(pair.id);
       }
     }
-    if (matchedIds.size === 0) return 0;
+    if (matchedIds.size === 0) return count;
 
-    const codes = await this.exclusionCodes();
     const matched = rows.filter((r) => matchedIds.has(r.id));
 
     // '분류 제외' 분류가 없으면 기존 방식(exclude_reason)으로 폴백
@@ -140,10 +155,9 @@ export class ReconcilerService {
         where: { id: { in: matched.map((m) => m.id) } },
         data: { excludeReason: 'self_transfer', isClassified: 'Y' },
       });
-      return matched.length;
+      return count + matched.length;
     }
 
-    let count = 0;
     for (const b of matched) {
       if (await this.classifyAsExclusion(b, codes, months)) count++;
     }
