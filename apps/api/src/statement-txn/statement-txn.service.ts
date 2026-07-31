@@ -364,7 +364,8 @@ export class StatementTxnService {
     const hid = requireTenant().householdId;
     const months = new Set<string>();
 
-    // 0) 카드대금·본인 계좌 간 이체 → '분류 제외'로 자동 분류
+    // 0) 결제수단 집계 제외 → '분류 제외', 카드대금·본인 계좌 간 이체 → '분류 제외'
+    await this.reconciler.classifyExcludedBankPms(months);
     const cardSettle = await this.reconciler.classifyCardSettlements(months);
     const selfTransfer = await this.reconciler.classifySelfTransfers(months);
 
@@ -789,6 +790,10 @@ export class StatementTxnService {
    */
   async autoClassifyCard() {
     const hid = requireTenant().householdId;
+    const months = new Set<string>();
+
+    // 0) 결제수단 집계 제외 카드 → '지출 분류 제외' (pending 조회 전에 먼저 확정)
+    await this.reconciler.classifyExcludedCardPms(months);
 
     // 1) 이력 맵 — 가맹점명(정규화) → 최신 분류코드 (exact + fuzzy)
     const history = await this.prisma.cardTransaction.findMany({
@@ -816,7 +821,6 @@ export class StatementTxnService {
     const pending = await this.prisma.cardTransaction.findMany({
       where: { transactionId: null, isCanceled: 'N' },
     });
-    const months = new Set<string>();
     let byRecurring = 0;
     let byHistory = 0;
     let byRule = 0;

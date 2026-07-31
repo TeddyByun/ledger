@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { EXCLUDE_CATEGORY_NAMES } from '../../common/exclude-category.js';
+import { excludedPaymentMethodIds } from '../../common/exclude-payment.js';
 
 /** classifyAsExclusion 이 받는 은행 원천 행의 최소 형태. */
 interface BankRowLite {
@@ -165,14 +166,14 @@ export class ReconcilerService {
       if (!pair) continue;
       used.add(w.id);
       used.add(pair.id);
-      if (await this.ensureSelfTransferExclusion(w, codes, months)) count++;
-      if (await this.ensureSelfTransferExclusion(pair, codes, months)) count++;
+      if (await this.ensureBankExclusion(w, codes, months)) count++;
+      if (await this.ensureBankExclusion(pair, codes, months)) count++;
     }
     return count;
   }
 
   /** 은행 행을 방향에 맞는 '분류 제외'로 보정 — 이미 분류돼 있으면 분류만 교체, 아니면 거래 생성. */
-  private async ensureSelfTransferExclusion(
+  private async ensureBankExclusion(
     row: BankRowLite & {
       excludeReason?: string | null;
       transactionId?: number | null;
@@ -221,6 +222,77 @@ export class ReconcilerService {
     }
     months.add(row.txnAt.toISOString().slice(0, 7));
     return true;
+  }
+
+  /**
+   * 집계 제외 결제수단(exclude_from_stats)의 은행 거래 → 방향별 '분류 제외'로 매핑.
+   * 출금=지출 분류 제외 / 입금=수입 분류 제외. 이미 다른 분류면 교체.
+   */
+  async classifyExcludedBankPms(months: Set<string>): Promise<number> {
+    const codes = await this.exclusionCodes();
+    if (!codes.expense && !codes.income) return 0;
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
+    if (excludedPm.length === 0) return 0;
+
+    const rows = await this.prisma.bankTransaction.findMany({
+      where: { paymentMethodId: { in: excludedPm } },
+      include: { transaction: { select: { categoryCode: true } } },
+    });
+    let count = 0;
+    for (const r of rows) {
+      if (Number(r.withdrawal) <= 0 && Number(r.deposit) <= 0) continue;
+      if (await this.ensureBankExclusion(r, codes, months)) count++;
+    }
+    return count;
+  }
+
+  /**
+   * 집계 제외 결제수단의 카드 거래 → '지출 분류 제외'로 매핑(카드는 항상 지출).
+   * 취소행 제외. 이미 다른 분류면 교체.
+   */
+  async classifyExcludedCardPms(months: Set<string>): Promise<number> {
+    const codes = await this.exclusionCodes();
+    if (!codes.expense) return 0;
+    const excludedPm = await excludedPaymentMethodIds(this.prisma);
+    if (excludedPm.length === 0) return 0;
+
+    const rows = await this.prisma.cardTransaction.findMany({
+      where: { paymentMethodId: { in: excludedPm }, isCanceled: 'N' },
+      include: { transaction: { select: { categoryCode: true } } },
+    });
+    let count = 0;
+    for (const c of rows) {
+      if (c.transaction?.categoryCode === codes.expense) continue;
+      const amount = Number(c.principal) + Number(c.fee);
+      const day = startOfDay(c.txnDate);
+      if (c.transactionId) {
+        await this.prisma.transaction.update({
+          where: { id: c.transactionId },
+          data: { categoryCode: codes.expense },
+        });
+      } else {
+        const tx = await this.prisma.transaction.create({
+          data: {
+            householdId: c.householdId,
+            type: 'expense',
+            categoryCode: codes.expense,
+            paymentMethodId: c.paymentMethodId,
+            description: c.merchantName,
+            amount,
+            transactionDate: day,
+            settledDate: day,
+            status: 'settled',
+          },
+        });
+        await this.prisma.cardTransaction.update({
+          where: { id: c.id },
+          data: { transactionId: tx.id, isClassified: 'Y' },
+        });
+      }
+      months.add(c.txnDate.toISOString().slice(0, 7));
+      count++;
+    }
+    return count;
   }
 }
 
