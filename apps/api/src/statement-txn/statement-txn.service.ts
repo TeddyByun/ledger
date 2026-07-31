@@ -675,8 +675,9 @@ export class StatementTxnService {
     let byHistory = 0;
     let byRule = 0;
     for (const c of pending) {
+      // 금액 제한 없음: 환불(음수)·할인/포인트(0원) 조정행도 매칭되면 분류.
+      // 음수는 해당 분류 지출에서 정확히 차감되므로 오분류 문제가 없다(취소행은 위 where 에서 제외).
       const amount = Number(c.principal) + Number(c.fee);
-      if (amount <= 0) continue; // 0/음수 조정행은 수동 분류
       const norm = normKey(c.merchantName);
 
       let code: string | null = null;
