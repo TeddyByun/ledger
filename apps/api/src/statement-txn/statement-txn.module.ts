@@ -9,5 +9,6 @@ import { StatementTxnService } from './statement-txn.service.js';
   imports: [StatisticsModule, ClassificationModule, ReconciliationModule],
   controllers: [StatementTxnController],
   providers: [StatementTxnService],
+  exports: [StatementTxnService],
 })
 export class StatementTxnModule {}

@@ -7,6 +7,7 @@ import { StorageService } from '../storage/storage.service.js';
 import { ParserRegistry } from '../parsers/parser.registry.js';
 import { ClassifierService } from '../classification/classifier.service.js';
 import { ReconcilerService } from '../reconciliation/reconciler.service.js';
+import { StatementTxnService } from '../../statement-txn/statement-txn.service.js';
 import { readTabular } from '../parsers/tabular.js';
 import type { NormalizedBankRow, NormalizedCardRow } from '../parsers/types.js';
 import { Issuer } from '@ledger/shared';
@@ -43,6 +44,7 @@ export class ImportPipelineService {
     private readonly classifier: ClassifierService,
     private readonly reconciler: ReconcilerService,
     private readonly stats: StatisticsService,
+    private readonly statementTxn: StatementTxnService,
   ) {}
 
   /** 잡 1건 전체 처리: 파싱 → 적재 → 분류 → 대사 → 집계. */
@@ -169,6 +171,11 @@ export class ImportPipelineService {
           }
         }
       }
+
+      // 업로드분에 이력·정기지출 매칭까지 반영 — 업로드만으로 '자동 분류' 버튼과 동일하게
+      // 정기지출→이력→키워드 순으로 분류(키워드 외에 이전 분류와 일치하는 건도 자동 분류).
+      await this.statementTxn.autoClassifyBank();
+      await this.statementTxn.autoClassifyCard();
 
       // 월 재집계
       for (const ym of months) await this.stats.rebuild(ym);
