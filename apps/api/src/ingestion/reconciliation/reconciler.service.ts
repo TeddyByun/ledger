@@ -101,9 +101,10 @@ export class ReconcilerService {
   }
 
   /**
-   * 본인 계좌 간 이체 — 같은 날짜·동일 금액의 (출금 A) ↔ (입금 B)를 한 쌍으로 인식.
-   * 두 계좌 모두 본인 명의(owner)일 때만, 양쪽을 '분류 제외' 분류로 자동 분류(거래 생성)한다.
-   * 분류된 월을 months 에 추가(호출자가 집계 재계산). 반환값은 분류한 행 수.
+   * 본인 계좌 간 이체 — 같은 이름(내용)·같은 날·동일 금액의 (출금 A) ↔ (입금 B)를 한 쌍으로 인식.
+   * 두 계좌 모두 본인 명의일 때, 출금→'지출 분류 제외'·입금→'수입 분류 제외'로 보정한다.
+   * 이미 분류/제외된 행도 대상에 포함(계좌를 나눠 업로드해 한쪽이 먼저 분류돼도 짝을 맞춤).
+   * 분류된 월을 months 에 추가(호출자가 집계 재계산). 반환값은 보정한 행 수.
    */
   async classifySelfTransfers(months: Set<string>): Promise<number> {
     const codes = await this.exclusionCodes();
@@ -118,50 +119,108 @@ export class ReconcilerService {
         if (await this.classifyAsExclusion(b, codes, months)) count++;
       }
     }
+    if (!codes.expense && !codes.income) return count; // 분류 제외 카테고리 없으면 종료
 
-    // (b) 미표시 행에서 새 자기이체 쌍 감지
+    // (b) 이름+날짜+금액이 일치하는 (출금↔입금, 본인 계좌) 쌍 — 이미 분류/제외된 행도 포함
     const rows = await this.prisma.bankTransaction.findMany({
-      where: { transactionId: null, excludeReason: null },
-      include: { paymentMethod: true },
+      include: {
+        paymentMethod: true,
+        transaction: { select: { categoryCode: true } },
+      },
     });
+    const nd = (s: string | null) => (s ?? '').replace(/\s/g, '');
+    const keyOf = (amount: number, at: Date) =>
+      `${amount}|${at.toISOString().slice(0, 10)}`;
+    // 아직 거래·제외로 확정되지 않은 순수 미분류 행
+    const isPending = (r: (typeof rows)[number]) =>
+      !r.transactionId && !r.excludeReason;
 
-    const withdrawals = rows.filter((r) => Number(r.withdrawal) > 0);
-    const deposits = rows.filter((r) => Number(r.deposit) > 0);
-    const matchedIds = new Set<number>();
+    // 입금 행을 (금액|날짜) 키로 색인
+    const depByKey = new Map<string, typeof rows>();
+    for (const d of rows) {
+      if (Number(d.deposit) <= 0) continue;
+      const key = keyOf(Number(d.deposit), d.txnAt);
+      const list = depByKey.get(key) ?? [];
+      list.push(d);
+      depByKey.set(key, list);
+    }
 
-    for (const w of withdrawals) {
+    const used = new Set<number>();
+    for (const w of rows) {
       const amt = Number(w.withdrawal);
-      const day = w.txnAt.toISOString().slice(0, 10);
-      const pair = deposits.find(
+      if (amt <= 0 || used.has(w.id)) continue;
+      const candidates = depByKey.get(keyOf(amt, w.txnAt));
+      if (!candidates) continue;
+      const wDesc = nd(w.description);
+      const pair = candidates.find(
         (d) =>
-          !matchedIds.has(d.id) &&
-          Number(d.deposit) === amt &&
-          d.txnAt.toISOString().slice(0, 10) === day &&
+          !used.has(d.id) &&
           d.paymentMethodId !== w.paymentMethodId &&
-          isOwnPair(w.paymentMethod?.owner, d.paymentMethod?.owner),
+          isOwnPair(w.paymentMethod?.owner, d.paymentMethod?.owner) &&
+          // 이미 분류/제외된 행을 건드릴 땐 '같은 이름' 필수(오탐 방지),
+          // 둘 다 순수 미분류면 이름 없이도 매칭(기존 동작 유지).
+          ((wDesc !== '' && nd(d.description) === wDesc) ||
+            (isPending(w) && isPending(d))),
       );
-      if (pair) {
-        matchedIds.add(w.id);
-        matchedIds.add(pair.id);
-      }
-    }
-    if (matchedIds.size === 0) return count;
-
-    const matched = rows.filter((r) => matchedIds.has(r.id));
-
-    // '분류 제외' 분류가 없으면 기존 방식(exclude_reason)으로 폴백
-    if (!codes.expense && !codes.income) {
-      await this.prisma.bankTransaction.updateMany({
-        where: { id: { in: matched.map((m) => m.id) } },
-        data: { excludeReason: 'self_transfer', isClassified: 'Y' },
-      });
-      return count + matched.length;
-    }
-
-    for (const b of matched) {
-      if (await this.classifyAsExclusion(b, codes, months)) count++;
+      if (!pair) continue;
+      used.add(w.id);
+      used.add(pair.id);
+      if (await this.ensureSelfTransferExclusion(w, codes, months)) count++;
+      if (await this.ensureSelfTransferExclusion(pair, codes, months)) count++;
     }
     return count;
+  }
+
+  /** 은행 행을 방향에 맞는 '분류 제외'로 보정 — 이미 분류돼 있으면 분류만 교체, 아니면 거래 생성. */
+  private async ensureSelfTransferExclusion(
+    row: BankRowLite & {
+      excludeReason?: string | null;
+      transactionId?: number | null;
+      transaction?: { categoryCode: string } | null;
+    },
+    codes: { expense?: string; income?: string },
+    months: Set<string>,
+  ): Promise<boolean> {
+    const isExpense = Number(row.withdrawal) > 0;
+    const target = isExpense ? codes.expense : codes.income;
+    if (!target) return false;
+    if (row.transaction?.categoryCode === target) return false; // 이미 올바름
+
+    if (row.transactionId) {
+      // 이미 다른 분류로 잡힌 거래(예: 기타수입) → 분류만 '분류 제외'로 교체
+      await this.prisma.transaction.update({
+        where: { id: row.transactionId },
+        data: { categoryCode: target },
+      });
+      if (row.excludeReason) {
+        await this.prisma.bankTransaction.update({
+          where: { id: row.id },
+          data: { excludeReason: null },
+        });
+      }
+    } else {
+      const amount = isExpense ? Number(row.withdrawal) : Number(row.deposit);
+      const day = startOfDay(row.txnAt);
+      const tx = await this.prisma.transaction.create({
+        data: {
+          householdId: row.householdId,
+          type: isExpense ? 'expense' : 'income',
+          categoryCode: target,
+          paymentMethodId: row.paymentMethodId,
+          description: row.description,
+          amount,
+          transactionDate: day,
+          settledDate: day,
+          status: 'settled',
+        },
+      });
+      await this.prisma.bankTransaction.update({
+        where: { id: row.id },
+        data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
+      });
+    }
+    months.add(row.txnAt.toISOString().slice(0, 7));
+    return true;
   }
 }
 
