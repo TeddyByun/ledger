@@ -557,6 +557,74 @@ export class StatementTxnService {
     return { count: agg._count, usageAmount, payAmount };
   }
 
+  /**
+   * 분류 불일치 점검 — 조회 기간·카드 내에서 '같은 가맹점명'이 2개 이상 서로 다른 분류로
+   * 분류된 건을 찾아 반환한다. (분류 필터는 무시 — 교차 분류를 봐야 하므로)
+   */
+  async cardCategoryConflicts(query: StatementTxnQueryDto) {
+    const where: Prisma.CardTransactionWhereInput = {
+      transactionId: { not: null }, // 분류된 것만
+    };
+    const pmIds = parseIdList(query.paymentMethodIds, query.paymentMethodId);
+    if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
+    else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
+    if (query.from || query.to) {
+      where.txnDate = {
+        ...(query.from && { gte: new Date(`${query.from}T00:00:00.000Z`) }),
+        ...(query.to && { lte: new Date(`${query.to}T00:00:00.000Z`) }),
+      };
+    }
+    if (query.q) where.merchantName = { contains: query.q, mode: 'insensitive' };
+
+    const rows = await this.prisma.cardTransaction.findMany({
+      where,
+      select: {
+        merchantName: true,
+        transaction: {
+          select: { categoryCode: true, category: { select: { name: true } } },
+        },
+      },
+    });
+
+    // 가맹점명 → (분류코드 → { name, count })
+    const byMerchant = new Map<string, Map<string, { name: string; count: number }>>();
+    for (const r of rows) {
+      const code = r.transaction?.categoryCode;
+      if (!code) continue;
+      const name = r.transaction?.category?.name ?? code;
+      let cats = byMerchant.get(r.merchantName);
+      if (!cats) {
+        cats = new Map();
+        byMerchant.set(r.merchantName, cats);
+      }
+      const e = cats.get(code) ?? { name, count: 0 };
+      e.count++;
+      cats.set(code, e);
+    }
+
+    const items = [];
+    for (const [merchantName, cats] of byMerchant) {
+      if (cats.size < 2) continue; // 서로 다른 분류가 2개 이상인 것만
+      const categories = [...cats.entries()]
+        .map(([categoryCode, c]) => ({
+          categoryCode,
+          categoryName: c.name,
+          count: c.count,
+        }))
+        .sort((a, b) => b.count - a.count);
+      items.push({
+        merchantName,
+        total: categories.reduce((s, c) => s + c.count, 0),
+        categories,
+      });
+    }
+    // 분류 가짓수 많은 순 → 건수 많은 순
+    items.sort(
+      (a, b) => b.categories.length - a.categories.length || b.total - a.total,
+    );
+    return { items };
+  }
+
   /** 선택한 카드 거래들의 분류를 일괄 변경(미분류 행은 거래 생성·확정). */
   async bulkClassifyCard(ids: number[], categoryCode: string) {
     const hid = requireTenant().householdId;

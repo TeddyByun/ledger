@@ -61,6 +61,12 @@ export class StatementTxnController {
     return this.service.findCardSummary(query);
   }
 
+  @Get('card-transactions/category-conflicts')
+  @ApiOperation({ summary: '같은 가맹점명이 서로 다른 분류로 분류된 목록' })
+  cardCategoryConflicts(@Query() query: StatementTxnQueryDto) {
+    return this.service.cardCategoryConflicts(query);
+  }
+
   @Get('card-transactions/export')
   @ApiOperation({ summary: '카드 조회 결과 엑셀(xlsx) 내보내기' })
   async cardExport(

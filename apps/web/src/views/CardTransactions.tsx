@@ -29,6 +29,11 @@ interface CardSummary {
   usageAmount: number;
   payAmount: number;
 }
+interface ConflictItem {
+  merchantName: string;
+  total: number;
+  categories: { categoryCode: string; categoryName: string; count: number }[];
+}
 
 /** 금액 표기 — 음수(할인·환급)는 −₩ 대신 ₩ 앞에 부호를 붙여 표시 */
 function signed(n: number): string {
@@ -97,6 +102,7 @@ export function CardTransactions() {
   const { sort, toggle, param: sortParam } = useSort([{ col: 'date', dir: 'desc' }]);
   // 조회 조건 전체에 대한 합계(이용금액·결제금액·건수)
   const [summary, setSummary] = useState<CardSummary | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
 
   // 선택 + 일괄 작업
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -195,6 +201,7 @@ export function CardTransactions() {
     setLoading(true);
     setError(null);
     setSummary(null);
+    setConflicts([]);
     setSelected(new Set());
     load(true, applied, sortParam, 0)
       .catch((e) => setError(e.message))
@@ -203,6 +210,12 @@ export function CardTransactions() {
       .get<CardSummary>(`/card-transactions/summary?${filterParams(applied)}`)
       .then(setSummary)
       .catch(() => setSummary(null));
+    api
+      .get<{ items: ConflictItem[] }>(
+        `/card-transactions/category-conflicts?${filterParams(applied)}`,
+      )
+      .then((r) => setConflicts(r.items))
+      .catch(() => setConflicts([]));
   }, [applied, sortParam, load]);
 
   const exportXlsx = () => {
@@ -547,6 +560,68 @@ export function CardTransactions() {
             )}
           </div>
         </div>
+
+        {/* 분류 불일치 — 같은 가맹점, 다른 분류 */}
+        {!loading && (
+          <div className="card pad-0" style={{ marginTop: 18 }}>
+            <div className="card-head" style={{ padding: '16px 20px 8px' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>분류 불일치</h3>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                  조회 기간 내 같은 가맹점명인데 서로 다른 분류로 분류된 건입니다.
+                  가맹점명을 누르면 해당 내역만 조회해 분류를 통일할 수 있습니다.
+                </div>
+              </div>
+              <span className="tag">{conflicts.length}개 가맹점</span>
+            </div>
+            {conflicts.length === 0 ? (
+              <div className="muted" style={{ padding: '6px 20px 16px', fontSize: 13 }}>
+                분류가 엇갈린 가맹점이 없습니다.
+              </div>
+            ) : (
+              <div style={{ padding: '4px 12px 10px' }}>
+                {conflicts.map((c) => (
+                  <div
+                    key={c.merchantName}
+                    style={{
+                      display: 'flex',
+                      gap: 12,
+                      alignItems: 'baseline',
+                      padding: '10px 8px',
+                      borderBottom: '1px solid var(--line)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <b
+                      onClick={() => {
+                        const next = { ...applied, q: c.merchantName };
+                        setDraft(next);
+                        setApplied(next);
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        minWidth: 200,
+                        color: 'var(--brand, #0F766E)',
+                      }}
+                      title="이 가맹점만 조회"
+                    >
+                      {c.merchantName}
+                    </b>
+                    <div
+                      style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}
+                    >
+                      {c.categories.map((cat) => (
+                        <span key={cat.categoryCode} className="pill plain">
+                          {cat.categoryName} · {cat.count}건
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </>
   );
