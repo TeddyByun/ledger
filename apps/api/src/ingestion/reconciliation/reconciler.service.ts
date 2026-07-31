@@ -257,7 +257,7 @@ export class ReconcilerService {
     if (excludedPm.length === 0) return 0;
 
     const rows = await this.prisma.cardTransaction.findMany({
-      where: { paymentMethodId: { in: excludedPm }, isCanceled: 'N' },
+      where: { paymentMethodId: { in: excludedPm } },
       include: { transaction: { select: { categoryCode: true } } },
     });
     let count = 0;

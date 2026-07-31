@@ -818,8 +818,9 @@ export class StatementTxnService {
 
     // 2) 미분류 행 처리
     const recMatchers = await this.recurringMatchers();
+    // 취소행(is_canceled)도 포함 — 금액과 무관하게 같은 분류로 자동 분류(환불은 지출에서 차감)
     const pending = await this.prisma.cardTransaction.findMany({
-      where: { transactionId: null, isCanceled: 'N' },
+      where: { transactionId: null },
     });
     let byRecurring = 0;
     let byHistory = 0;

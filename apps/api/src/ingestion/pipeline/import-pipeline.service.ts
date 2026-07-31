@@ -483,9 +483,9 @@ export class ImportPipelineService {
         },
       });
 
-      // 실지출 금액 = 결제원금 + 이자. 취소행만 제외(환불 음수·할인/포인트 0원은 규칙 매칭 시 분류).
+      // 실지출 금액 = 결제원금 + 이자. 금액·취소 여부와 무관하게 규칙 매칭 시 같은 분류로.
+      // (환불 음수는 지출에서 차감, 취소·0원 조정행은 0으로 반영 — 오분류 없음)
       const amount = r.principal + r.fee;
-      if (r.isCanceled) continue;
 
       const categoryCode = await this.classifier.classify(r.merchantName);
       if (!categoryCode) {
