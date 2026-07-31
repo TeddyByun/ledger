@@ -479,6 +479,84 @@ export class StatementTxnService {
     };
   }
 
+  /**
+   * 은행 분류 불일치 — 조회 기간·계좌 내에서 '같은 내용(description)'이 2개 이상 서로 다른
+   * 분류로 분류된 건을 반환. 방향(출금=지출/입금=수입)이 다르면 별개로 취급(오탐 방지).
+   */
+  async bankCategoryConflicts(query: StatementTxnQueryDto) {
+    const where: Prisma.BankTransactionWhereInput = {
+      transactionId: { not: null }, // 분류된 것만
+    };
+    const pmIds = parseIdList(query.paymentMethodIds, query.paymentMethodId);
+    if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
+    else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
+    if (query.txnType) where.txnTypeRaw = query.txnType;
+    if (query.from || query.to) {
+      where.txnAt = {
+        ...(query.from && { gte: new Date(`${query.from}T00:00:00.000Z`) }),
+        ...(query.to && { lte: new Date(`${query.to}T23:59:59.999Z`) }),
+      };
+    }
+    if (query.q) where.description = { contains: query.q, mode: 'insensitive' };
+
+    const rows = await this.prisma.bankTransaction.findMany({
+      where,
+      select: {
+        description: true,
+        withdrawal: true,
+        deposit: true,
+        transaction: {
+          select: { categoryCode: true, category: { select: { name: true } } },
+        },
+      },
+    });
+
+    // (방향:내용) → (분류코드 → { name, count })
+    const byKey = new Map<
+      string,
+      { content: string; direction: 'out' | 'in'; cats: Map<string, { name: string; count: number }> }
+    >();
+    for (const r of rows) {
+      const content = r.description?.trim();
+      if (!content) continue;
+      const code = r.transaction?.categoryCode;
+      if (!code) continue;
+      const direction = Number(r.withdrawal) > 0 ? 'out' : 'in';
+      const key = `${direction}:${content}`;
+      let g = byKey.get(key);
+      if (!g) {
+        g = { content, direction, cats: new Map() };
+        byKey.set(key, g);
+      }
+      const name = r.transaction?.category?.name ?? code;
+      const e = g.cats.get(code) ?? { name, count: 0 };
+      e.count++;
+      g.cats.set(code, e);
+    }
+
+    const items = [];
+    for (const g of byKey.values()) {
+      if (g.cats.size < 2) continue;
+      const categories = [...g.cats.entries()]
+        .map(([categoryCode, c]) => ({
+          categoryCode,
+          categoryName: c.name,
+          count: c.count,
+        }))
+        .sort((a, b) => b.count - a.count);
+      items.push({
+        content: g.content,
+        direction: g.direction,
+        total: categories.reduce((s, c) => s + c.count, 0),
+        categories,
+      });
+    }
+    items.sort(
+      (a, b) => b.categories.length - a.categories.length || b.total - a.total,
+    );
+    return { items };
+  }
+
   // ── 카드 원천 거래 (card_transaction) ───────────────────
   async findCard(query: StatementTxnQueryDto) {
     const limit = query.limit ?? 50;

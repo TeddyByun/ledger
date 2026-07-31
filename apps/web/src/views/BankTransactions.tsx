@@ -45,6 +45,12 @@ interface BankSummary {
   withdrawal: number;
   deposit: number;
 }
+interface ConflictItem {
+  content: string;
+  direction: 'out' | 'in';
+  total: number;
+  categories: { categoryCode: string; categoryName: string; count: number }[];
+}
 
 /** 필터 → 쿼리 파라미터(limit/cursor 제외) — 목록·합계 공용. 기간은 년월 → 일자 변환 */
 function filterParams(f: Filters): URLSearchParams {
@@ -84,6 +90,7 @@ export function BankTransactions() {
   const [applied, setApplied] = useState<Filters>(withDefaults);
   // 조회 조건 전체에 대한 합계(출금·입금·건수)
   const [summary, setSummary] = useState<BankSummary | null>(null);
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
 
   // 건별 인라인 편집
   const [editId, setEditId] = useState<number | null>(null);
@@ -211,6 +218,7 @@ export function BankTransactions() {
     setError(null);
     setSelected(new Set());
     setSummary(null);
+    setConflicts([]);
     load(true, applied, sortParam, 0)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -218,6 +226,12 @@ export function BankTransactions() {
       .get<BankSummary>(`/bank-transactions/summary?${filterParams(applied)}`)
       .then(setSummary)
       .catch(() => setSummary(null));
+    api
+      .get<{ items: ConflictItem[] }>(
+        `/bank-transactions/category-conflicts?${filterParams(applied)}`,
+      )
+      .then((r) => setConflicts(r.items))
+      .catch(() => setConflicts([]));
   }, [applied, sortParam, load]);
 
   const exportXlsx = () => {
@@ -606,6 +620,72 @@ export function BankTransactions() {
             )}
           </div>
         </div>
+
+        {/* 분류 불일치 — 같은 내용, 다른 분류 */}
+        {!loading && (
+          <div className="card pad-0" style={{ marginTop: 18 }}>
+            <div className="card-head" style={{ padding: '16px 20px 8px' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>분류 불일치</h3>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                  조회 기간 내 같은 내용인데 서로 다른 분류로 분류된 건입니다(출금·입금은 별개).
+                  내용을 누르면 해당 내역만 조회해 분류를 통일할 수 있습니다.
+                </div>
+              </div>
+              <span className="tag">{conflicts.length}건</span>
+            </div>
+            {conflicts.length === 0 ? (
+              <div className="muted" style={{ padding: '6px 20px 16px', fontSize: 13 }}>
+                분류가 엇갈린 내용이 없습니다.
+              </div>
+            ) : (
+              <div style={{ padding: '4px 12px 10px' }}>
+                {conflicts.map((c) => (
+                  <div
+                    key={`${c.direction}:${c.content}`}
+                    style={{
+                      display: 'flex',
+                      gap: 12,
+                      alignItems: 'baseline',
+                      padding: '10px 8px',
+                      borderBottom: '1px solid var(--line)',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span
+                      className={`pill ${c.direction === 'in' ? 'settled' : 'plain'}`}
+                      style={{ flex: 'none' }}
+                    >
+                      {c.direction === 'in' ? '입금' : '출금'}
+                    </span>
+                    <b
+                      onClick={() => {
+                        const next = { ...applied, q: c.content };
+                        setDraft(next);
+                        setApplied(next);
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        minWidth: 180,
+                        color: 'var(--brand, #0F766E)',
+                      }}
+                      title="이 내용만 조회"
+                    >
+                      {c.content}
+                    </b>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+                      {c.categories.map((cat) => (
+                        <span key={cat.categoryCode} className="pill plain">
+                          {cat.categoryName} · {cat.count}건
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </>
   );

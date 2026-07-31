@@ -39,6 +39,12 @@ export class StatementTxnController {
     return this.service.findBankSummary(query);
   }
 
+  @Get('bank-transactions/category-conflicts')
+  @ApiOperation({ summary: '같은 내용이 서로 다른 분류로 분류된 목록' })
+  bankCategoryConflicts(@Query() query: StatementTxnQueryDto) {
+    return this.service.bankCategoryConflicts(query);
+  }
+
   @Get('bank-transactions/export')
   @ApiOperation({ summary: '은행 조회 결과 엑셀(xlsx) 내보내기' })
   async bankExport(
