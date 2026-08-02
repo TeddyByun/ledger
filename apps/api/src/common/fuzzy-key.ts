@@ -15,12 +15,13 @@ export function fuzzyKey(s: string | null | undefined): string {
 /**
  * 정기지출 그룹화·매칭 전용 키 — 모든 숫자(가운데 월/식별번호 포함)와 기호를 제거하고
  * 문자만 남긴다. 예: 메리츠06-212 / 메리츠05-192 → "메리츠", 카카오페이((..)) → "카카오페이..".
- * 숫자만인 내용(예: 계좌번호 5459...)은 문자가 없어 비므로 fuzzyKey(끝숫자만 제거)로 폴백.
+ * 문자가 없는 내용(예: 가상계좌번호 56991019696425)은 fuzzyKey(끝숫자 제거)로 폴백하고,
+ * 그래도 비면 숫자 전체(정규화 문자열)를 키로 쓴다 — 매월 같은 번호면 그룹화되도록.
  * ⚠ 추천·recurring_expense.match_key·forecast 매칭에서 동일하게 사용해야 매칭이 일치한다.
  */
 export function recurringKey(s: string | null | undefined): string {
   const letters = normKey(s)
     .replace(/[0-9]+/g, '')
     .replace(/[^\p{L}]/gu, '');
-  return letters || fuzzyKey(s);
+  return letters || fuzzyKey(s) || normKey(s);
 }
