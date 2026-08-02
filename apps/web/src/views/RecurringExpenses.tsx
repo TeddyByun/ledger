@@ -367,14 +367,7 @@ export function RecurringExpenses() {
                             <td>
                               <span className="tag">{r.categoryName}</span>
                             </td>
-                            <td className="muted">
-                              {CADENCE_LABEL[r.cadence]}
-                              {r.cadence === 'annual' && r.months.length > 0 && (
-                                <div className="muted" style={{ fontSize: 11 }}>
-                                  {r.months.join(',')}월
-                                </div>
-                              )}
-                            </td>
+                            <td className="muted">{CADENCE_LABEL[r.cadence]}</td>
                             <td className="money">
                               <AmountEdit
                                 value={r.amount}
@@ -668,7 +661,6 @@ function AddForm({
   const [categoryCode, setCategoryCode] = useState('');
   const [amount, setAmount] = useState('');
   const [cadence, setCadence] = useState<Cadence>('monthly');
-  const [months, setMonths] = useState<number[]>([]);
   const [amountType, setAmountType] = useState<AmountType>('fixed');
   const [endYm, setEndYm] = useState('');
   const [paymentMethodId, setPaymentMethodId] = useState('');
@@ -676,22 +668,15 @@ function AddForm({
     .filter((c) => c.type === 'expense')
     .sort((a, b) => a.code.localeCompare(b.code));
 
-  const toggleMonth = (m: number) =>
-    setMonths((p) =>
-      p.includes(m) ? p.filter((x) => x !== m) : [...p, m].sort((a, b) => a - b),
-    );
-
-  const annualNeedsMonth = cadence === 'annual' && months.length === 0;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!label || !categoryCode || !amount || annualNeedsMonth) return;
+    if (!label || !categoryCode || !amount) return;
     onAdd({
       label,
       categoryCode,
       amount: Number(amount),
       amountType,
       cadence,
-      months: cadence === 'annual' ? months : undefined,
       endYm: endYm || undefined,
       paymentMethodId: paymentMethodId ? Number(paymentMethodId) : undefined,
       source: 'manual',
@@ -700,7 +685,6 @@ function AddForm({
     setAmount('');
     setEndYm('');
     setAmountType('fixed');
-    setMonths([]);
   };
 
   return (
@@ -734,24 +718,6 @@ function AddForm({
             <option value="schedule">만기까지(대출·적금)</option>
           </select>
         </div>
-        {cadence === 'annual' && (
-          <div className="field" style={{ minWidth: 260 }}>
-            <label>발생 월 {annualNeedsMonth && <span style={{ color: 'var(--warn)' }}>· 선택 필요</span>}</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`btn sm ${months.includes(m) ? 'primary' : 'ghost'}`}
-                  onClick={() => toggleMonth(m)}
-                  style={{ padding: '4px 0', minWidth: 30, justifyContent: 'center' }}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="field" style={{ minWidth: 120 }}>
           <label>예상금액</label>
           <input className="input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="30000" min={0} required />
@@ -789,7 +755,7 @@ function AddForm({
             ))}
           </select>
         </div>
-        <button className="btn primary" type="submit" disabled={busy || !label || !categoryCode || !amount || annualNeedsMonth}>
+        <button className="btn primary" type="submit" disabled={busy || !label || !categoryCode || !amount}>
           추가
         </button>
         {categoryCode && (
