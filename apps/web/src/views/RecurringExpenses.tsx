@@ -83,6 +83,21 @@ export function RecurringExpenses() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // 행 편집 모드 — 수정 버튼으로 모든 컬럼 편집
+  const [editId, setEditId] = useState<number | null>(null);
+  const [ef, setEf] = useState<{
+    label: string;
+    categoryCode: string;
+    cadence: Cadence;
+    amount: string;
+    amountType: AmountType;
+    dayOfMonth: string;
+    endYm: string;
+  } | null>(null);
+  const catOpts = [...cats]
+    .filter((c) => c.type === 'expense')
+    .sort((a, b) => a.code.localeCompare(b.code));
+
   const load = useCallback(async () => {
     const [sug, list] = await Promise.all([
       api.get<Suggestion[]>('/recurring-expenses/suggestions'),
@@ -201,6 +216,38 @@ export function RecurringExpenses() {
     }
   };
 
+  const startEdit = (r: RecurringRow) => {
+    setEditId(r.id);
+    setEf({
+      label: r.label,
+      categoryCode: r.categoryCode,
+      cadence: r.cadence,
+      amount: String(r.amount),
+      amountType: r.amountType,
+      dayOfMonth: r.dayOfMonth != null ? String(r.dayOfMonth) : '',
+      endYm: r.endYm ?? '',
+    });
+  };
+  const cancelEdit = () => {
+    setEditId(null);
+    setEf(null);
+  };
+  const saveEdit = async () => {
+    if (editId == null || !ef) return;
+    if (!ef.label.trim() || !ef.categoryCode || !ef.amount) return;
+    await patch(editId, {
+      label: ef.label.trim(),
+      categoryCode: ef.categoryCode,
+      cadence: ef.cadence,
+      amount: Number(ef.amount),
+      amountType: ef.amountType,
+      dayOfMonth: ef.dayOfMonth ? Number(ef.dayOfMonth) : null,
+      endYm: ef.endYm || null,
+    });
+    setEditId(null);
+    setEf(null);
+  };
+
   return (
     <>
       <header className="topbar">
@@ -298,7 +345,7 @@ export function RecurringExpenses() {
             <div className="card" style={{ marginBottom: 18 }}>
               <div className="card-head">
                 <h3>내 정기지출</h3>
-                <span className="sub">체크(활성)된 항목만 예측에 반영됩니다 · 예상금액·금액변동·예상 지출일·만기는 표에서 바로 수정 · 컬럼명을 클릭하면 정렬(Ctrl+클릭=다중)</span>
+                <span className="sub">체크(활성)된 항목만 예측에 반영됩니다 · 맨 우측 <b>수정</b>으로 모든 컬럼 편집 · 컬럼명을 클릭하면 정렬(Ctrl+클릭=다중)</span>
               </div>
               {rows.length === 0 ? (
                 <div className="empty">
@@ -348,99 +395,166 @@ export function RecurringExpenses() {
                               <input
                                 type="checkbox"
                                 checked={r.isActive === 'Y'}
-                                disabled={busy}
+                                disabled={busy || editId === r.id}
                                 onChange={(e) =>
                                   patch(r.id, { isActive: e.target.checked ? 'Y' : 'N' })
                                 }
                                 aria-label="예측 포함"
                               />
                             </td>
-                            <td>
-                              <b>{r.label}</b>
-                              {r.source === 'auto' && (
-                                <span className="muted" style={{ fontSize: 11 }}>
-                                  {' '}
-                                  · 추천
-                                </span>
-                              )}
-                            </td>
-                            <td>
-                              <span className="tag">{r.categoryName}</span>
-                            </td>
-                            <td className="muted">{CADENCE_LABEL[r.cadence]}</td>
-                            <td className="money">
-                              <AmountEdit
-                                value={r.amount}
-                                disabled={busy}
-                                onCommit={(v) => patch(r.id, { amount: v })}
-                              />
-                            </td>
-                            <td>
-                              <select
-                                className="select"
-                                value={r.amountType}
-                                disabled={busy}
-                                title="고정 = 매월 같은 금액 · 변동 = 달마다 달라짐(예상금액은 평균치)"
-                                onChange={(e) => patch(r.id, { amountType: e.target.value })}
-                                style={{ width: 92, padding: '6px 8px' }}
-                              >
-                                <option value="fixed">고정</option>
-                                <option value="variable">변동</option>
-                              </select>
-                            </td>
-                            <td>
-                              <DayEdit
-                                value={r.dayOfMonth}
-                                disabled={busy}
-                                onCommit={(v) => patch(r.id, { dayOfMonth: v })}
-                              />
-                            </td>
-                            <td>
-                              {/* 만기는 주기와 무관하게 모든 항목에 지정 가능(할부·구독 등) */}
-                              <MonthPicker
-                                value={r.endYm}
-                                disabled={busy}
-                                placeholder="만기 없음"
-                                highlight={r.needsMaturity}
-                                title="만기 년월 — 이 달까지만 예측에 포함됩니다"
-                                onChange={(v) => patch(r.id, { endYm: v })}
-                              />
-                              {r.needsMaturity && (
-                                <div className="muted" style={{ fontSize: 11, color: 'var(--warn)' }}>
-                                  만기 입력 필요
-                                </div>
-                              )}
-                              {r.remainingMonths != null && r.endYm && (
-                                <div className="muted" style={{ fontSize: 11 }}>
-                                  잔여 {r.remainingMonths}개월
-                                </div>
-                              )}
-                              {!r.endYm && !r.needsMaturity && (
-                                <div className="muted" style={{ fontSize: 11 }}>
-                                  만기 없음(계속)
-                                </div>
-                              )}
-                            </td>
-                            <td>
-                              <span style={{ color: st.c, fontSize: 12, fontWeight: 600 }}>
-                                {st.t}
-                              </span>
-                              {r.occurredAmount > 0 && (
-                                <div className="muted" style={{ fontSize: 11 }}>
-                                  ₩{won(r.occurredAmount)}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ textAlign: 'right' }}>
-                              <button
-                                className="btn ghost sm"
-                                style={{ color: 'var(--expense)' }}
-                                disabled={busy}
-                                onClick={() => remove(r)}
-                              >
-                                삭제
-                              </button>
-                            </td>
+                            {editId === r.id && ef ? (
+                              <>
+                                <td>
+                                  <input
+                                    className="input"
+                                    value={ef.label}
+                                    onChange={(e) => setEf({ ...ef, label: e.target.value })}
+                                    style={{ minWidth: 120 }}
+                                  />
+                                </td>
+                                <td>
+                                  <select
+                                    className="select"
+                                    value={ef.categoryCode}
+                                    onChange={(e) => setEf({ ...ef, categoryCode: e.target.value })}
+                                    style={{ minWidth: 130 }}
+                                  >
+                                    {catOpts.map((c) => (
+                                      <option key={c.code} value={c.code}>
+                                        {c.depth === 2 ? '　└ ' : ''}
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td>
+                                  <select
+                                    className="select"
+                                    value={ef.cadence}
+                                    onChange={(e) => setEf({ ...ef, cadence: e.target.value as Cadence })}
+                                    style={{ width: 128 }}
+                                  >
+                                    <option value="monthly">매월</option>
+                                    <option value="annual">연례</option>
+                                    <option value="schedule">만기까지</option>
+                                  </select>
+                                </td>
+                                <td className="money">
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min={0}
+                                    value={ef.amount}
+                                    onChange={(e) => setEf({ ...ef, amount: e.target.value })}
+                                    style={{ width: 110, textAlign: 'right' }}
+                                  />
+                                </td>
+                                <td>
+                                  <select
+                                    className="select"
+                                    value={ef.amountType}
+                                    onChange={(e) => setEf({ ...ef, amountType: e.target.value as AmountType })}
+                                    style={{ width: 92, padding: '6px 8px' }}
+                                  >
+                                    <option value="fixed">고정</option>
+                                    <option value="variable">변동</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min={1}
+                                    max={31}
+                                    placeholder="일"
+                                    value={ef.dayOfMonth}
+                                    onChange={(e) => setEf({ ...ef, dayOfMonth: e.target.value })}
+                                    style={{ width: 64 }}
+                                  />
+                                </td>
+                                <td>
+                                  <MonthPicker
+                                    value={ef.endYm || null}
+                                    placeholder="만기 없음"
+                                    title="만기 년월 — 이 달까지만 예측에 포함됩니다"
+                                    onChange={(v) => setEf({ ...ef, endYm: v ?? '' })}
+                                  />
+                                </td>
+                                <td>
+                                  <span style={{ color: st.c, fontSize: 12, fontWeight: 600 }}>
+                                    {st.t}
+                                  </span>
+                                </td>
+                                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <button className="btn primary sm" disabled={busy} onClick={saveEdit}>
+                                    저장
+                                  </button>{' '}
+                                  <button className="btn ghost sm" disabled={busy} onClick={cancelEdit}>
+                                    취소
+                                  </button>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td>
+                                  <b>{r.label}</b>
+                                  {r.source === 'auto' && (
+                                    <span className="muted" style={{ fontSize: 11 }}> · 추천</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <span className="tag">{r.categoryName}</span>
+                                </td>
+                                <td className="muted">{CADENCE_LABEL[r.cadence]}</td>
+                                <td className="money">₩{won(r.amount)}</td>
+                                <td className="muted">{AMOUNT_TYPE_LABEL[r.amountType]}</td>
+                                <td className="muted">
+                                  {r.dayOfMonth ? `${r.dayOfMonth}일` : '—'}
+                                </td>
+                                <td>
+                                  <span className={r.needsMaturity ? '' : 'muted'} style={r.needsMaturity ? { color: 'var(--warn)' } : undefined}>
+                                    {r.endYm ?? '만기 없음'}
+                                  </span>
+                                  {r.needsMaturity && (
+                                    <div className="muted" style={{ fontSize: 11, color: 'var(--warn)' }}>
+                                      만기 입력 필요
+                                    </div>
+                                  )}
+                                  {r.remainingMonths != null && r.endYm && (
+                                    <div className="muted" style={{ fontSize: 11 }}>
+                                      잔여 {r.remainingMonths}개월
+                                    </div>
+                                  )}
+                                </td>
+                                <td>
+                                  <span style={{ color: st.c, fontSize: 12, fontWeight: 600 }}>
+                                    {st.t}
+                                  </span>
+                                  {r.occurredAmount > 0 && (
+                                    <div className="muted" style={{ fontSize: 11 }}>
+                                      ₩{won(r.occurredAmount)}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <button
+                                    className="btn ghost sm"
+                                    disabled={busy || editId != null}
+                                    onClick={() => startEdit(r)}
+                                  >
+                                    수정
+                                  </button>{' '}
+                                  <button
+                                    className="btn ghost sm"
+                                    style={{ color: 'var(--expense)' }}
+                                    disabled={busy || editId != null}
+                                    onClick={() => remove(r)}
+                                  >
+                                    삭제
+                                  </button>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         );
                       })}
@@ -463,184 +577,6 @@ export function RecurringExpenses() {
         )}
       </main>
     </>
-  );
-}
-
-/** 예상 지출일(1~31) 인라인 편집 — 비우면 미지정. */
-function DayEdit({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number | null;
-  disabled?: boolean;
-  onCommit: (v: number | null) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value == null ? '' : String(value));
-
-  useEffect(() => {
-    if (!editing) setDraft(value == null ? '' : String(value));
-  }, [value, editing]);
-
-  const commit = () => {
-    setEditing(false);
-    const t = draft.trim();
-    if (t === '') {
-      if (value != null) onCommit(null);
-      return;
-    }
-    const n = Math.round(Number(t));
-    if (!Number.isFinite(n) || n < 1 || n > 31 || n === value) {
-      setDraft(value == null ? '' : String(value));
-      return;
-    }
-    onCommit(n);
-  };
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        title="클릭해서 예상 지출일 수정 (1~31, 비우면 미지정)"
-        onClick={() => setEditing(true)}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          borderRadius: 8,
-          padding: '4px 6px',
-          cursor: disabled ? 'default' : 'text',
-          color: value == null ? 'var(--faint)' : 'var(--ink-2)',
-          font: 'inherit',
-          fontVariantNumeric: 'tabular-nums',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          whiteSpace: 'nowrap',
-        }}
-        onMouseEnter={(e) => {
-          if (!disabled) e.currentTarget.style.boxShadow = 'var(--nm-in-sm)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      >
-        {value == null ? '미지정' : `매월 ${value}일`}
-        <span className="muted" style={{ fontSize: 10.5 }}>
-          ✎
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <input
-      className="input"
-      type="number"
-      min={1}
-      max={31}
-      autoFocus
-      placeholder="1~31"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onFocus={(e) => e.currentTarget.select()}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
-        if (e.key === 'Escape') {
-          setDraft(value == null ? '' : String(value));
-          setEditing(false);
-        }
-      }}
-      style={{ width: 78, padding: '6px 8px', textAlign: 'right' }}
-    />
-  );
-}
-
-/** 예상금액 인라인 편집 — 클릭하면 입력, Enter/포커스아웃 저장, Esc 취소. */
-function AmountEdit({
-  value,
-  disabled,
-  onCommit,
-}: {
-  value: number;
-  disabled?: boolean;
-  onCommit: (v: number) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value));
-
-  useEffect(() => {
-    if (!editing) setDraft(String(value));
-  }, [value, editing]);
-
-  const commit = () => {
-    setEditing(false);
-    const n = Math.round(Number(draft.replace(/[^0-9.]/g, '')));
-    if (!Number.isFinite(n) || n <= 0 || n === value) {
-      setDraft(String(value));
-      return;
-    }
-    onCommit(n);
-  };
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        title="클릭해서 예상금액 수정"
-        onClick={() => setEditing(true)}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          borderRadius: 8,
-          padding: '4px 6px',
-          cursor: disabled ? 'default' : 'text',
-          color: 'var(--expense)',
-          font: 'inherit',
-          fontWeight: 700,
-          fontVariantNumeric: 'tabular-nums',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-        onMouseEnter={(e) => {
-          if (!disabled) e.currentTarget.style.boxShadow = 'var(--nm-in-sm)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      >
-        −₩{won(value)}
-        <span className="muted" style={{ fontSize: 10.5 }}>
-          ✎
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <input
-      className="input"
-      type="number"
-      min={0}
-      step={100}
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onFocus={(e) => e.currentTarget.select()}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') commit();
-        if (e.key === 'Escape') {
-          setDraft(String(value));
-          setEditing(false);
-        }
-      }}
-      style={{ width: 116, padding: '6px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
-    />
   );
 }
 
