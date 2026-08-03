@@ -135,6 +135,11 @@ export class ReconcilerService {
     // 아직 거래·제외로 확정되지 않은 순수 미분류 행
     const isPending = (r: (typeof rows)[number]) =>
       !r.transactionId && !r.excludeReason;
+    // 이미 '분류 제외'(지출18/수입19)로 확정된 행 — 짝 판단의 강한 앵커
+    const isExcluded = (r: (typeof rows)[number]) =>
+      r.transaction?.categoryCode === codes.expense ||
+      r.transaction?.categoryCode === codes.income ||
+      r.excludeReason === 'self_transfer';
 
     // 입금 행을 (금액|날짜) 키로 색인
     const depByKey = new Map<string, typeof rows>();
@@ -158,9 +163,12 @@ export class ReconcilerService {
           !used.has(d.id) &&
           d.paymentMethodId !== w.paymentMethodId &&
           isOwnPair(w.paymentMethod?.owner, d.paymentMethod?.owner) &&
-          // 이미 분류/제외된 행을 건드릴 땐 '같은 이름' 필수(오탐 방지),
+          // 한쪽이 이미 '분류 제외'면 이름이 달라도 짝으로 인정(강한 앵커),
+          // 이미 분류됐지만 제외가 아니면 '같은 이름' 필수(오탐 방지),
           // 둘 다 순수 미분류면 이름 없이도 매칭(기존 동작 유지).
-          ((wDesc !== '' && nd(d.description) === wDesc) ||
+          (isExcluded(w) ||
+            isExcluded(d) ||
+            (wDesc !== '' && nd(d.description) === wDesc) ||
             (isPending(w) && isPending(d))),
       );
       if (!pair) continue;
