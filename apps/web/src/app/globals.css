@@ -139,7 +139,7 @@ h1,h2,h3,h4 { margin:0; letter-spacing:-.02em; }
 /* buttons / inputs */
 .btn { border:0; background:var(--surface); color:var(--ink-2); font-weight:700; font-size:13px;
   padding:11px 18px; border-radius:var(--r); cursor:pointer; display:inline-flex; align-items:center; gap:8px;
-  box-shadow:var(--nm-out-sm); font-family:inherit; transition:all .13s ease; }
+  box-shadow:var(--nm-out-sm); font-family:inherit; transition:all .13s ease; white-space:nowrap; }
 .btn:hover { color:var(--ink); }
 .btn:active { box-shadow:var(--nm-in); }
 .btn:disabled { opacity:.55; cursor:not-allowed; }
