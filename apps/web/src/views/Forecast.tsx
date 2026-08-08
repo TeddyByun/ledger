@@ -64,6 +64,7 @@ interface FlowSide {
 }
 interface CashflowData {
   ym: string;
+  scope: { accountId: number; accountName: string; options: { id: number; name: string }[] };
   daysInMonth: number;
   today: number | null;
   isCurrentMonth: boolean;
@@ -78,6 +79,8 @@ interface CashflowData {
   income: FlowSide;
   expense: FlowSide;
   net: number;
+  unscheduled: { income: number; expense: number };
+  lowest: DayRow;
   daily: DayRow[];
   prevYm: string;
 }
@@ -116,31 +119,33 @@ const shiftMonth = (ym: string, delta: number) => {
 
 export function Forecast(_props: { onNavigate: (v: View) => void }) {
   const [ym, setYm] = useState(thisMonth);
+  const [acct, setAcct] = useState<number | null>(null);
   const [cf, setCf] = useState<CashflowData | null>(null);
   const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (m: string) => {
+  const load = useCallback(async (m: string, a: number | null) => {
     const [c, f] = await Promise.all([
-      api.get<CashflowData>(`/stats/cashflow?ym=${m}`),
+      api.get<CashflowData>(`/stats/cashflow?ym=${m}${a ? `&accountId=${a}` : ''}`),
       api.get<ForecastData>(`/stats/forecast?ym=${m}`),
     ]);
     setCf(c);
     setData(f);
+    setAcct((prev) => prev ?? c.scope.accountId); // 첫 조회 시 기본 계좌 고정
   }, []);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    load(ym)
+    load(ym, acct)
       .catch((e) => {
         setCf(null);
         setData(null);
         setError((e as Error).message);
       })
       .finally(() => setLoading(false));
-  }, [ym, load]);
+  }, [ym, acct, load]);
 
   const abc = data?.abc ?? { A: 0, B: 0, C: 0 };
   const totalAbc = Math.max(1, abc.A + abc.B + abc.C);
@@ -157,8 +162,9 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
           <div className="titles">
             <h1>예상 수입•지출</h1>
             <p>
-              은행 거래 기준으로 그 달의 수입·지출과 <b>일자별 잔액</b>을 예측합니다. 카드는 사용
-              시점이 아니라 <b>전월 이용액이 이번 달 카드대금</b>으로 빠져나가는 날에 반영됩니다.
+              선택한 <b>은행 계좌 1개</b>를 기준으로 그 달의 수입·지출과 <b>일자별 잔액</b>을
+              예측합니다. 카드는 사용 시점이 아니라 <b>전월 이용액이 이번 달 카드대금</b>으로
+              빠져나가는 날에 반영됩니다.
             </p>
           </div>
         </div>
@@ -194,6 +200,23 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
             <button className="btn" onClick={() => setYm(thisMonth())}>
               이번 달
             </button>
+            {cf && (
+              <div className="field" style={{ minWidth: 190 }}>
+                <label>기준 계좌</label>
+                <select
+                  className="select"
+                  value={acct ?? cf.scope.accountId}
+                  onChange={(e) => setAcct(Number(e.target.value))}
+                  title="이 계좌의 입출금만으로 일자별 잔액을 예측합니다"
+                >
+                  {cf.scope.options.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -237,23 +260,34 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
                   color={cf.closing.balance >= 0 ? 'var(--ink)' : 'var(--expense)'}
                   strong
                 />
+                <Metric
+                  label={`최저 잔액 (${cf.lowest.date.slice(5)})`}
+                  value={cf.lowest.balance}
+                  color="var(--warn)"
+                  strong
+                />
               </div>
               <div className="muted" style={{ fontSize: 12, marginTop: 12, lineHeight: 1.7 }}>
-                기준 계좌: {cf.opening.accounts.map((a) => a.name).join(' · ') || '없음'}
+                기준 계좌: <b>{cf.scope.accountName}</b> 1개 — 이 계좌의 입출금만 계산합니다(다른
+                계좌에서 들어오는 이체도 이 계좌의 수입으로 잡습니다).
                 {cf.opening.excludedAccounts.length > 0 && (
-                  <> · 제외(집계 제외 계좌): {cf.opening.excludedAccounts.join(' · ')}</>
+                  <> 제외: {cf.opening.excludedAccounts.join(' · ')}</>
                 )}
                 <br />
                 {cf.actualUntil > 0
                   ? `1~${cf.actualUntil}일은 실제 은행 거래, ${cf.actualUntil + 1}일부터 예측입니다.`
                   : '해당 월의 은행 거래가 아직 없어 전체를 예측했습니다.'}
+                <br />
+                예측은 <b>날짜가 특정되는 현금 흐름만</b> 잡습니다. 날짜가 일정하지 않은 흐름(수입 약
+                ₩{won(cf.unscheduled.income)} · 지출 약 ₩{won(cf.unscheduled.expense)})은 일자별
+                잔액에 <b>포함하지 않았습니다</b> — 그만큼 여유를 두고 보세요.
               </div>
             </div>
 
             {/* 1. 예상 수입 목록 */}
             <FlowSection
               title="예상 수입"
-              sub="최근 6개월 은행 입금에서 반복 항목을 찾아 예측합니다 (자기이체·분류 제외 항목 제외)"
+              sub="이 계좌에 실제로 들어오는 입금 중 날짜·금액이 반복되는 것만 (다른 계좌에서 오는 이체 포함)"
               accent="var(--income)"
               side={cf.income}
               flow="income"
@@ -262,7 +296,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
             {/* 2. 예상 지출 목록 */}
             <FlowSection
               title="예상 지출"
-              sub="카드대금(전월 이용액) · 정기 출금 · 변동 지출을 은행 출금 기준으로 예측합니다"
+              sub="이 계좌에서 실제로 나가는 출금만 — 카드대금·정기 출금·반복 출금 (날짜 미확정 지출은 제외)"
               accent="var(--expense)"
               side={cf.expense}
               flow="expense"
@@ -472,7 +506,7 @@ function FlowSection({
             <tbody>
               {side.predictedItems.map((l, i) => (
                 <tr key={i}>
-                  <td className="mono">{l.day == null ? '매일' : `${l.day}일`}</td>
+                  <td className="mono">{l.day == null ? '—' : `${l.day}일`}</td>
                   <td>
                     <span className="pill plain">{FLOW_KIND_LABEL[l.kind]}</span>
                   </td>
