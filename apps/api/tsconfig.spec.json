@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 테스트는 워크스페이스 패키지(@ledger/shared)의 소스를 직접 컴파일하므로
+    // rootDir 을 모노레포 루트까지 넓힌다(noEmit 이라 출력 경로에는 영향 없음).
+    "rootDir": "../..",
+    "noEmit": true,
+    // jest 전역(describe/it/expect) 추가. multer/express 는 컨트롤러 시그니처에
+    // 필요하므로 명시해야 한다 — types 를 지정하면 자동 포함이 꺼진다.
+    "types": ["node", "jest", "multer", "express"],
+    "paths": {
+      // 빌드 없이 테스트가 돌도록 dist 대신 소스를 가리킨다.
+      "@ledger/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "../../packages/shared/src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,828 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 가계부 DB v2 — SKILL_DB_Design.md 규칙 적용 (제안본, 아직 미적용)
+//
+//   설계서: design/DATABASE_V2_DESIGN.md
+//   검증:   pnpm exec prisma validate --schema prisma/schema.v2.prisma
+//
+// 규칙 요약
+//   · 접미어  _mt 마스터 / _ct 코드 / _tt 업무 / _rt 마스터↔마스터 관계
+//   · 식별자  전 테이블 uuid (gen_random_uuid())
+//   · 참조    물리 FK 없음 → relationMode = "prisma" (논리 연결만)
+//             모든 관계에 onDelete/onUpdate: Restrict — 참조 무결성은 앱이 보장하므로
+//             Prisma 가 임의로 cascade/set-null 하지 못하게 막는다. (Postgres +
+//             relationMode="prisma" 에서는 NoAction 이 미구현이라 Restrict 를 쓴다)
+//   · _mt 는 **다른** _mt 를 가리키는 컬럼을 두지 않는다 (household_id 포함, 결정 V1)
+//     → 인라인 허용 예외 2가지: ⓐ 코드(_ct) 참조  ⓑ 같은 테이블 자기참조 계층(parent_id)
+//     → 서로 다른 마스터 간 관계만 _rt 로 분리
+//   · _tt 는 마스터·코드·부모업무를 인라인 uuid 로 자유롭게 참조 (§8.1)
+//   · 공통    id / created_at / updated_at,  _tt 는 is_deleted / deleted_at 추가
+//     (예외: append-only 토큰 2종, 재생성 대상 monthly_* 4종 — 설계서 §1.5)
+//
+// Prisma 모델명에 접미어를 그대로 남겨 애플리케이션 코드에서도 분류가 드러나게 한다.
+// 코드(_ct) 참조는 @relation 을 걸지 않고 uuid 스칼라로 둔다 — 부팅 시 코드 전량을
+// 메모리에 올리는 CodeService 가 해석한다(설계서 §7).
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "postgresql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma" // 물리 FK 생성 안 함 (결정 V4)
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CODE (_ct) — 도메인별 1개 테이블 + code_group 으로 세분
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// code_group: SYSTEM_ROLE(OPERATOR|USER) · HOUSEHOLD_ROLE(OWNER|MEMBER|VIEWER)
+///             · MEMBER_RELATION(SELF|SPOUSE|CHILD|PARENT|ETC)
+model UserCt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeGroup String   @map("code_group") @db.VarChar(40)
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([codeGroup, code])
+  @@map("user_ct")
+}
+
+/// code_group: METHOD_TYPE(BANK|CARD) · ISSUER(HANA_BANK|HANA_CARD|HYUNDAI_CARD|SHINHAN_CARD|SAMSUNG_CARD)
+model PaymentCt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeGroup String   @map("code_group") @db.VarChar(40)
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([codeGroup, code])
+  @@map("payment_ct")
+}
+
+/// code_group: TRANSACTION_TYPE(INCOME|EXPENSE) · TRANSACTION_STATUS(SETTLED|PENDING|INFO)
+///             · EXCLUDE_REASON(CARD_SETTLEMENT|SELF_TRANSFER|TRANSFER) · COUNTERPARTY_TYPE
+model TransactionCt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeGroup String   @map("code_group") @db.VarChar(40)
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([codeGroup, code])
+  @@map("transaction_ct")
+}
+
+/// code_group: BANK_TXN_TYPE(v1 bank_txn_type 테이블 이관) · BANK_TXN_DIRECTION(IN|OUT|BOTH)
+///             · IMPORT_STATUS(QUEUED|PARSING|CLASSIFYING|REVIEW|COMPLETED|FAILED)
+model StatementCt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeGroup String   @map("code_group") @db.VarChar(40)
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([codeGroup, code])
+  @@map("statement_ct")
+}
+
+/// code_group: MATCH_TYPE(CONTAINS|EXACT|REGEX) · RECURRING_CADENCE(MONTHLY|ANNUAL|SCHEDULE)
+///             · RECURRING_SOURCE(AUTO|MANUAL)
+model RuleCt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codeGroup String   @map("code_group") @db.VarChar(40)
+  code      String   @db.VarChar(40)
+  name      String   @db.VarChar(100)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([codeGroup, code])
+  @@map("rule_ct")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MASTER (_mt) — 자기 속성 + 코드 참조만. 다른 _mt 참조 금지
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// 가구 (테넌시 단위)
+model HouseholdMt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  userLinks         HouseholdUserRt[]
+  familyMemberLinks HouseholdFamilyMemberRt[]
+  paymentMethodLinks HouseholdPaymentMethodRt[]
+  counterpartyLinks  HouseholdCounterpartyRt[]
+  recurringLinks     HouseholdRecurringExpenseRt[]
+
+  @@map("household_mt")
+}
+
+/// 로그인 계정. 사람(가족 구성원)과는 user_family_member_rt 로 연결한다.
+/// 최초 등록 1명만 systemRole = OPERATOR (설계서 §3)
+model UserMt {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @db.VarChar(200)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  name         String    @db.VarChar(50)
+  /// → user_ct.id (code_group='SYSTEM_ROLE')
+  systemRoleId String    @map("system_role_id") @db.Uuid
+  /// systemRole 파생값. 부분 유니크 인덱스로 운영자를 물리적으로 1명으로 제한한다.
+  isOperator   Boolean   @default(false) @map("is_operator")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  householdLinks    HouseholdUserRt[]
+  familyMemberLink  UserFamilyMemberRt?
+  refreshTokens     RefreshTokenTt[]
+  passwordResets    PasswordResetTokenTt[]
+
+  // 이메일 대소문자 무시 유니크는 `CREATE UNIQUE INDEX ON user_mt (lower(email))` 로
+  // 마이그레이션 SQL 에 직접 넣는다(Prisma 미지원). 아래는 보조 유니크.
+  @@unique([email])
+  @@index([systemRoleId])
+  @@map("user_mt")
+}
+
+/// 가족 구성원 = 사람. 지출 명의. 로그인 계정이 없어도 존재한다(자녀 등).
+/// 대표(본인) 여부는 가구 안에서의 관계 속성이므로 household_family_member_rt 에 둔다.
+model FamilyMemberMt {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @db.VarChar(50)
+  /// → user_ct.id (code_group='MEMBER_RELATION')
+  relationId String?  @map("relation_id") @db.Uuid
+  color      String?  @db.VarChar(20)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  householdLinks     HouseholdFamilyMemberRt[]
+  userLink           UserFamilyMemberRt?
+  paymentMethodLinks PaymentMethodFamilyMemberRt[]
+  transactions       TransactionTt[]
+
+  @@index([relationId])
+  @@map("family_member_mt")
+}
+
+/// 결제수단(카드/계좌). 가구 소유는 household_payment_method_rt, 명의자는
+/// payment_method_family_member_rt (v1 owner 자유문자열을 승격).
+model PaymentMethodMt {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @db.VarChar(100)
+  /// → payment_ct.id (code_group='METHOD_TYPE')
+  methodTypeId String   @map("method_type_id") @db.Uuid
+  /// → payment_ct.id (code_group='ISSUER')
+  issuerId     String?  @map("issuer_id") @db.Uuid
+  identifier   String?  @db.VarChar(50)
+  /// 카드 식별번호 — 마스킹 저장(뒤 4자리 노출). 은행은 null
+  cardNo       String?  @map("card_no") @db.VarChar(20)
+  accountNo    String?  @map("account_no") @db.VarChar(50)
+  memo         String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  householdLinks    HouseholdPaymentMethodRt[]
+  familyMemberLinks PaymentMethodFamilyMemberRt[]
+  recurringLinks    RecurringExpensePaymentMethodRt[]
+  transactions      TransactionTt[]
+  bankTransactions  BankTransactionTt[]
+  cardStatements    CardStatementTt[]                @relation("CardOfStatement")
+  settledStatements CardStatementTt[]                @relation("SettleAccount")
+  cardTransactions  CardTransactionTt[]
+  installmentPlans  InstallmentPlanTt[]
+  importJobs        ImportJobTt[]
+  monthlyStats      MonthlyPaymentStatTt[]
+
+  @@index([methodTypeId])
+  @@index([issuerId])
+  @@map("payment_method_mt")
+}
+
+/// 거래상대(수입처·거래처)
+model CounterpartyMt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(200)
+  /// → transaction_ct.id (code_group='COUNTERPARTY_TYPE')
+  typeId    String?  @map("type_id") @db.Uuid
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  householdLinks HouseholdCounterpartyRt[]
+  transactions   TransactionTt[]
+  monthlyStats   MonthlySourceStatTt[]
+
+  @@index([typeId])
+  @@map("counterparty_mt")
+}
+
+/// 분류 — **전역 마스터**. 쓰기는 OPERATOR 전용 (결정 V2, 감사 #20 해소).
+/// 상위-하위는 **같은 테이블 안의 계층**이므로 parent_id 인라인 컬럼으로 둔다
+/// (SKILL §5.4 예외 B — 자기참조는 _rt 로 빼지 않는다).
+model CategoryMt {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// '0501' — 시드 안정성·파서 규칙 호환용 자연키 (설계서 §9-2 미결)
+  code      String   @unique @db.VarChar(20)
+  name      String   @db.VarChar(100)
+  /// ⭕ 자기참조 계층 → category_mt.id (SKILL §5.4 예외 B)
+  parentId  String?  @map("parent_id") @db.Uuid
+  /// → transaction_ct.id (code_group='TRANSACTION_TYPE')
+  typeId    String   @map("type_id") @db.Uuid
+  depth     Int      @default(1)
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  parent   CategoryMt?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  children CategoryMt[] @relation("CategoryTree")
+
+  merchantRules  MerchantRuleCategoryRt[]
+  recurringLinks RecurringExpenseCategoryRt[]
+  transactions   TransactionTt[]
+  monthlyStats   MonthlyCategoryStatTt[]
+
+  @@index([parentId])
+  @@index([typeId])
+  @@map("category_mt")
+}
+
+/// 가맹점 자동분류 규칙 — **전역 마스터**. 쓰기는 OPERATOR 전용.
+model MerchantRuleMt {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pattern     String   @db.VarChar(200)
+  /// → rule_ct.id (code_group='MATCH_TYPE')
+  matchTypeId String   @map("match_type_id") @db.Uuid
+  priority    Int      @default(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  categoryLink MerchantRuleCategoryRt?
+
+  @@index([matchTypeId])
+  @@index([priority])
+  @@map("merchant_rule_mt")
+}
+
+/// 정기지출 규칙 (예측 R4/R6/R7). 정책성 기준정보로 보아 _mt 로 분류.
+/// → 가구·분류·결제수단 3개 참조가 전부 _rt 가 된다 (설계서 §9-1 미결)
+model RecurringExpenseMt {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label       String   @db.VarChar(100)
+  amount      Decimal  @db.Decimal(15, 2)
+  /// → rule_ct.id (code_group='RECURRING_CADENCE')
+  cadenceId   String   @map("cadence_id") @db.Uuid
+  /// → rule_ct.id (code_group='RECURRING_SOURCE')
+  sourceId    String   @map("source_id") @db.Uuid
+  /// annual 발생 월(1~12)
+  months      Int[]    @default([])
+  startYm     String?  @map("start_ym") @db.Char(7)
+  /// 만기 년월(R7). 지나면 예측 종료
+  endYm       String?  @map("end_ym") @db.Char(7)
+  dayOfMonth  Int?     @map("day_of_month")
+  /// 자동 매칭 키(fuzzyKey). 없으면 label 에서 파생 — 감사 P1 #9
+  matchKey    String?  @map("match_key") @db.VarChar(100)
+  memo        String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  householdLink     HouseholdRecurringExpenseRt?
+  categoryLink      RecurringExpenseCategoryRt?
+  paymentMethodLink RecurringExpensePaymentMethodRt?
+
+  @@index([cadenceId])
+  @@map("recurring_expense_mt")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RELATION (_rt) — 마스터↔마스터. 관계 속성은 여기에 둔다
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// 가구 ↔ 계정 (+ 가구 내 역할). 한 계정이 여러 가구에 속할 수 있다.
+model HouseholdUserRt {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String   @map("household_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  /// → user_ct.id (code_group='HOUSEHOLD_ROLE')
+  householdRoleId String   @map("household_role_id") @db.Uuid
+  /// 기본 가구. `CREATE UNIQUE INDEX ... (user_id) WHERE is_primary` 로 1건 보장
+  isPrimary       Boolean  @default(false) @map("is_primary")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  household HouseholdMt @relation(fields: [householdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  user      UserMt      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, userId])
+  @@index([userId])
+  @@index([householdRoleId])
+  @@map("household_user_rt")
+}
+
+/// 가구 ↔ 가족 구성원 (+ 대표 여부 = v1 is_self)
+model HouseholdFamilyMemberRt {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId      String   @map("household_id") @db.Uuid
+  familyMemberId   String   @map("family_member_id") @db.Uuid
+  /// `CREATE UNIQUE INDEX ... (household_id) WHERE is_representative` 로 가구당 1명 보장
+  isRepresentative Boolean  @default(false) @map("is_representative")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  household    HouseholdMt    @relation(fields: [householdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  familyMember FamilyMemberMt @relation(fields: [familyMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, familyMemberId])
+  @@index([familyMemberId])
+  @@map("household_family_member_rt")
+}
+
+/// 계정 ↔ 사람 (1:1). 양쪽 유니크로 강제한다.
+model UserFamilyMemberRt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @unique @map("user_id") @db.Uuid
+  familyMemberId String   @unique @map("family_member_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user         UserMt         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  familyMember FamilyMemberMt @relation(fields: [familyMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@map("user_family_member_rt")
+}
+
+/// 가구 ↔ 결제수단 — 테넌트 스코프 경로 (설계서 §4.2 TENANT_VIA_RT)
+model HouseholdPaymentMethodRt {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String   @map("household_id") @db.Uuid
+  paymentMethodId String   @map("payment_method_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  household     HouseholdMt     @relation(fields: [householdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  paymentMethod PaymentMethodMt @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, paymentMethodId])
+  @@index([paymentMethodId])
+  @@map("household_payment_method_rt")
+}
+
+/// 가구 ↔ 거래상대 — 테넌트 스코프 경로
+model HouseholdCounterpartyRt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId    String   @map("household_id") @db.Uuid
+  counterpartyId String   @map("counterparty_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  household    HouseholdMt    @relation(fields: [householdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  counterparty CounterpartyMt @relation(fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, counterpartyId])
+  @@index([counterpartyId])
+  @@map("household_counterparty_rt")
+}
+
+/// 가구 ↔ 정기지출 — 테넌트 스코프 경로
+model HouseholdRecurringExpenseRt {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId        String   @map("household_id") @db.Uuid
+  recurringExpenseId String   @unique @map("recurring_expense_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  household        HouseholdMt        @relation(fields: [householdId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  recurringExpense RecurringExpenseMt @relation(fields: [recurringExpenseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([householdId])
+  @@map("household_recurring_expense_rt")
+}
+
+/// 결제수단 ↔ 명의자 (v1 payment_method.owner 문자열 승격)
+model PaymentMethodFamilyMemberRt {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentMethodId String   @unique @map("payment_method_id") @db.Uuid
+  familyMemberId  String   @map("family_member_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  paymentMethod PaymentMethodMt @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  familyMember  FamilyMemberMt  @relation(fields: [familyMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([familyMemberId])
+  @@map("payment_method_family_member_rt")
+}
+
+/// 가맹점 규칙 ↔ 분류
+model MerchantRuleCategoryRt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  merchantRuleId String   @unique @map("merchant_rule_id") @db.Uuid
+  categoryId     String   @map("category_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  merchantRule MerchantRuleMt @relation(fields: [merchantRuleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  category     CategoryMt     @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([categoryId])
+  @@map("merchant_rule_category_rt")
+}
+
+/// 정기지출 ↔ 분류
+model RecurringExpenseCategoryRt {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recurringExpenseId String   @unique @map("recurring_expense_id") @db.Uuid
+  categoryId         String   @map("category_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  recurringExpense RecurringExpenseMt @relation(fields: [recurringExpenseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  category         CategoryMt         @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([categoryId])
+  @@map("recurring_expense_category_rt")
+}
+
+/// 정기지출 ↔ 결제수단
+model RecurringExpensePaymentMethodRt {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recurringExpenseId String   @unique @map("recurring_expense_id") @db.Uuid
+  paymentMethodId    String   @map("payment_method_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  recurringExpense RecurringExpenseMt @relation(fields: [recurringExpenseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  paymentMethod    PaymentMethodMt    @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([paymentMethodId])
+  @@map("recurring_expense_payment_method_rt")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TRANSACTION (_tt) — 마스터·코드·부모업무를 인라인 uuid 로 참조 (§8.1)
+//   household_id 를 인라인으로 갖기 때문에 Prisma 미들웨어 자동 스코핑이 유효하다
+// ═════════════════════════════════════════════════════════════════════════════
+
+/// 거래 (수입/지출 공용)
+model TransactionTt {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String    @map("household_id") @db.Uuid
+  /// → transaction_ct.id (TRANSACTION_TYPE)
+  typeId          String    @map("type_id") @db.Uuid
+  /// → transaction_ct.id (TRANSACTION_STATUS)
+  statusId        String    @map("status_id") @db.Uuid
+  categoryId      String    @map("category_id") @db.Uuid
+  counterpartyId  String?   @map("counterparty_id") @db.Uuid
+  paymentMethodId String    @map("payment_method_id") @db.Uuid
+  /// 지출 명의 — 계정이 아니라 사람(family_member_mt)을 가리킨다
+  familyMemberId  String?   @map("family_member_id") @db.Uuid
+  description     String?
+  /// v1 은 nullable 이었다 → NOT NULL 로 강화 (합계에서 조용히 누락되는 문제)
+  amount          Decimal   @db.Decimal(15, 2)
+  transactionDate DateTime  @map("transaction_date") @db.Date
+  settledDate     DateTime? @map("settled_date") @db.Date
+  memo            String?
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  category      CategoryMt      @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  counterparty  CounterpartyMt? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  paymentMethod PaymentMethodMt @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  familyMember  FamilyMemberMt? @relation(fields: [familyMemberId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  bankTransaction BankTransactionTt?
+  cardTransaction CardTransactionTt?
+
+  // (householdId, ...) 복합은 테넌트 조회용.
+  @@index([householdId, transactionDate])
+  @@index([householdId, categoryId])
+  @@index([householdId, paymentMethodId])
+  // 단일 컬럼은 역방향 정합성 검사용 — 물리 FK 가 없으므로 "이 분류/결제수단을
+  // 참조하는 거래가 있는가?"를 앱이 쿼리로 확인해야 한다(설계서 §6.4).
+  @@index([categoryId])
+  @@index([paymentMethodId])
+  @@index([counterpartyId])
+  @@index([familyMemberId])
+  @@index([typeId])
+  @@index([statusId])
+  @@map("transaction_tt")
+}
+
+/// 은행 거래내역 (원천 적재)
+model BankTransactionTt {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String    @map("household_id") @db.Uuid
+  paymentMethodId String    @map("payment_method_id") @db.Uuid
+  transactionId   String?   @unique @map("transaction_id") @db.Uuid
+  /// → statement_ct.id (BANK_TXN_TYPE)
+  txnTypeId       String?   @map("txn_type_id") @db.Uuid
+  /// → transaction_ct.id (EXCLUDE_REASON)
+  excludeReasonId String?   @map("exclude_reason_id") @db.Uuid
+  /// 이관 시 KST 벽시계 값 보존 필요 (설계서 §5.4 주석)
+  txnAt           DateTime  @map("txn_at") @db.Timestamptz
+  /// 발급사 원문 보존 — 코드화하지 않는다
+  txnTypeRaw      String?   @map("txn_type_raw") @db.VarChar(100)
+  counterpartOrg  String?   @map("counterpart_org") @db.VarChar(200)
+  description     String?
+  withdrawal      Decimal   @default(0) @db.Decimal(15, 2)
+  deposit         Decimal   @default(0) @db.Decimal(15, 2)
+  balance         Decimal?  @db.Decimal(15, 2)
+  branch          String?   @db.VarChar(100)
+  isClassified    Boolean   @default(false) @map("is_classified")
+  importBatch     String?   @map("import_batch") @db.VarChar(50)
+  dedupHash       String?   @map("dedup_hash") @db.VarChar(64)
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  paymentMethod PaymentMethodMt @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transaction   TransactionTt?  @relation(fields: [transactionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, dedupHash])
+  @@index([householdId, txnAt])
+  @@index([paymentMethodId])
+  @@index([isClassified])
+  @@map("bank_transaction_tt")
+}
+
+/// 카드 명세서 (원천 적재)
+model CardStatementTt {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId      String    @map("household_id") @db.Uuid
+  paymentMethodId  String    @map("payment_method_id") @db.Uuid
+  settleAccountId  String?   @map("settle_account_id") @db.Uuid
+  statementYm      String    @map("statement_ym") @db.Char(7)
+  billingDate      DateTime? @map("billing_date") @db.Date
+  settleAccountRaw String?   @map("settle_account_raw") @db.VarChar(100)
+  totalAmount      Decimal?  @map("total_amount") @db.Decimal(15, 2)
+  lumpSum          Decimal   @default(0) @map("lump_sum") @db.Decimal(15, 2)
+  installmentAmt   Decimal   @default(0) @map("installment_amt") @db.Decimal(15, 2)
+  cashAdvance      Decimal   @default(0) @map("cash_advance") @db.Decimal(15, 2)
+  cardLoan         Decimal   @default(0) @map("card_loan") @db.Decimal(15, 2)
+  revolving        Decimal   @default(0) @db.Decimal(15, 2)
+  annualFee        Decimal   @default(0) @map("annual_fee") @db.Decimal(15, 2)
+  prevUnpaid       Decimal   @default(0) @map("prev_unpaid") @db.Decimal(15, 2)
+  lateFee          Decimal   @default(0) @map("late_fee") @db.Decimal(15, 2)
+  totalCount       Int?      @map("total_count")
+  benefitTotal     Decimal   @default(0) @map("benefit_total") @db.Decimal(15, 2)
+  creditFrom       DateTime? @map("credit_from") @db.Date
+  creditTo         DateTime? @map("credit_to") @db.Date
+  createdDate      DateTime? @map("created_date") @db.Date
+  isDeleted        Boolean   @default(false) @map("is_deleted")
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  card          PaymentMethodMt     @relation("CardOfStatement", fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  settleAccount PaymentMethodMt?    @relation("SettleAccount", fields: [settleAccountId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transactions  CardTransactionTt[]
+
+  @@unique([paymentMethodId, statementYm])
+  @@index([householdId])
+  @@index([settleAccountId])
+  @@map("card_statement_tt")
+}
+
+/// 카드 이용내역 (원천 적재)
+model CardTransactionTt {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId         String    @map("household_id") @db.Uuid
+  statementId         String    @map("statement_id") @db.Uuid
+  paymentMethodId     String    @map("payment_method_id") @db.Uuid
+  transactionId       String?   @unique @map("transaction_id") @db.Uuid
+  installmentPlanId   String?   @map("installment_plan_id") @db.Uuid
+  cardLabel           String?   @map("card_label") @db.VarChar(50)
+  /// 라벨에서 추출한 카드 식별번호 — 결제수단 매핑 키
+  cardNo              String?   @map("card_no") @db.VarChar(20)
+  txnDate             DateTime  @map("txn_date") @db.Date
+  merchantName        String    @map("merchant_name") @db.VarChar(200)
+  usageAmount         Decimal   @map("usage_amount") @db.Decimal(15, 2)
+  principal           Decimal   @db.Decimal(15, 2)
+  fee                 Decimal   @default(0) @db.Decimal(15, 2)
+  installmentPeriod   String?   @map("installment_period") @db.VarChar(10)
+  billingRound        String?   @map("billing_round") @db.VarChar(10)
+  installmentTotalAmt Decimal?  @map("installment_total_amt") @db.Decimal(15, 2)
+  /// 발급사 원문 보존 — 코드화하지 않는다
+  benefitType         String?   @map("benefit_type") @db.VarChar(50)
+  benefitRate         Decimal?  @map("benefit_rate") @db.Decimal(5, 2)
+  benefitAmount       Decimal   @default(0) @map("benefit_amount") @db.Decimal(15, 2)
+  benefitNote         String?   @map("benefit_note")
+  region              String?   @db.VarChar(50)
+  saleType            String?   @map("sale_type") @db.VarChar(50)
+  isCanceled          Boolean   @default(false) @map("is_canceled")
+  balanceAfter        Decimal?  @map("balance_after") @db.Decimal(15, 2)
+  pointName           String?   @map("point_name") @db.VarChar(50)
+  point               Decimal   @default(0) @db.Decimal(15, 2)
+  isClassified        Boolean   @default(false) @map("is_classified")
+  dedupHash           String?   @map("dedup_hash") @db.VarChar(64)
+  isDeleted           Boolean   @default(false) @map("is_deleted")
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  statement       CardStatementTt    @relation(fields: [statementId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  paymentMethod   PaymentMethodMt    @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transaction     TransactionTt?     @relation(fields: [transactionId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  installmentPlan InstallmentPlanTt? @relation(fields: [installmentPlanId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, dedupHash])
+  @@index([householdId, txnDate])
+  @@index([statementId])
+  @@index([paymentMethodId])
+  @@index([installmentPlanId])
+  @@index([isClassified])
+  @@map("card_transaction_tt")
+}
+
+/// 할부 원거래(최초 구매) — 매달 청구건이 참조
+model InstallmentPlanTt {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String    @map("household_id") @db.Uuid
+  paymentMethodId String    @map("payment_method_id") @db.Uuid
+  cardNo          String?   @map("card_no") @db.VarChar(20)
+  merchantName    String    @map("merchant_name") @db.VarChar(200)
+  originalDate    DateTime  @map("original_date") @db.Date
+  totalAmount     Decimal   @map("total_amount") @db.Decimal(15, 2)
+  totalMonths     Int       @map("total_months")
+  dedupKey        String    @map("dedup_key") @db.VarChar(200)
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  paymentMethod PaymentMethodMt     @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transactions  CardTransactionTt[]
+
+  @@unique([householdId, dedupKey])
+  @@index([paymentMethodId])
+  @@map("installment_plan_tt")
+}
+
+/// 적재 잡 (업로드 파이프라인 상태 추적)
+model ImportJobTt {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String    @map("household_id") @db.Uuid
+  paymentMethodId String?   @map("payment_method_id") @db.Uuid
+  /// → payment_ct.id (code_group='ISSUER')
+  issuerId        String    @map("issuer_id") @db.Uuid
+  /// → statement_ct.id (code_group='IMPORT_STATUS')
+  statusId        String    @map("status_id") @db.Uuid
+  fileKey         String    @map("file_key") @db.VarChar(500)
+  originalName    String?   @map("original_name") @db.VarChar(300)
+  statementYm     String?   @map("statement_ym") @db.Char(7)
+  parsedRows      Int       @default(0) @map("parsed_rows")
+  classifiedRows  Int       @default(0) @map("classified_rows")
+  pendingRows     Int       @default(0) @map("pending_rows")
+  error           String?
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  paymentMethod PaymentMethodMt? @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([householdId])
+  @@index([statusId])
+  @@index([paymentMethodId])
+  @@map("import_job_tt")
+}
+
+// ── append-only (§4 예외 — is_deleted/deleted_at 없음) ────────────────────────
+
+/// Refresh 토큰. v1 은 member_id 였고 v2 는 **계정**(user_mt)을 가리킨다.
+model RefreshTokenTt {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(128)
+  familyId   String    @map("family_id") @db.Uuid
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user UserMt @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_token_tt")
+}
+
+model PasswordResetTokenTt {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(128)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user UserMt @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId])
+  @@map("password_reset_token_tt")
+}
+
+// ── 월별 집계 (재생성 대상 — 설계서 §1.5, is_deleted 없음) ────────────────────
+
+model MonthlySummaryTt {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId        String   @map("household_id") @db.Uuid
+  ym                 String   @db.Char(7)
+  incomeTotal        Decimal  @default(0) @map("income_total") @db.Decimal(15, 2)
+  expenseTotal       Decimal  @default(0) @map("expense_total") @db.Decimal(15, 2)
+  netAmount          Decimal  @default(0) @map("net_amount") @db.Decimal(15, 2)
+  incomeCount        Int      @default(0) @map("income_count")
+  expenseCount       Int      @default(0) @map("expense_count")
+  transferExcluded   Decimal  @default(0) @map("transfer_excluded") @db.Decimal(15, 2)
+  cardSettleExcluded Decimal  @default(0) @map("card_settle_excluded") @db.Decimal(15, 2)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([householdId, ym])
+  @@map("monthly_summary_tt")
+}
+
+model MonthlyCategoryStatTt {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId String   @map("household_id") @db.Uuid
+  ym          String   @db.Char(7)
+  categoryId  String   @map("category_id") @db.Uuid
+  /// → transaction_ct.id (TRANSACTION_TYPE)
+  typeId      String   @map("type_id") @db.Uuid
+  amountTotal Decimal  @default(0) @map("amount_total") @db.Decimal(15, 2)
+  txCount     Int      @default(0) @map("tx_count")
+  ratio       Decimal? @db.Decimal(5, 2)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  category CategoryMt @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, ym, categoryId])
+  @@index([categoryId])
+  @@map("monthly_category_stat_tt")
+}
+
+model MonthlySourceStatTt {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId    String   @map("household_id") @db.Uuid
+  ym             String   @db.Char(7)
+  counterpartyId String   @map("counterparty_id") @db.Uuid
+  amountTotal    Decimal  @default(0) @map("amount_total") @db.Decimal(15, 2)
+  txCount        Int      @default(0) @map("tx_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  counterparty CounterpartyMt @relation(fields: [counterpartyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, ym, counterpartyId])
+  @@index([counterpartyId])
+  @@map("monthly_source_stat_tt")
+}
+
+model MonthlyPaymentStatTt {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  householdId     String   @map("household_id") @db.Uuid
+  ym              String   @db.Char(7)
+  paymentMethodId String   @map("payment_method_id") @db.Uuid
+  /// → payment_ct.id (code_group='METHOD_TYPE')
+  methodTypeId    String   @map("method_type_id") @db.Uuid
+  incomeTotal     Decimal  @default(0) @map("income_total") @db.Decimal(15, 2)
+  expenseTotal    Decimal  @default(0) @map("expense_total") @db.Decimal(15, 2)
+  txCount         Int      @default(0) @map("tx_count")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  paymentMethod PaymentMethodMt @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([householdId, ym, paymentMethodId])
+  @@index([paymentMethodId])
+  @@map("monthly_payment_stat_tt")
+}

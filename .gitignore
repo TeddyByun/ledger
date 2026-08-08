@@ -16,6 +16,9 @@ out/
 # Turbo
 .turbo/
 
+# 테스트 커버리지 리포트
+coverage/
+
 # Prisma 생성물
 **/generated/
 
