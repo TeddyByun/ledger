@@ -4,6 +4,11 @@
 > 핵심 원칙: **앱 로그인(자체 JWT)과 드라이브 연결(Google OAuth)은 완전히 별개 레이어**다.
 > 연동: [AUTH_DESIGN.md](AUTH_DESIGN.md) §11 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §1.3 · [ARCHITECTURE.md](ARCHITECTURE.md) §5(적재) · [DATABASE.md](DATABASE.md) §1(원본 시트)
 
+> ⚠️ **구현 현황 (as-built, 2026-08-01): 전체 미구현.**
+> Google OAuth 연결·Picker·드라이브 폴더·시트 가져오기 모두 코드가 없다(`google` 관련 의존성 없음).
+> 업로드 원본은 `ingestion/storage/storage.service.ts` 가 **로컬 디스크**(`UPLOAD_DIR`, 기본 `apps/api/uploads/`)에 저장하며,
+> 명세서는 사용자가 파일을 직접 첨부하는 방식(`POST /imports`)만 지원한다. 본 문서는 향후 설계안으로 유지.
+
 ---
 
 ## 1. 두 개의 인증 레이어 (혼동 금지)

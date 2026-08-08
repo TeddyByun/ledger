@@ -65,6 +65,12 @@
 
 ## 3. 목록 규약 (정렬 · 필터 · 페이지네이션)
 
+> **as-built (2026-08-01)**: 거래 목록은 설계대로 `{ items, page: { nextCursor, hasNext } }` 커서 방식이다.
+> 다만 **원천 거래(bank/card)와 `/transactions/unified` 는 `offset`+`limit`**(≤100)을 쓰며 `page`/`pageSize` 는 쓰지 않는다.
+> 소형 목록(categories·payment-methods·classify-keywords·recurring-expenses)은 **페이지네이션 없이 전량 반환**한다.
+> 합계는 목록 응답에 넣지 않고 **`GET …/summary` 로 분리**했다(정렬·페이지와 무관하게 조회 조건 전체 합계).
+> 알 수 없는 필터 파라미터 400 정책(§3.3)은 미적용 — 현재는 무시된다.
+
 ### 3.1 페이지네이션 — 리소스별 이원화
 
 | 방식 | 대상 | 이유 |
@@ -110,6 +116,9 @@
 ## 4. 잡 상태 통지 (폴링 vs 실시간)
 
 업로드 파이프라인(queued→parsing→classifying→review→completed/failed)의 진행 상태를 클라이언트에 전달하는 방식.
+
+> **as-built (2026-08-01)**: **폴링만 구현**(`GET /imports/{jobId}`). SSE 엔드포인트 `/imports/{jobId}/events` 는 미구현이고,
+> 프런트(`views/Imports.tsx`)는 업로드 후 잡 상태를 주기 조회한다. 큐 재시도·DLQ 설정도 기본값 그대로다.
 
 ### 4.1 결정: 폴링 기본 + SSE 선택 업그레이드
 

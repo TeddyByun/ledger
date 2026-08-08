@@ -1,6 +1,11 @@
 # 백엔드 부가기능 설계서 (감사 로그 · 데이터 내보내기)
 
 > 백로그 백엔드 남은 2항목(둘 다 🟢). 핵심 도메인은 완성됐고, 운영·신뢰성 보강 기능이다.
+>
+> **구현 현황 (as-built, 2026-08-01)**
+> - **감사 로그 §1 — ❌ 미구현.** `audit_log` 모델·인터셉터 모두 없다(Prisma 스키마에 테이블 없음). 설계안으로만 유지.
+> - **데이터 내보내기 §2 — ⚠️ 부분 구현(형태 상이).** 잡·CSV·서명 URL 방식이 아니라 **원천 거래 목록의 동기 xlsx 다운로드**로 만들었다:
+>   `GET /bank-transactions/export` · `GET /card-transactions/export` — 조회 필터를 그대로 받아 ExcelJS 로 워크북을 생성해 즉시 응답(금액 서식 포함). 거래(`/transactions`)·통계 export 는 없다.
 > 연동: [AUTH_DESIGN.md](AUTH_DESIGN.md) §4·§8(스코프·감사) · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md)(에러·잡·페이지네이션) · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §4(로그 구분)
 
 ---

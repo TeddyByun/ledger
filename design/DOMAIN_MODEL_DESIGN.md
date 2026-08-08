@@ -4,6 +4,16 @@
 > 세 모델은 서로 얽힌다: **member**(가족)에 지출·예산이 귀속되고, **반복지출**이 매월 거래를 생성하며, **예산**이 그 실적을 집계로 대비한다.
 > 연동: [DATABASE.md](DATABASE.md) §3(테이블)·§8(월 집계) · [AUTH_DESIGN.md](AUTH_DESIGN.md) §3(householdId 스코프) · [API_SPEC.md](API_SPEC.md)
 
+> **구현 현황 (as-built, 2026-08-01)**
+>
+> | 모델 | 상태 | 실제 구현 |
+> |------|------|-----------|
+> | **가족 구성원(§1)** | ⚠️ 부분 | `household_member` + 가족 관리 화면·`/household/members` CRUD 는 구현. `transaction.member_id` 컬럼은 있으나 **화면·집계에서 사용하지 않음**(명의별 지출 집계 미구현) |
+> | **예산(§2)** | ❌ 미구현 | `budget` 테이블·API·화면 모두 없음. 예산 소진율·초과 경고도 없음 |
+> | **반복/고정 지출(§3)** | ⚠️ 형태 상이 | `recurring_rule`(거래 자동 생성) 대신 **`recurring_expense`** 로 구현 — 거래를 만들지 않고 ① **예상 지출 예측**(EXPENSE_FORECAST_DESIGN) ② **자동분류 매칭 힌트**(match_key)로 쓴다. `transaction.is_recurring` 플래그는 없음 |
+>
+> 아래 §1~§6 중 예산·`recurring_rule` 절은 **미구현 설계안**으로 읽는다.
+
 ---
 
 ## 0. 세 모델의 관계

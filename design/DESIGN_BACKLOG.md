@@ -17,6 +17,56 @@
 | 공통(Cross-cutting) | 7 | 0 |
 | 인프라/운영 | 5 | 0 |
 
+> ⚠️ 위 표는 **설계 완료** 기준이다. 설계됐지만 **구현되지 않은** 항목이 있으므로, 구현 기준 현황은 아래 §0.1 을 본다.
+
+---
+
+## 0.1 구현 현황 (as-built, 2026-08-01)
+
+코드(`apps/api` 컨트롤러 13개 · `apps/web` 화면 14개 · `schema.prisma` 테이블 20개) ↔ 설계 문서 전수 대조 결과.
+
+### A. 설계 O / 구현 O
+
+인증·멀티테넌시(가구 스코프 미들웨어·RBAC·SuperAdmin) · 적재 파이프라인(업로드→파싱→정규화→자동분류→대사→집계) ·
+거래/분류/결제수단/가구 CRUD · 월별 집계 4종 + 재집계 · 예상 지출 규칙 엔진 + 정기지출 ·
+API 에러 계약(traceId 봉투) · 커서 페이지네이션 · 로컬 dev 환경 · 마이그레이션 · 헬스체크/env 검증 · 테스트 하네스(jest projects).
+
+### B. 설계 O / 구현 X — **설계안으로만 유지**
+
+| 항목 | 문서 | 비고 |
+|------|------|------|
+| **예산(Budget)** | DOMAIN_MODEL_DESIGN §2 | 테이블·API·화면 전무. 예산 소진율·초과 경고도 없음 |
+| **검토(pending) 확정 워크플로** | REVIEW_WORKFLOW_DESIGN | 잡 단위 확정 API·검토 화면 미구현 → 목록 화면 방식으로 대체(§0 as-built 절) |
+| **구글 드라이브 연동** | GOOGLE_DRIVE_DESIGN | 전체 미구현. 저장은 로컬 디스크 |
+| **감사 로그** | BACKEND_FEATURES_DESIGN §1 | `audit_log` 테이블 없음 |
+| **비밀번호 재설정 / 가구원 초대** | AUTH_DESIGN §5·§6 | 토큰 테이블만 존재. 초대 대신 owner 직접 생성 |
+| **CI/CD 파이프라인** | INFRA_OPS_DESIGN §3 | `.github/workflows` 없음 → PM2 수동 배포 |
+| **SSE 잡 통지** | API_CONVENTIONS_DESIGN §4.3 | 폴링만 구현 |
+| **프런트 스택**(TanStack Query·shadcn/Tailwind·zod 폼·Recharts·api-client 생성) | FRONTEND_DESIGN §2·§8~§10 | 전부 미도입 — 수기 fetch + 수기 CSS + 자체 SVG 차트 |
+| **DB V2 규칙(`_mt`/`_ct`/`_tt`)** | DATABASE_V2_DESIGN | 재설계 제안. 현행 스키마는 V1 계열 |
+
+### C. 구현 O / 설계에 없던 것 — **본 정비에서 문서 반영 완료**
+
+| 구현 | 반영 위치 |
+|------|-----------|
+| 자동분류 확장(정기지출 → 이력 학습 → 키워드 3단계 + 잔여 이체 처리) | ARCHITECTURE §5.1 · API_SPEC §9 |
+| 자동분류 재실행 버튼(`POST …/auto-classify`) | API_SPEC §7 |
+| **분류 제외** 대분류(지출 18 / 수입 19) 기반 집계 제외 | DATABASE §3.2 · §7.1.1 |
+| **집계 제외 결제수단**(`exclude_from_stats`) → 방향별 분류 제외 매핑 | DATABASE §3.1 · §7.1.1 |
+| 자기이체 짝 맞춤 보정(계좌 분할 업로드 대응) · 카드대금 승격 | DATABASE §7.1.1 |
+| **분류 불일치**(`category-conflicts`) 조회·교정 | API_SPEC §7 · ARCHITECTURE §5.1 |
+| **자동분류 키워드 관리** CRUD 화면·API | API_SPEC §8 · FRONTEND_DESIGN §0.3 |
+| 분류 관리(category) CRUD 화면 | API_SPEC §4 |
+| 원천 거래 화면(은행·카드) — 인라인/일괄 분류·일괄 삭제·정렬·필터 | FRONTEND_DESIGN §0.3·§0.4 |
+| **전체 거래 통합 목록**(`/transactions/unified`) + `/summary` | API_SPEC §6 |
+| **xlsx 내보내기**(은행·카드) | BACKEND_FEATURES_DESIGN 머리말 · API_SPEC §7 |
+| 대시보드/월별 추이/**결제수단별 추이** 조회 API·화면 | API_SPEC §11 · FRONTEND_DESIGN §0.3 |
+| **전체 운영 관리자** 가구 생성·삭제 | AUTH_DESIGN §12.4 |
+| 카드 관리 + 명세서 **감지 카드**(`detected-cards`) 매핑 | API_SPEC §5 |
+| 카드사별 **전용 파서 4종** | ARCHITECTURE §5 |
+| 단일 페이지(SPA) 셸 구조 — URL 라우팅 없음 | FRONTEND_DESIGN §0.1·§0.2 |
+| **월 현금흐름 예측**(`/stats/cashflow`) — 예상 수입 탐지·카드대금(전월 이용액)·일자별 잔액 | EXPENSE_FORECAST_DESIGN §10 · API_SPEC §11 |
+
 ---
 
 ## 1. 기획 · 데이터 (Foundation)
@@ -38,16 +88,16 @@
 ### 남음
 - [x] 🔴 **인증/인가** — 회원가입·로그인·JWT(Access/Refresh)·비밀번호 재설정·가드 · [AUTH_DESIGN.md](AUTH_DESIGN.md)
 - [x] 🔴 **멀티테넌시/데이터 소유권** — household 스코프, 쿼리 격리, 가구 RBAC · [AUTH_DESIGN.md](AUTH_DESIGN.md) §3·§4
-- [x] 🔴 **검토(pending) 확정 워크플로** — 확정 API + 규칙 학습(피드백) · [REVIEW_WORKFLOW_DESIGN.md](REVIEW_WORKFLOW_DESIGN.md)
-- [x] 🟡 **예산(Budget) 모델·API** — 예산 설정·소진율·초과 판정 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §2
-- [x] 🟡 **반복/고정 지출** — is_recurring + 자동 생성 규칙 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §3
-- [x] 🟡 **가족 구성원(member) 모델** — 지출 명의 귀속(본인/가족) · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §1
+- [x] 🔴 **검토(pending) 확정 워크플로** — 확정 API + 규칙 학습(피드백) · [REVIEW_WORKFLOW_DESIGN.md](REVIEW_WORKFLOW_DESIGN.md) · ⚙️ *설계만 — 목록 화면 방식으로 대체 구현(§0.1 B)*
+- [x] 🟡 **예산(Budget) 모델·API** — 예산 설정·소진율·초과 판정 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §2 · ⚙️ *설계만 — 미구현*
+- [x] 🟡 **반복/고정 지출** — is_recurring + 자동 생성 규칙 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §3 · ⚙️ *구현 형태 상이 — `recurring_expense`(예측·자동분류용, 거래 자동생성 없음)*
+- [x] 🟡 **가족 구성원(member) 모델** — 지출 명의 귀속(본인/가족) · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §1 · ⚙️ *구성원 CRUD 만 구현, `transaction.member_id` 미사용*
 - [x] 🟡 **API 규약 표준화** — 에러 포맷/코드, 정렬·필터 컨벤션, 커서 페이지네이션 · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §1·§2·§3
-- [x] 🟡 **잡 상태 통지 방식** — 폴링 vs SSE/WebSocket, 큐 재시도·DLQ · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4
+- [x] 🟡 **잡 상태 통지 방식** — 폴링 vs SSE/WebSocket, 큐 재시도·DLQ · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4 · ⚙️ *폴링만 구현, SSE 미구현*
 - [x] 🟡 **테스트 전략** — 단위/통합/e2e, 테스트 DB, 파서 픽스처(실파일·EUC-KR) · [TEST_STRATEGY_DESIGN.md](TEST_STRATEGY_DESIGN.md)
-- [x] 🟢 **감사 로그** — 거래 수정·삭제·업로드 이력 · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §1
-- [x] 🟢 **데이터 내보내기** — CSV/Excel export · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §2
-- [x] 🔴 **구글 드라이브 연동(파일 저장 + 기존 시트 가져오기)** — Google OAuth(별도 레이어)·drive.file+Picker·StorageService·가구 폴더 · [GOOGLE_DRIVE_DESIGN.md](GOOGLE_DRIVE_DESIGN.md)
+- [x] 🟢 **감사 로그** — 거래 수정·삭제·업로드 이력 · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §1 · ⚙️ *설계만 — 미구현*
+- [x] 🟢 **데이터 내보내기** — CSV/Excel export · [BACKEND_FEATURES_DESIGN.md](BACKEND_FEATURES_DESIGN.md) §2 · ⚙️ *원천 거래 xlsx 동기 다운로드로 구현(잡·CSV 아님)*
+- [x] 🔴 **구글 드라이브 연동(파일 저장 + 기존 시트 가져오기)** — Google OAuth(별도 레이어)·drive.file+Picker·StorageService·가구 폴더 · [GOOGLE_DRIVE_DESIGN.md](GOOGLE_DRIVE_DESIGN.md) · ⚙️ *설계만 — 미구현(로컬 디스크 저장)*
 
 ---
 
@@ -56,12 +106,12 @@
 - [x] 🔴 **프론트 아키텍처** — Next.js 구조·라우팅·렌더링·TanStack Query · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §2·§3·§4
 - [x] 🔴 **화면 목록 + IA** — 화면 인벤토리 + 내비게이션 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §5
 - [x] 🔴 **핵심 UX 플로우/와이어프레임** — 빠른입력·업로드→검토→확정·월말리뷰 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §6
-- [x] 🔴 **검토(review) UI 설계** — 추천 분류·일괄 확정·규칙 학습 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §7
-- [x] 🟡 **디자인 시스템** — Tailwind + shadcn/ui·다크모드·토큰 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §10
-- [x] 🟡 **데이터 페칭 계층** — api-client·캐싱·낙관적 업데이트·무효화 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §8
-- [x] 🟡 **폼/검증** — 공유 zod + react-hook-form · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §9
+- [x] 🔴 **검토(review) UI 설계** — 추천 분류·일괄 확정·규칙 학습 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §7 · ⚙️ *설계안 — 실제는 목록 화면 검토(§0.4)*
+- [x] 🟡 **디자인 시스템** — Tailwind + shadcn/ui·다크모드·토큰 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §10 · ⚙️ *구현은 수기 CSS 뉴모피즘 테마(globals.css)*
+- [x] 🟡 **데이터 페칭 계층** — api-client·캐싱·낙관적 업데이트·무효화 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §8 · ⚙️ *TanStack Query 미도입 — useEffect + fetch*
+- [x] 🟡 **폼/검증** — 공유 zod + react-hook-form · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §9 · ⚙️ *미도입 — 제어 컴포넌트 + 서버 검증*
 - [x] 🟡 **포맷팅/i18n** — 원화·날짜 로케일(ko-KR) · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §11
-- [x] 🟡 **시각화 상세** — 차트별 데이터·인터랙션 정교화(Recharts) · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §1
+- [x] 🟡 **시각화 상세** — 차트별 데이터·인터랙션 정교화(Recharts) · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §1 · ⚙️ *Recharts 대신 자체 SVG 차트 4종*
 - [x] 🟢 **상태 UX 상세** — 로딩/에러/빈/알림 컴포넌트 규격 · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §2
 - [x] 🟢 **반응형·접근성 상세** — 브레이크포인트·a11y 체크리스트 · [FRONTEND_UI_SPEC.md](FRONTEND_UI_SPEC.md) §3
 
@@ -75,10 +125,10 @@
 
 ### 남음
 - [x] 🔴 **인증/세션 전략 통합** — 웹(쿠키) vs 모바일(토큰) · [AUTH_DESIGN.md](AUTH_DESIGN.md) §2.3
-- [x] 🟡 **공유 검증 스키마(zod)** — 프론트 폼 ↔ 백엔드 DTO 단일 소스 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §9·§13
-- [x] 🟡 **api-client 생성 파이프라인** — OpenAPI JSON → packages/api-client · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §8·§13
+- [x] 🟡 **공유 검증 스키마(zod)** — 프론트 폼 ↔ 백엔드 DTO 단일 소스 · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §9·§13 · ⚙️ *설계만 — 미도입*
+- [x] 🟡 **api-client 생성 파이프라인** — OpenAPI JSON → packages/api-client · [FRONTEND_DESIGN.md](FRONTEND_DESIGN.md) §8·§13 · ⚙️ *설계만 — 수기 fetch 래퍼 사용*
 - [x] 🟡 **공통 에러 계약** — 에러 타입을 양쪽이 공유 · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §2
-- [x] 🟢 **실시간 잡 상태 전송 규약** — 폴링/SSE 선택(양쪽 영향) · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4
+- [x] 🟢 **실시간 잡 상태 전송 규약** — 폴링/SSE 선택(양쪽 영향) · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4 · ⚙️ *폴링만 구현*
 
 ---
 
@@ -90,7 +140,7 @@
 ### 남음
 - [x] 🟡 **로컬 개발 환경** — docker-compose(PostgreSQL + Redis), Node/pnpm 설치 가이드 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §1
 - [x] 🟡 **DB 마이그레이션 실행 전략** — dev/staging/prod, 시드 자동화 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §2
-- [x] 🟡 **CI/CD** — 빌드·테스트·마이그레이션·배포 자동화 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §3
+- [x] 🟡 **CI/CD** — 빌드·테스트·마이그레이션·배포 자동화 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §3 · ⚙️ *설계만 — PM2 수동 배포 중*
 - [x] 🟢 **관측성** — 구조화 로그·메트릭·readiness·Sentry, env 검증 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §4·§1.3
 
 ---

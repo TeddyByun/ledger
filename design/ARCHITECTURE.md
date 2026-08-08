@@ -86,16 +86,22 @@
 
 ## 4. 핵심 도메인 모듈
 
-| 모듈 | 책임 | 주요 데이터(=DATABASE.md) |
-|------|------|---------------------------|
-| **Auth/Account** | 회원가입·로그인·세션/토큰·앱 잠금 | user, (가구 공유 시) household |
-| **Ledger(거래)** | 수입/지출 CRUD·검색·필터 | transaction, counterparty |
-| **Category** | 분류 코드 관리(Parent-Child) | category |
-| **PaymentMethod** | 계좌·카드 관리 | payment_method |
-| **Ingestion(적재)** | 파일 업로드·파싱·정규화·자동분류 | bank_transaction, card_statement, card_transaction, merchant_category_map |
-| **Reconciliation(대사)** | 카드대금·자기이체 매칭/제외 | bank_transaction.exclude_reason 등 |
-| **Statistics(통계)** | 월별 집계·대시보드 | monthly_summary, monthly_*_stat |
-| **Budget(예산)** | 예산 설정·소진율(차기) | budget |
+| 모듈 | 책임 | 주요 데이터(=DATABASE.md) | 구현 |
+|------|------|---------------------------|------|
+| **Auth/Account** | 회원가입·로그인·JWT 회전·가드(Jwt/Roles/SuperAdmin) | household_member, refresh_token | ✅ `auth/` |
+| **Household(가족)** | 가구·구성원(가족) 관리, RBAC | household, household_member | ✅ `household/` |
+| **Admin(운영)** | **전체 운영 관리자** — 전 가구 조회·생성·삭제(테넌시 밖) | household 전체 | ✅ `admin/` |
+| **Ledger(거래)** | 수입/지출 CRUD·검색·필터·통합 목록 | transaction, counterparty | ✅ `transaction/`, `counterparty/` |
+| **StatementTxn(원천 거래)** | 은행·카드 원천 목록/분류/일괄처리/불일치/엑셀 | bank_transaction, card_transaction | ✅ `statement-txn/` |
+| **Category** | 분류 코드 관리(Parent-Child, CRUD) | category | ✅ `category/` |
+| **MerchantRule(자동분류 키워드)** | 키워드 규칙 CRUD + 분류기 캐시 무효화 | merchant_category_map | ✅ `merchant-rule/` |
+| **PaymentMethod** | 계좌·카드 관리, 명세서 감지 카드, **집계 제외** 지정 | payment_method(`exclude_from_stats`) | ✅ `payment-method/` |
+| **Ingestion(적재)** | 파일 업로드·파싱·정규화·자동분류 | bank_transaction, card_statement, card_transaction | ✅ `ingestion/` |
+| **Reconciliation(대사)** | 카드대금·자기이체·집계제외 결제수단 → **'분류 제외'** 매핑 | bank/card_transaction, exclude_reason | ✅ `ingestion/reconciliation/` |
+| **RecurringExpense(정기지출)** | 정기지출 CRUD + 반복 패턴 추천 | recurring_expense | ✅ `recurring-expense/` |
+| **Statistics(통계)** | 월별 집계·대시보드·추이·**예상 지출 규칙 엔진** | monthly_*, transaction | ✅ `statistics/`(+`forecast.service`) |
+| **Budget(예산)** | 예산 설정·소진율 | budget | ❌ **미구현**(DOMAIN_MODEL_DESIGN §2 설계만) |
+| **Audit/Export** | 감사 로그 / 데이터 내보내기 | audit_log | 감사로그 ❌ · 내보내기는 원천 거래 **xlsx** 로 구현 |
 
 ---
 
@@ -139,13 +145,36 @@
 | ① Upload | `ingestion.controller` `POST /imports` → `ingestion.service.enqueue` (원본 저장 `storage/`, `ImportJob` 생성, 큐 등록) |
 | ② Detect / ③ Parse | `parsers/parser.registry` → `parsers/bank.parser` · `parsers/card.parser` (헤더 별칭 기반 컬럼 매핑, `parsers/tabular` 로 xlsx/csv 읽기) |
 | ④ Normalize | `parsers/types` 정규화 타입 → `pipeline/import-pipeline.service` 가 staging(`bank_transaction`/`card_statement`+`card_transaction`) 적재 (dedupHash 멱등) |
-| ⑤ Auto-Classify | `classification/classifier.service` (`merchant_category_map` 우선순위 매칭) → `transaction` 생성 or pending |
-| ⑥ Reconcile | `reconciliation/reconciler.service` (카드대금 `card_settlement` + 자기이체 `self_transfer` 제외 표시) |
-| ⑦ Review | `GET /imports/:jobId/pending` (미분류 건 조회) |
+| ⑤ Auto-Classify | `classification/classifier.service` (`merchant_category_map` 우선순위 매칭) + `statement-txn.service` 의 정기지출·이력 매칭 → `transaction` 생성 or pending |
+| ⑥ Reconcile | `reconciliation/reconciler.service` (카드대금·자기이체·집계제외 결제수단 → **'분류 제외' 분류로 매핑**, 폴백 `exclude_reason`) |
+| ⑦ Review | `GET /imports/:jobId/pending` + **as-built 주경로**: 은행/카드 거래 화면의 인라인 분류·일괄 분류·자동분류 재실행 |
 | ⑧ Aggregate | `StatisticsService.rebuild(ym)` — 영향 월 재집계 |
 | 큐/워커 | `pipeline/import.processor` (BullMQ `@Processor`), `pipeline/import.queue` |
 
-> **설정 기반 파서**: 카드 4사(하나·현대·신한·삼성)는 컬럼명만 달라 `GenericCardParser` 하나 + 헤더 별칭 세트로 흡수. 은행은 `GenericBankParser`. 실제 파일 컬럼에 맞춰 `parsers/*.parser.ts`의 별칭을 튜닝한다.
+> **파서(as-built)**: 은행은 `GenericBankParser`, 카드는 **발급사별 전용 파서 4종**(`hana-card` / `hyundai-card` / `shinhan-card` / `samsung-card`)을 `parser.registry` 에서 매핑한다. 공통 로직(헤더 탐색·금액/날짜 파싱·dedupHash)은 `generic.ts` · `tabular.ts` 에 모아 두고, 카드사별 헤더 별칭·특이 포맷(청구회차·사용월/청구월 분리 등)만 각 파서가 갖는다.
+
+### 5.1 자동분류 규칙 (as-built)
+
+⑤는 초기 설계의 "키워드 규칙 매칭" 하나가 아니라, **선(先) 제외 매핑 + 3단계 우선순위**로 확장되었다.
+업로드 파이프라인과 화면의 **자동분류 버튼**(`POST /bank-transactions/auto-classify`, `/card-transactions/auto-classify`)이 같은 로직을 공유한다.
+
+```
+0) 선(先) 제외 매핑 (reconciler)
+   · exclude_from_stats 결제수단      → 방향별 '분류 제외'(지출 18 / 수입 19)
+   · 카드대금 결제 출금(구분에 '카드')  → '지출 분류 제외'
+   · 자기이체(같은 내용·같은 날·동일 금액·본인 명의 계좌 쌍) → 출금 18 / 입금 19
+     └ 계좌를 나눠 업로드해 한쪽이 먼저 분류된 경우도 짝을 맞춰 보정
+1) 정기지출 매칭  recurring_expense.match_key(또는 label) 토큰이 내용에 포함 → 그 분류
+2) 이력 학습      과거 같은 내용(은행은 방향별)의 최신 분류 (exact → fuzzy)
+3) 키워드 규칙    merchant_category_map (priority 오름차순, 공백 무시)
+4) 잔여 당행송금  1~3 에 안 걸린 '당행송금' → exclude_reason='transfer'
+5) 영향 월 rebuild
+```
+
+- **명시적 신호 우선**: 정기지출·이력·키워드가 당행송금 제외보다 우선한다. 이미 `transfer` 로 제외된 행도 재분류 대상에 포함해, 키워드를 나중에 등록해도 소급 반영된다.
+- **카드 취소·0원 행**: `is_canceled='Y'` 와 0원·음수 조정행도 금액 제한 없이 분류한다(환불이 해당 분류 지출에서 차감되도록).
+- **분류 불일치 점검**: `GET …/category-conflicts` — 같은 내용이 서로 다른 분류로 잡힌 건을 화면에서 모아 보여주고 일괄 교정한다(이력 학습의 오염 방지).
+- 규칙 상세·응답 필드는 [API_SPEC.md](API_SPEC.md) §9.
 
 ---
 

@@ -80,6 +80,8 @@ erDiagram
     enum method_type "bank|card"
     string card_no "마스킹"
     string account_no
+    string owner "명의(자기이체 판정)"
+    boolean exclude_from_stats "수입·지출 집계 제외"
   }
   category {
     string code PK
@@ -119,9 +121,12 @@ erDiagram
     int household_id FK
     int payment_method_id FK
     string txn_type_code FK
+    string txn_type_raw "원문 거래구분(필터)"
     int transaction_id "UK 1:1"
     decimal withdrawal
     decimal deposit
+    enum is_classified "Y|N"
+    enum exclude_reason "card_settlement|self_transfer|transfer"
     string dedup_hash
   }
   card_statement {
@@ -139,8 +144,13 @@ erDiagram
     int payment_method_id FK
     int transaction_id "UK 1:1"
     int installment_plan_id FK
+    string card_no "라벨에서 추출, 카드 매핑 키"
     string merchant_name
     decimal usage_amount
+    decimal principal
+    decimal fee
+    enum is_canceled "Y|N 취소·환불행"
+    enum is_classified "Y|N"
     string dedup_hash
   }
   installment_plan {
@@ -167,6 +177,7 @@ erDiagram
     string category_code FK
     int payment_method_id FK
     decimal amount
+    enum amount_type "fixed|variable 금액 성격"
     enum cadence "monthly|annual|schedule"
     string end_ym "만기(R7)"
     string match_key
@@ -264,6 +275,15 @@ erDiagram
 | 2026-07 | 집계 4종 `monthly_*` 가구 스코프(복합 PK+FK) | (보안 리뷰 #4) |
 | 2026-07 | **전체 운영 관리자** — `household_member.is_super_admin` + `SuperAdminGuard` + `GET /admin/households` | AUTH_DESIGN §12 |
 | 2026-07 | 보안 강화 5건(민감정보 노출·권한 상승·소프트삭제 로그인·집계 스코프·viewer 쓰기) | AUTH_DESIGN §13 |
+| 2026-07 | **분류 제외 대분류** 도입 → 지출 `18`·수입 `19` 로 분리 | §3.2 · `common/exclude-category.ts` |
+| 2026-07 | **`payment_method.exclude_from_stats`** — 집계 제외 결제수단(투자·저축 계좌 등), 자동분류 시 방향별 '분류 제외' 매핑 | §3.1 · `common/exclude-payment.ts` |
+| 2026-07 | 자동분류 확장 — 정기지출·이력 학습이 당행송금 제외보다 **우선**, 카드 취소·0원 행도 분류 대상 | ARCHITECTURE §5.1 |
+| 2026-07 | 자기이체 판정 강화 — 계좌를 나눠 업로드해도 (출금↔입금) 짝을 맞춰 '분류 제외' 보정 | §7.1 |
+| 2026-07 | 분류 불일치 조회(`category-conflicts`) — 같은 내용/가맹점의 상이한 분류 탐지 | API_SPEC §7 |
+| 2026-07 | 분류 관리 CRUD·자동분류 키워드 CRUD 화면 도입(`category`·`merchant_category_map` 를 UI 에서 편집) | API_SPEC §4·§8 |
+| 2026-08 | 정기지출 **만기(`end_ym`)를 주기 무관 적용** — 할부 등 매월 항목도 만기 지정 | EXPENSE_FORECAST_DESIGN §4·§6.2 |
+| 2026-08 | 정기지출 **`amount_type`(고정/변동)** 추가 — 추천 시 월별 편차로 자동 판정 | EXPENSE_FORECAST_DESIGN §4 |
+| 2026-08 | 문서 동기화 — API_SPEC/ARCHITECTURE/FRONTEND_DESIGN as-built 반영 | (본 정비) |
 
 ---
 
@@ -1052,6 +1072,21 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
 - **중복 적재 방지**: (계좌, 거래일시, 출금액, 입금액, 잔액) 조합으로 유니크 제약 또는 사전 체크 권장.
 - **자기 계좌 간 이체 처리**: 보유 계좌 간 이체(예: `62707`의 `당행송금(ㅅ) 8,837,922 출금` ↔ `47307`의 `대체(ㅅ) 8,837,922 입금`)는 가계부상 실지출이 아니므로 **양쪽을 한 쌍으로 인식해 지출 집계에서 제외**한다. 같은 날짜·동일 금액·반대 방향·본인 명의 계좌 조건으로 자동 매칭하고, `transaction`에는 미연결 + `exclude_reason='self_transfer'`로 둔다. (자산 이동성 '지출' 정책은 외부 투자·저축에 적용되며, 본인 계좌 간 단순 이동은 여기서 분리.)
 
+#### 7.1.1 대사 구현 현황 (as-built, `ingestion/reconciliation/reconciler.service.ts`)
+
+설계는 제외 대상을 `transaction` 미연결 + `exclude_reason` 으로 두었으나, **현행은 '분류 제외' 분류로 정식 분류**한다.
+집계에서 빠지는 것은 같지만, 화면에서 "왜 빠졌는지"가 분류로 보이고 목록·필터에서 일관되게 다뤄진다.
+
+| 대상 | 판정 | 현행 처리 |
+|------|------|-----------|
+| 집계 제외 결제수단 | `payment_method.exclude_from_stats=true` | 은행: 출금→`18 지출 분류 제외` / 입금→`19 수입 분류 제외`, 카드: 항상 `18`. 이미 다른 분류면 **교체** |
+| 카드대금 결제 출금 | 은행 거래구분명에 '카드' 포함 | `18 지출 분류 제외` 로 분류(이미 `exclude_reason` 표시된 행도 승격) |
+| 본인 계좌 간 이체 | **같은 내용·같은 날·동일 금액**의 (출금 A ↔ 입금 B) 쌍 + 두 계좌 모두 본인 명의(`owner` 동일 또는 '본인') | 출금→`18`, 입금→`19`. **이미 분류/제외된 행도 대상**에 포함해, 계좌를 나눠 업로드해 한쪽만 먼저 분류된 경우도 짝을 맞춰 보정 |
+| 잔여 당행송금 | 정기지출·이력·키워드 어디에도 안 걸린 `당행송금` | `exclude_reason='transfer'`(분류 없음). 이후 키워드가 등록되면 **재분류 대상에 다시 포함** |
+
+- `exclude_reason` 은 **'분류 제외' 분류가 없을 때의 폴백**이자 잔여 이체 표시로 남아 있다.
+- 위 매핑은 업로드 파이프라인과 화면의 **[자동분류] 버튼** 양쪽에서 동일하게 실행된다(ARCHITECTURE §5.1).
+
 ### 7.2 카드 명세서 자동 입력 흐름
 - **적재 단위**: 업로드 1회 = `card_statement` 1건 + `card_transaction` N건. 명세서 합계(`total_amount`)와 건별 `principal` 합이 일치하는지 검증.
 - **사용월 ↔ 청구월 분리 (확정)**: 명세서 제목(예: 2026년 4월)은 **청구월**(카드값 빠지는 달)이고, 실제 이용일은 **사용월**(예: 3월)이다. 둘을 분리해 저장·조회한다.
@@ -1061,6 +1096,8 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
   - **월 집계 기본 축 = 사용월**(`transaction_date`, "언제 썼나"). 청구월 뷰는 `settled_date`로 토글 가능(둘 다 저장).
 - **카드 라우팅(번호 매핑)**: 파서가 각 행의 카드 구분(`card_label`)에서 식별번호(뒤 4자리)를 뽑아 `card_transaction.card_no`에 저장하고, **가구에 등록된 카드 목록(`payment_method.card_no`)과 매칭**해 그 행의 `payment_method_id`를 정한다. 한 명세서에 본인·가족 카드가 섞여도 번호로 각각 라우팅. **미등록 번호**면 "새 카드 등록" 제안 후 보류(pending). (카드 목록은 물리 카드별 1행, 카드번호는 마스킹 저장 — §3.1)
 - **자동 분류**: `merchant_category_map`을 `priority` 순으로 적용해 `category_code` 부여 → 매칭 시 `transaction` 자동 생성·연결. 미매칭은 `is_classified='N'`으로 남겨 수기 처리 후 규칙 보강.
+  - **as-built 확장**: 키워드 규칙 앞에 ① 정기지출 매칭(`recurring_expense.match_key`) ② 이력 학습(같은 가맹점의 최신 분류)이 붙는다. 우선순위는 정기지출 → 이력 → 키워드(ARCHITECTURE §5.1).
+  - **취소·0원 행도 분류**: `is_canceled='Y'` 와 0원·음수 조정행을 **금액 제한 없이** 같은 규칙으로 분류한다. 환불(음수)은 해당 분류의 지출에서 정확히 차감되므로 별도 처리하지 않는다.
 - **금액 기준 (확정)**: 가계부 지출 금액 = `principal + fee`(할인 반영 실청구 원금 + 할부 이자). 일시불은 `fee=0`이라 `principal`과 동일, 할부는 이자까지 포함(1.8 확정 정책). `usage_amount`/`benefit_amount`는 분석·혜택 통계용으로 보존.
 - **카드대금 출금 제외 (확정)**: 은행 명세의 `타사카드`/`하나카드` 구분 출금(= 카드대금 결제)은 **카드 건별 지출과 중복**이므로 **지출 집계에서 제외**한다. 해당 `bank_transaction` 행은 `transaction`에 연결하지 않고(`transaction_id=NULL`), `exclude_reason='card_settlement'`로 표시해 실지출은 오직 `card_transaction`(카드 건별)으로만 잡는다. **자동 식별**: `card_statement.settle_account_id` + `billing_date` + `total_amount`로 은행 명세의 카드대금 출금 행과 매칭(예: 신한카드 명세 결제계좌 `하나은행47307` → 은행 `타사카드(신한카드)` 출금 제외).
 - **할부 거래 (확정: 회차별 월 집계, 이용일 기준)**: 할부는 **최초 거래월에 총액을 잡지 않고, 매 청구 회차에 해당 월의 청구액만 지출로 집계**한다. 그 달 청구된 회차 금액(`principal`)이 곧 그 달의 지출이며, `transaction.transaction_date`는 **회차 표기 이용일**(`card_transaction.txn_date`와 동일)로 생성한다 — 카드 거래·전체 거래 목록이 같은 날짜로 보이도록 통일. 청구 시점은 `settled_date`로 보존. `installment_period`(예: 12/24 → 총 24회)와 `billing_round`(예: 12 → 12회차)는 회차 추적용으로 보존한다.

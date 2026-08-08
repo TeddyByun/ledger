@@ -4,6 +4,16 @@
 > 스택 전제: Node ≥20 · pnpm 9 · Turborepo · NestJS(api+worker) · Next.js(web) · Prisma · PostgreSQL 18.4(`ledger` 스키마, raw.so4.kr) · Redis+BullMQ.
 > 연동: [ARCHITECTURE.md](ARCHITECTURE.md) §11(배포·운영) · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §5(traceId) · [AUTH_DESIGN.md](AUTH_DESIGN.md) §7(env)
 
+> **구현 현황 (as-built, 2026-08-01)**
+>
+> | 항목 | 상태 | 실제 |
+> |------|------|------|
+> | 로컬 환경 §1 | ✅ | `docker-compose.yml`(PostgreSQL+Redis), `.env.example`, `config/env.validation.ts`, `health`(live/ready), `prisma/seed.ts` |
+> | 마이그레이션 §2 | ✅ | `apps/api/prisma/migrations/` + `pnpm prisma:migrate` · `prisma:seed` |
+> | **CI/CD §3** | ❌ **미구현** | `.github/workflows/` 없음. 대신 **PM2 상시 실행**(`ecosystem.config.cjs` — `ledger-api`:4000, `ledger-web`:3000, 자동 재시작·`pm2 resurrect`)과 워크스페이스 부팅 스크립트(`scripts/coder-startup.sh`)로 운영한다. 배포 = 수동 `pnpm build` → `pm2 restart` |
+> | 관측성 §4 | ⚠️ 부분 | 헬스체크·env 검증·`traceId` 에러 봉투는 구현. **구조화 로그 수집·메트릭·Sentry 는 미도입** |
+> | 파일 저장 | ⚠️ | `StorageService` = **로컬 디스크**(`UPLOAD_DIR`). S3·구글 드라이브 어댑터 미구현 |
+
 ---
 
 ## 1. 로컬 개발 환경

@@ -147,19 +147,23 @@ model User {
 
 ## 5. API 엔드포인트
 
-| 메서드 | 경로 | 설명 | 인증 |
-|--------|------|------|:----:|
-| POST | `/auth/signup` | 회원가입(+기본 가구 생성, owner 부여) | ✕ |
-| POST | `/auth/login` | 로그인 → Access + Refresh | ✕ |
-| POST | `/auth/refresh` | Refresh 회전 → 새 Access + Refresh | ✕(쿠키) |
-| POST | `/auth/logout` | 현재 Refresh 폐기 | ✓ |
-| GET | `/auth/me` | 내 프로필 + 소속 가구/역할 | ✓ |
-| POST | `/auth/password/reset-request` | 재설정 메일 발송(토큰) | ✕ |
-| POST | `/auth/password/reset-confirm` | 토큰으로 비밀번호 변경 | ✕ |
-| POST | `/auth/password/change` | 로그인 상태 비밀번호 변경 | ✓ |
-| GET | `/households` · `/households/{id}/members` | 가구·구성원 조회 | ✓ |
-| POST | `/households/{id}/invitations` | 가구원 초대 | owner |
-| PATCH | `/households/{id}/members/{userId}` | 역할 변경 | owner |
+| 메서드 | 경로 | 설명 | 인증 | 구현 |
+|--------|------|------|:----:|:----:|
+| POST | `/auth/signup` | 회원가입(+기본 가구 생성, owner 부여) | ✕ | ✅ |
+| POST | `/auth/login` | 로그인 → Access + Refresh | ✕ | ✅ |
+| POST | `/auth/refresh` | Refresh 회전 → 새 Access + Refresh | ✕(쿠키) | ✅ |
+| POST | `/auth/logout` | 현재 Refresh 폐기 | ✓ | ✅ |
+| GET | `/auth/me` | 내 프로필 + 소속 가구/역할(+`isSuperAdmin`) | ✓ | ✅ |
+| POST | `/auth/password/reset-request` | 재설정 메일 발송(토큰) | ✕ | ❌ |
+| POST | `/auth/password/reset-confirm` | 토큰으로 비밀번호 변경 | ✕ | ❌ |
+| POST | `/auth/password/change` | 로그인 상태 비밀번호 변경 | ✓ | ❌ |
+| GET | `/household` | **내 가구** 정보(경로 단수형으로 구현) | ✓ | ✅ |
+| PATCH | `/household` | 가구명 변경 | owner | ✅ |
+| GET · POST | `/household/members` | 구성원 조회·추가(로그인 계정 겸용) | ✓ / owner | ✅ |
+| PATCH · DELETE | `/household/members/{id}` | 구성원 수정(역할 포함)·삭제 | owner | ✅ |
+| POST | `/households/{id}/invitations` | 가구원 초대 | owner | ❌ |
+
+> **as-built 차이**: ① 비밀번호 재설정 3종은 **미구현**(`password_reset_token` 테이블만 존재). ② 가구 API 는 `/households/{id}/…` 가 아니라 **토큰의 가구를 쓰는 단수형 `/household`**. ③ 초대(invitation) 흐름 대신 **owner 가 구성원(+로그인 계정)을 직접 생성**한다. ④ 역할 변경은 구성원 PATCH 에 포함.
 
 **응답 예 (login)**
 ```json
@@ -280,6 +284,8 @@ AuthModule
 | 메서드 | 경로 | 설명 | 인증 |
 |--------|------|------|:----:|
 | GET | `/admin/households` | **전체 가구 목록**(가구별 구성원·거래 건수 집계). 가구 경계 초월. | super_admin |
+| POST | `/admin/households` | **가구 생성** — 가구 + owner 계정(email/password) 동시 생성 | super_admin |
+| DELETE | `/admin/households/{id}` | **가구 삭제** — 하위 데이터 포함 정리 | super_admin |
 
 - 구현 요점: `Household` 는 **테넌시 스코프 대상이 아니므로**(`SCOPED_MODELS` 제외) `findMany` 가 전체를 반환하고, `include`/`_count` 는 미들웨어 스코핑을 타지 않아 가구별 집계도 전역으로 계산된다.
 

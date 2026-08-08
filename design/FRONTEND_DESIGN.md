@@ -2,6 +2,78 @@
 
 > 전략: **웹 먼저**, 이후 모바일(RN)과 타입·검증·API 클라이언트를 `packages/`로 공유.
 > 백엔드는 **API-First** — 프론트는 OpenAPI에서 생성한 `@ledger/api-client`를 소비한다.
+>
+> ⚠️ **§2~§4·§7 은 목표(to-be) 설계이며 현행 구현과 다르다. 현행은 아래 §0 을 정본으로 본다.**
+
+---
+
+## 0. 현행 구현 (as-built, 2026-08-01)
+
+### 0.1 실제 스택 — 설계 대비 차이
+
+| 영역 | 설계(§2) | **현행 구현** |
+|------|----------|---------------|
+| 프레임워크 | Next.js App Router | Next.js 14 App Router **셸만** — `app/page.tsx` 단일 진입, URL 라우팅 없이 `Shell` 의 `useState<View>` 로 화면 전환(code-server 하위경로 프록시에서 라우팅이 깨지는 문제 회피) |
+| 서버 상태 | TanStack Query | **미도입** — 각 view 에서 `useEffect` + `api.get` 직접 호출 |
+| 클라이언트 상태 | Zustand | **미도입** — `lib/auth.tsx` 의 React Context(세션) + 화면 로컬 state |
+| 스타일/UI | Tailwind + shadcn/ui | **미도입** — `app/globals.css` 수기 CSS(뉴모피즘 다크 테마, `.btn`·`.card`·`.nav` 등 클래스) |
+| 폼/검증 | react-hook-form + zod | **미도입** — 제어 컴포넌트 + 서버 검증(class-validator) 의존 |
+| 차트 | Recharts | **미도입** — 자체 SVG 컴포넌트(`TrendChart`·`MonthlyBars`·`GroupedBarChart`·`StackedBarChart`) |
+| API 클라이언트 | openapi-typescript 생성물 | **수기** `lib/api.ts` fetch 래퍼 + `lib/types.ts` 수기 타입. 401 → `/auth/refresh` 자동 재시도는 구현됨 |
+| 의존성 | — | `apps/web/package.json` = next·react·react-dom·@ledger/shared **뿐** |
+
+> 즉 현행 웹은 **의존성 없는 SPA**다. TanStack Query·shadcn·zod·Recharts 도입은 남은 과제이며,
+> 도입 전까지 §2·§4 는 목표 상태로만 읽는다.
+
+### 0.2 실제 앱 구조
+
+```
+apps/web/src/
+├─ app/{layout.tsx, page.tsx, globals.css}   # 셸 + 뉴모피즘 테마 CSS
+├─ components/   Shell · Sidebar · Login · MultiSelect · sortable
+│                TrendChart · MonthlyBars · GroupedBarChart · StackedBarChart · chart-utils
+├─ views/        화면 1개 = 파일 1개 (아래 §0.3)
+└─ lib/          api.ts(fetch 래퍼·토큰) · auth.tsx(Context) · types.ts · format.ts
+```
+
+### 0.3 실제 화면 인벤토리 (사이드바 = `components/Sidebar.tsx`)
+
+| 그룹 | 화면(view) | 핵심 기능 |
+|------|-----------|-----------|
+| 집계 | **월별 거래 추이** `dashboard` | 기간 선택(기본 올해), 월별 수입·지출 추이, 대분류별 지출 비교, 계좌/카드 집계 |
+| | **월별 결제수단별 지출 추이** `payment-trend` | 기간 선택, 계좌·카드 그룹 단일 비교 막대 |
+| | **예상 수입•지출** `forecast` | 월 선택 · 예상 수입/지출 목록 · **일자별 현금흐름(1일~말일 수입·지출·잔액)** · 소비 기준 예측(규칙 엔진) |
+| 거래내역 | **전체 거래** `all-transactions` | `/transactions/unified` — 은행+카드 통합 목록·필터·합계 |
+| | **은행 거래** `bank-transactions` | 목록·정렬·필터·인라인 분류·일괄 분류/삭제·**자동분류**·**분류 불일치**·xlsx 내보내기 |
+| | **카드 거래** `card-transactions` | 은행과 동형(+할부 필터·취소행 표시) |
+| 관리 | **가족 관리** `family` | 가구명·구성원 CRUD(로그인 계정 겸용·역할) |
+| | **카드 관리** `cards` | 카드 등록·수정, 명세서에서 **감지된 카드** 매핑 |
+| | **결제수단** `payment-methods` | 계좌·카드 목록, **수입·지출 집계 제외** 지정 |
+| | **분류 관리** `categories` | 분류 코드 트리 CRUD(대/소분류·정렬·사용여부) |
+| | **정기지출** `recurring-expenses` | 정기지출 CRUD + 반복 패턴 **추천** 확정 |
+| | **자동분류 키워드** `classify-keywords` | 키워드 규칙 CRUD(패턴·매칭방식·우선순위) |
+| | **명세서 업로드** `imports` | 발급사·결제수단 선택 업로드, 잡 상태, 업로드 이력 |
+| 운영 관리자 | **가구 관리** `admin-households` | `isSuperAdmin` 에게만 노출 — 전 가구 목록·생성·삭제 |
+
+**설계(§5) 대비 차이**
+- **미구현**: 예산 화면, 회원가입/비밀번호 재설정 화면(로그인만), 거래 빠른 입력(+ FAB), 모바일 하단 탭, 잡 상태 SSE.
+- **설계에 없던 as-built 화면**: 월별 결제수단별 지출 추이 · 예상 지출 · 전체 거래 · 은행/카드 거래 · 카드 관리 · 정기지출 · 자동분류 키워드 · 운영 관리자 가구 관리.
+- **검토(pending) 전용 화면 없음** → 아래 §0.4.
+
+### 0.4 검토(Review) 플로 — 실제 구현
+
+설계 §7 의 "잡 단위 검토 화면"은 만들지 않았다. 대신 **원천 거래 목록 화면이 검토 화면 역할**을 한다.
+
+```
+명세서 업로드 → (업로드 시점에 자동분류·대사까지 수행) → 은행/카드 거래 화면
+   · 미분류 행을 목록에서 직접 인라인 분류
+   · 체크박스 선택 → 일괄 분류 / 일괄 삭제
+   · [자동분류] 버튼으로 규칙·정기지출·이력 기반 재분류 (키워드 추가 후 소급 적용)
+   · [분류 불일치] 패널에서 같은 내용이 다른 분류로 잡힌 건을 모아 교정
+   · 규칙 학습 = 관리>자동분류 키워드 화면에서 명시적으로 등록(체크박스 학습 아님)
+```
+
+즉 검토는 **잡 단위(job-scoped)가 아니라 목록 단위(list-scoped)** 이며, 확정 버튼 대신 분류 즉시 반영 + 월 재집계다. REVIEW_WORKFLOW_DESIGN.md 의 as-built 절도 같은 내용을 담는다.
 
 ---
 
@@ -62,6 +134,8 @@ src/
 
 ## 5. 화면 인벤토리 · 정보구조(IA)
 
+> ⚠️ 아래는 초기 설계안. **실제 구현된 화면 목록은 §0.3** 를 본다(예산·빠른입력·검토 화면 미구현, 추이/예상지출/원천거래/키워드/운영관리자 화면 추가).
+
 | 그룹 | 화면 | 핵심 |
 |------|------|------|
 | 인증 | 로그인 / 회원가입 / 비밀번호 재설정 | AUTH_DESIGN 흐름 |
@@ -104,6 +178,8 @@ src/
 ---
 
 ## 7. 검토(Review) UI — 가장 복잡
+
+> ⚠️ **미구현(설계안)**. 실제로는 은행/카드 거래 목록 화면이 이 역할을 대신한다 — §0.4 참조.
 
 자동분류 실패(pending) 건을 사람이 확정하는 화면. **추천 분류 표시 · 인라인 수정 · 일괄 확정 · 규칙 학습**.
 
