@@ -79,6 +79,12 @@ enum RecurringSource {
   manual // 수기 추가
 }
 
+// 정기지출 금액 성격 — 매월 같은 금액(fixed)인지 달마다 달라지는지(variable)
+enum AmountType {
+  fixed // 고정 — 월세·구독·할부금처럼 금액이 일정
+  variable // 변동 — 공과금·통신비처럼 달마다 금액이 달라짐(예상금액은 평균치)
+}
+
 // ─────────────────────────────────────────────
 // 계정 · 가구 (인증/멀티테넌시) — AUTH_DESIGN §3
 // ─────────────────────────────────────────────
@@ -515,6 +521,7 @@ model RecurringExpense {
   categoryCode    String           @map("category_code")
   paymentMethodId Int?             @map("payment_method_id")
   amount          Decimal          @db.Decimal(15, 2)
+  amountType      AmountType       @default(fixed) @map("amount_type") // 고정/변동
   cadence         RecurringCadence @default(monthly)
   months          Int[]            @default([]) // annual/custom 발생 월(1~12)
   startYm         String?          @map("start_ym") @db.Char(7) // schedule 시작 년월

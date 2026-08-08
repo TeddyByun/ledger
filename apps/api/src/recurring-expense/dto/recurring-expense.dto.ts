@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
@@ -11,7 +11,13 @@ import {
   Matches,
   Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
+
+export enum AmountType {
+  fixed = 'fixed',
+  variable = 'variable',
+}
 
 export enum RecurringCadence {
   monthly = 'monthly',
@@ -42,6 +48,15 @@ export class CreateRecurringExpenseDto {
   @IsNumber()
   amount!: number;
 
+  @ApiPropertyOptional({
+    enum: AmountType,
+    default: AmountType.fixed,
+    description: '금액 성격 — fixed(고정: 월세·구독·할부금) / variable(변동: 공과금·통신비 등, 예상금액은 평균치)',
+  })
+  @IsEnum(AmountType)
+  @IsOptional()
+  amountType?: AmountType;
+
   @ApiPropertyOptional({ enum: RecurringCadence, default: RecurringCadence.monthly })
   @IsEnum(RecurringCadence)
   @IsOptional()
@@ -60,18 +75,30 @@ export class CreateRecurringExpenseDto {
   @IsOptional()
   startYm?: string;
 
-  @ApiPropertyOptional({ example: '2027-05', description: '만기 년월(R7). 지나면 예측 종료' })
+  @ApiPropertyOptional({
+    example: '2027-05',
+    description: '만기 년월. 지나면 예측 종료(주기 무관 — 할부·구독 등 모든 항목에 지정 가능). null/빈값 = 만기 해제',
+    nullable: true,
+  })
+  @Transform(({ value }) => (value === '' || value === null ? null : value))
+  @ValidateIf((_o, v) => v !== null)
   @Matches(YM)
   @IsOptional()
-  endYm?: string;
+  endYm?: string | null;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 31, description: '예상 청구일' })
-  @Type(() => Number)
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 31,
+    nullable: true,
+    description: '예상 지출일(1~31). null/빈값 = 미지정',
+  })
+  @Transform(({ value }) => (value === '' || value === null ? null : Number(value)))
+  @ValidateIf((_o, v) => v !== null)
   @IsInt()
   @Min(1)
   @Max(31)
   @IsOptional()
-  dayOfMonth?: number;
+  dayOfMonth?: number | null;
 
   @ApiPropertyOptional({ description: '자동 매칭 키(추천 확정 시)' })
   @IsString()

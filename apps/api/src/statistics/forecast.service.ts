@@ -177,12 +177,10 @@ export class ForecastService {
       if (claimedKeys.has(fk)) thisMonthByKey.set(fk, (thisMonthByKey.get(fk) ?? 0) + amt);
     }
     for (const r of recurrings) {
-      const applies =
-        r.cadence === 'annual'
-          ? r.months.includes(tm)
-          : r.cadence === 'schedule'
-            ? !r.endYm || cmpYm(tym, r.endYm) <= 0
-            : true;
+      // 시작·만기 년월은 주기와 무관하게 적용(할부처럼 끝이 있는 매월 항목)
+      const inWindow =
+        (!r.startYm || cmpYm(tym, r.startYm) >= 0) && (!r.endYm || cmpYm(tym, r.endYm) <= 0);
+      const applies = inWindow && (r.cadence === 'annual' ? r.months.includes(tm) : true);
       if (!applies) continue;
       const occurred = r.matchKey ? (thisMonthByKey.get(r.matchKey) ?? 0) : 0;
       const expected = Number(r.amount);
@@ -196,12 +194,18 @@ export class ForecastService {
         remaining,
         status: occurred > 0 ? 'occurred' : r.dayOfMonth && r.dayOfMonth < dayToday ? 'overdue' : 'due',
         basis:
-          r.cadence === 'schedule'
+          (r.cadence === 'schedule'
             ? `확정 스케줄${r.endYm ? ` · 만기 ${r.endYm}` : ' · 만기 미설정'}`
             : r.cadence === 'annual'
               ? `연례(${r.months.join(',')}월)`
-              : '월 정기',
-        confidence: r.cadence === 'schedule' && !r.endYm ? 'med' : 'high',
+              : '월 정기') + (r.amountType === 'variable' ? ' · 변동(평균치)' : ' · 고정'),
+        // 변동 금액은 등록값이 평균치라 그만큼 신뢰도를 낮춘다
+        confidence:
+          r.amountType === 'variable'
+            ? 'med'
+            : r.cadence === 'schedule' && !r.endYm
+              ? 'med'
+              : 'high',
       });
     }
     // 할부(R3)

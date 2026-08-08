@@ -37,12 +37,13 @@ export class RecurringExpenseService {
 
     return rows.map((r) => {
       const currentMonth = now.getUTCMonth() + 1;
+      // 시작/만기 년월은 **주기와 무관하게** 적용된다(할부·구독처럼 끝이 있는 매월 항목).
+      const beforeStart = r.startYm ? cmpYm(ym, r.startYm) < 0 : false;
+      const afterEnd = r.endYm ? cmpYm(ym, r.endYm) > 0 : false;
       const appliesThisMonth =
-        r.cadence === 'annual'
-          ? r.months.includes(currentMonth)
-          : r.cadence === 'schedule'
-            ? !r.endYm || cmpYm(ym, r.endYm) <= 0 // 만기 전
-            : true; // monthly
+        !beforeStart &&
+        !afterEnd &&
+        (r.cadence === 'annual' ? r.months.includes(currentMonth) : true);
 
       // 이번 달 발생 매칭(fuzzyKey + 결제수단)
       let occurred = 0;
@@ -56,19 +57,19 @@ export class RecurringExpenseService {
       const isOccurred = occurred > 0;
 
       let status: 'occurred' | 'due' | 'overdue' | 'ended' | 'off';
-      if (!appliesThisMonth) status = r.cadence === 'schedule' ? 'ended' : 'off';
+      if (afterEnd) status = 'ended';
+      else if (!appliesThisMonth) status = 'off';
       else if (isOccurred) status = 'occurred';
       else if (r.dayOfMonth && r.dayOfMonth < today) status = 'overdue';
       else status = 'due';
 
-      const remainingMonths =
-        r.cadence === 'schedule' && r.endYm
-          ? Math.max(
-              0,
-              (Number(r.endYm.slice(0, 4)) - now.getUTCFullYear()) * 12 +
-                (Number(r.endYm.slice(5, 7)) - (now.getUTCMonth() + 1)),
-            )
-          : null;
+      const remainingMonths = r.endYm
+        ? Math.max(
+            0,
+            (Number(r.endYm.slice(0, 4)) - now.getUTCFullYear()) * 12 +
+              (Number(r.endYm.slice(5, 7)) - (now.getUTCMonth() + 1)),
+          )
+        : null;
 
       return {
         id: r.id,
@@ -78,6 +79,7 @@ export class RecurringExpenseService {
         paymentMethodId: r.paymentMethodId,
         paymentMethodName: r.paymentMethod?.name ?? null,
         amount: Number(r.amount),
+        amountType: r.amountType,
         cadence: r.cadence,
         months: r.months,
         startYm: r.startYm,
@@ -127,6 +129,7 @@ export class RecurringExpenseService {
     if (dto.categoryCode !== undefined) d.categoryCode = dto.categoryCode;
     if (dto.paymentMethodId !== undefined) d.paymentMethodId = dto.paymentMethodId;
     if (dto.amount !== undefined) d.amount = dto.amount;
+    if (dto.amountType !== undefined) d.amountType = dto.amountType;
     if (dto.cadence !== undefined) d.cadence = dto.cadence;
     if (dto.months !== undefined) d.months = dto.months;
     if (dto.startYm !== undefined) d.startYm = dto.startYm;
