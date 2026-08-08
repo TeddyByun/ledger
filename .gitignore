@@ -50,3 +50,8 @@ uploads/
 
 # PM2 런타임 로그
 .pm2-logs/
+
+# 로컬 전용 · 커밋 금지 (개인정보·인프라 메모)
+.claude/settings.local.json
+감사보고서.md
+메모-채성.md
