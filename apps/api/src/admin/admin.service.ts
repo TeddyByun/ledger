@@ -6,17 +6,68 @@ import {
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { runWithoutTenant } from '../common/tenant/tenant-context.js';
+import {
+  runWithoutTenant,
+  runWithTenant,
+} from '../common/tenant/tenant-context.js';
+import { HouseholdService } from '../household/household.service.js';
+import type {
+  CreateMemberDto,
+  UpdateMemberDto,
+} from '../household/dto/household.dto.js';
 import { CreateHouseholdDto } from './dto/admin.dto.js';
 
 /**
- * 전체 운영(플랫폼) 관리자 전용 서비스 — 가구 경계를 넘어 조회/생성/삭제한다.
+ * 전체 운영(플랫폼) 관리자 전용 서비스 — 가구 경계를 넘어 조회/생성/수정/삭제한다.
  * Household 는 테넌트 스코프 대상이 아니고(SCOPED_MODELS 제외), 스코프 모델의 교차 가구
- * 쓰기는 runWithoutTenant 로 미들웨어 자동 주입을 우회해 명시적 householdId 로 처리한다.
+ * 쓰기는 runWithoutTenant 로 미들웨어 자동 주입을 우회한다. 가구별 수정(이름·구성원)은
+ * runWithTenant 로 대상 가구 컨텍스트를 씌워 기존 HouseholdService 로직을 그대로 재사용한다.
  */
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly household: HouseholdService,
+  ) {}
+
+  /** 대상 가구를 테넌트로 씌워 HouseholdService 를 실행(운영자는 owner 권한으로 취급). */
+  private async asHousehold<T>(
+    householdId: number,
+    actorUserId: number,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const exists = await this.prisma.household.findUnique({
+      where: { id: householdId },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('HOUSEHOLD_NOT_FOUND');
+    return runWithTenant(
+      { userId: actorUserId, householdId, role: 'owner' },
+      fn,
+    );
+  }
+
+  /** 가구 이름 변경(임의 가구). */
+  renameHousehold(id: number, name: string, actorUserId: number) {
+    return this.asHousehold(id, actorUserId, () => this.household.rename(name));
+  }
+
+  /** 구성원 추가/수정/삭제(임의 가구) — 운영자는 owner 권한. */
+  addMember(id: number, dto: CreateMemberDto, actorUserId: number) {
+    return this.asHousehold(id, actorUserId, () =>
+      this.household.createMember(dto, 'owner'),
+    );
+  }
+  editMember(id: number, memberId: number, dto: UpdateMemberDto, actorUserId: number) {
+    return this.asHousehold(id, actorUserId, () =>
+      this.household.updateMember(memberId, dto, 'owner'),
+    );
+  }
+  removeMember(id: number, memberId: number, actorUserId: number) {
+    return this.asHousehold(id, actorUserId, () =>
+      this.household.removeMember(memberId),
+    );
+  }
 
   /** 전체 가구 목록 + 가구별 구성원/거래 집계. */
   async listHouseholds() {

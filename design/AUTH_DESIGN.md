@@ -285,7 +285,11 @@ AuthModule
 |--------|------|------|:----:|
 | GET | `/admin/households` | **전체 가구 목록**(가구별 구성원·거래 건수 집계). 가구 경계 초월. | super_admin |
 | POST | `/admin/households` | **가구 생성** — 가구 + owner 계정(email/password) 동시 생성 | super_admin |
+| PATCH | `/admin/households/{id}` | **가구 이름 변경**(소속 아니어도 가능) | super_admin |
 | DELETE | `/admin/households/{id}` | **가구 삭제** — 하위 데이터 포함 정리 | super_admin |
+| POST·PATCH·DELETE | `/admin/households/{id}/members[/{mid}]` | **구성원 관리**(추가·수정·삭제) — 임의 가구 | super_admin |
+
+> **가구 경계 초월 수정**: 시스템 운영자(is_super_admin)는 소속 구성원이 아니어도 임의 가구를 수정한다. `runWithTenant({householdId})` 로 대상 가구 컨텍스트를 씌워 기존 `HouseholdService`(이름 변경·구성원 CRUD, owner 권한)를 그대로 재사용한다.
 
 - 구현 요점: `Household` 는 **테넌시 스코프 대상이 아니므로**(`SCOPED_MODELS` 제외) `findMany` 가 전체를 반환하고, `include`/`_count` 는 미들웨어 스코핑을 타지 않아 가구별 집계도 전역으로 계산된다.
 

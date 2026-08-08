@@ -56,6 +56,55 @@ export function AdminHouseholds() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
+  // 가구 이름 수정 / 구성원 편집·추가
+  const [editHhId, setEditHhId] = useState<number | null>(null);
+  const [editHhName, setEditHhName] = useState('');
+  const [memberEditId, setMemberEditId] = useState<number | null>(null);
+  const [memberName, setMemberName] = useState('');
+  const [addingHhId, setAddingHhId] = useState<number | null>(null);
+  const [newMemberName, setNewMemberName] = useState('');
+
+  const act = async (fn: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await fn();
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : (e as Error).message);
+    }
+  };
+  const saveHhName = (h: AdminHousehold) => {
+    if (!editHhName.trim()) return;
+    act(async () => {
+      await api.patch(`/admin/households/${h.id}`, { name: editHhName.trim() });
+      setEditHhId(null);
+    });
+  };
+  const saveMemberName = (h: AdminHousehold, m: AdminMember) => {
+    if (!memberName.trim()) return;
+    act(async () => {
+      await api.patch(`/admin/households/${h.id}/members/${m.id}`, {
+        name: memberName.trim(),
+      });
+      setMemberEditId(null);
+    });
+  };
+  const delMember = (h: AdminHousehold, m: AdminMember) => {
+    if (!confirm(`구성원 '${m.name}'을(를) 삭제할까요?`)) return;
+    act(() => api.del(`/admin/households/${h.id}/members/${m.id}`));
+  };
+  const addMember = (h: AdminHousehold) => {
+    if (!newMemberName.trim()) return;
+    act(async () => {
+      await api.post(`/admin/households/${h.id}/members`, {
+        name: newMemberName.trim(),
+        relation: 'other',
+      });
+      setAddingHhId(null);
+      setNewMemberName('');
+    });
+  };
+
   const load = () => {
     setLoading(true);
     api
@@ -257,27 +306,55 @@ export function AdminHouseholds() {
             return (
               <div key={h.id} className="card pad-0">
                 <div className="card-head" style={{ padding: '16px 20px 6px' }}>
-                  <div>
-                    <h3 style={{ margin: 0 }}>
-                      {h.name}
-                      <span className="muted" style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>
-                        #{h.id}
-                      </span>
-                    </h3>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {editHhId === h.id ? (
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <input
+                          className="input"
+                          value={editHhName}
+                          autoFocus
+                          onChange={(e) => setEditHhName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && saveHhName(h)}
+                          style={{ maxWidth: 260 }}
+                        />
+                        <button className="btn primary sm" onClick={() => saveHhName(h)}>저장</button>
+                        <button className="btn ghost sm" onClick={() => setEditHhId(null)}>취소</button>
+                      </div>
+                    ) : (
+                      <h3 style={{ margin: 0 }}>
+                        {h.name}
+                        <span className="muted" style={{ fontWeight: 400, fontSize: 12, marginLeft: 8 }}>
+                          #{h.id}
+                        </span>
+                      </h3>
+                    )}
                     <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
                       생성 {fmtDate(h.createdAt)} · 구성원 {h.memberCount}명 · 거래{' '}
                       {h.transactionCount.toLocaleString('ko-KR')}건
                     </div>
                   </div>
-                  <button
-                    className="btn ghost sm"
-                    disabled={!!blocked || deletingId === h.id}
-                    title={blocked ?? '가구 삭제'}
-                    onClick={() => deleteHousehold(h)}
-                    style={{ flex: 'none', color: blocked ? undefined : 'var(--danger, #BE3B2A)' }}
-                  >
-                    {deletingId === h.id ? '삭제 중…' : blocked ? `삭제 불가 · ${blocked}` : '삭제'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
+                    {editHhId !== h.id && (
+                      <button
+                        className="btn ghost sm"
+                        onClick={() => {
+                          setEditHhId(h.id);
+                          setEditHhName(h.name);
+                        }}
+                      >
+                        이름 수정
+                      </button>
+                    )}
+                    <button
+                      className="btn ghost sm"
+                      disabled={!!blocked || deletingId === h.id}
+                      title={blocked ?? '가구 삭제'}
+                      onClick={() => deleteHousehold(h)}
+                      style={{ color: blocked ? undefined : 'var(--danger, #BE3B2A)' }}
+                    >
+                      {deletingId === h.id ? '삭제 중…' : blocked ? `삭제 불가 · ${blocked}` : '삭제'}
+                    </button>
+                  </div>
                 </div>
                 <div style={{ padding: '4px 12px 10px' }}>
                   {h.members.length === 0 ? (
@@ -313,25 +390,84 @@ export function AdminHouseholds() {
                           {m.name[0]}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <b style={{ fontSize: 13.5 }}>{m.name}</b>
-                          {m.isSuperAdmin && (
-                            <span className="pill settled" style={{ marginLeft: 8 }}>
-                              운영 관리자
-                            </span>
+                          {memberEditId === m.id ? (
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input
+                                className="input"
+                                value={memberName}
+                                autoFocus
+                                onChange={(e) => setMemberName(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && saveMemberName(h, m)}
+                                style={{ maxWidth: 180 }}
+                              />
+                              <button className="btn primary sm" onClick={() => saveMemberName(h, m)}>저장</button>
+                              <button className="btn ghost sm" onClick={() => setMemberEditId(null)}>취소</button>
+                            </div>
+                          ) : (
+                            <>
+                              <b style={{ fontSize: 13.5 }}>{m.name}</b>
+                              {m.isSuperAdmin && (
+                                <span className="pill settled" style={{ marginLeft: 8 }}>운영 관리자</span>
+                              )}
+                              {!m.isActive && (
+                                <span className="pill plain" style={{ marginLeft: 6 }}>비활성</span>
+                              )}
+                              <div className="muted" style={{ fontSize: 11.5 }}>
+                                {roleLabel(m.role)}
+                                {m.email ? ` · ${m.email}` : ''}
+                                {` · 최근 로그인 ${fmtDate(m.lastLoginAt)}`}
+                              </div>
+                            </>
                           )}
-                          {!m.isActive && (
-                            <span className="pill plain" style={{ marginLeft: 6 }}>
-                              비활성
-                            </span>
-                          )}
-                          <div className="muted" style={{ fontSize: 11.5 }}>
-                            {roleLabel(m.role)}
-                            {m.email ? ` · ${m.email}` : ''}
-                            {` · 최근 로그인 ${fmtDate(m.lastLoginAt)}`}
-                          </div>
                         </div>
+                        {memberEditId !== m.id && !m.isSuperAdmin && (
+                          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+                            <button
+                              className="btn ghost sm"
+                              onClick={() => {
+                                setMemberEditId(m.id);
+                                setMemberName(m.name);
+                              }}
+                            >
+                              수정
+                            </button>
+                            <button
+                              className="btn ghost sm"
+                              style={{ color: 'var(--danger, #BE3B2A)' }}
+                              onClick={() => delMember(h, m)}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))
+                  )}
+                  {addingHhId === h.id ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 8px' }}>
+                      <input
+                        className="input"
+                        value={newMemberName}
+                        autoFocus
+                        placeholder="구성원 이름"
+                        onChange={(e) => setNewMemberName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addMember(h)}
+                        style={{ maxWidth: 200 }}
+                      />
+                      <button className="btn primary sm" onClick={() => addMember(h)}>추가</button>
+                      <button className="btn ghost sm" onClick={() => setAddingHhId(null)}>취소</button>
+                    </div>
+                  ) : (
+                    <button
+                      className="btn ghost sm"
+                      style={{ margin: '8px' }}
+                      onClick={() => {
+                        setAddingHhId(h.id);
+                        setNewMemberName('');
+                      }}
+                    >
+                      + 구성원 추가
+                    </button>
                   )}
                 </div>
               </div>

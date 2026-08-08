@@ -36,3 +36,11 @@ export function requireTenant(): TenantContext {
 export function runWithoutTenant<T>(fn: () => T): T {
   return tenantStorage.exit(fn);
 }
+
+/**
+ * 지정한 테넌트 컨텍스트로 콜백을 실행한다(시스템 운영자가 임의 가구를 대상으로 작업할 때).
+ * 기존 가구 스코프 서비스(HouseholdService 등)를 대상 가구에 그대로 재사용할 수 있다.
+ */
+export function runWithTenant<T>(ctx: TenantContext, fn: () => T): T {
+  return tenantStorage.run(ctx, fn);
+}

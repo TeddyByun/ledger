@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -13,10 +14,15 @@ import {
   CurrentUser,
   type AuthUser,
 } from '../auth/decorators/current-user.decorator.js';
+import {
+  CreateMemberDto,
+  RenameHouseholdDto,
+  UpdateMemberDto,
+} from '../household/dto/household.dto.js';
 import { AdminService } from './admin.service.js';
 import { CreateHouseholdDto } from './dto/admin.dto.js';
 
-/** 전체 운영(플랫폼) 관리자 전용 라우트 (GET/POST/DELETE /api/v1/admin/...). */
+/** 전체 운영(플랫폼) 관리자 전용 라우트 (/api/v1/admin/...). */
 @Controller('admin')
 @UseGuards(SuperAdminGuard)
 export class AdminController {
@@ -34,6 +40,16 @@ export class AdminController {
     return this.admin.createHousehold(dto);
   }
 
+  /** 가구 이름 변경(임의 가구). */
+  @Patch('households/:id')
+  renameHousehold(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RenameHouseholdDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.admin.renameHousehold(id, dto.name, user.userId);
+  }
+
   /** 가구 완전 삭제(캐스케이드). */
   @Delete('households/:id')
   deleteHousehold(
@@ -41,5 +57,36 @@ export class AdminController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.admin.deleteHousehold(id, user.householdId);
+  }
+
+  /** 임의 가구에 구성원 추가. */
+  @Post('households/:id/members')
+  addMember(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateMemberDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.admin.addMember(id, dto, user.userId);
+  }
+
+  /** 임의 가구의 구성원 수정. */
+  @Patch('households/:id/members/:mid')
+  editMember(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('mid', ParseIntPipe) mid: number,
+    @Body() dto: UpdateMemberDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.admin.editMember(id, mid, dto, user.userId);
+  }
+
+  /** 임의 가구의 구성원 삭제. */
+  @Delete('households/:id/members/:mid')
+  removeMember(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('mid', ParseIntPipe) mid: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.admin.removeMember(id, mid, user.userId);
   }
 }
