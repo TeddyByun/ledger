@@ -29,11 +29,8 @@ export function StackedBarChart({
   const H = height;
   const padL = 60;
   const padR = 14;
-  const padT = 12;
   const padB = 42;
   const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-  const baseY = padT + plotH;
 
   const n = months.length || 1;
   const totals = months.map((_, i) => series.reduce((s, x) => s + (x.values[i] ?? 0), 0));
@@ -44,6 +41,17 @@ export function StackedBarChart({
 
   const groupW = plotW / n;
   const barW = Math.max(4, groupW * 0.52);
+
+  // ── 막대 위 총액 라벨 ── 막대보다 넓으면 세로(90°)로 눕힌다.
+  const TOTAL_FONT = 9;
+  const totalText = (v: number) => (v > 0 ? compact(v) : '');
+  const textW = (s: string) => s.length * TOTAL_FONT * 0.58;
+  const maxTotalW = Math.max(0, ...totals.map((t) => textW(totalText(t))));
+  const rotateTotals = maxTotalW > groupW - 4;
+  const padT = (rotateTotals ? maxTotalW : TOTAL_FONT) + 8;
+
+  const plotH = H - padT - padB;
+  const baseY = padT + plotH;
   const y = (v: number) => baseY - (plotH * v) / top;
 
   return (
@@ -89,6 +97,30 @@ export function StackedBarChart({
                   </rect>
                 );
               })}
+              {totalText(totals[i] ?? 0) &&
+                (rotateTotals ? (
+                  <text
+                    transform={`translate(${cx}, ${y(totals[i] ?? 0) - 5}) rotate(-90)`}
+                    fontSize={TOTAL_FONT}
+                    textAnchor="start"
+                    dominantBaseline="central"
+                    fill="var(--expense)"
+                    fontWeight={600}
+                  >
+                    {totalText(totals[i] ?? 0)}
+                  </text>
+                ) : (
+                  <text
+                    x={cx}
+                    y={y(totals[i] ?? 0) - 5}
+                    fontSize={TOTAL_FONT}
+                    textAnchor="middle"
+                    fill="var(--expense)"
+                    fontWeight={600}
+                  >
+                    {totalText(totals[i] ?? 0)}
+                  </text>
+                ))}
               <text x={cx} y={baseY + 15} fontSize={10} textAnchor="middle" fill="var(--ink-2)">
                 {month}
               </text>

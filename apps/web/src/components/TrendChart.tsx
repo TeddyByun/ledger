@@ -39,11 +39,8 @@ export function TrendChart({
   const H = height;
   const padL = 60;
   const padR = 14;
-  const padT = 12;
   const padB = 42;
   const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-  const baseY = padT + plotH;
 
   const rawMax = Math.max(1, ...data.flatMap((d) => [d.income, d.expense]));
   const step = niceCeil(rawMax / 4);
@@ -55,8 +52,56 @@ export function TrendChart({
   const innerPad = groupW * 0.16;
   const gap = 3;
   const barW = Math.max(3, (groupW - innerPad * 2 - gap) / 2);
+
+  // ── 막대 위 총액 라벨 ──
+  // 막대가 좁아 가로 라벨이 옆 막대와 겹치면 세로(90°)로 눕힌다.
+  const TOTAL_FONT = 9;
+  const totalText = (v: number) => (v > 0 ? compact(v) : '');
+  const textW = (s: string) => s.length * TOTAL_FONT * 0.58; // 대략치(자릿수 기준)
+  const maxTotalW = Math.max(
+    0,
+    ...data.flatMap((d) => [textW(totalText(d.income)), textW(totalText(d.expense))]),
+  );
+  const rotateTotals = maxTotalW > barW + gap - 2;
+  // 라벨이 차트 위로 잘리지 않게 상단 여백을 라벨 크기만큼 확보
+  const padT = (rotateTotals ? maxTotalW : TOTAL_FONT) + 8;
+
+  const plotH = H - padT - padB;
+  const baseY = padT + plotH;
   const y = (v: number) => baseY - (plotH * v) / top;
   const ymOf = splitYm;
+
+  /** 막대 위 총액 라벨 1개 — cx=막대 중심, v=총액. */
+  const totalLabel = (v: number, cx: number, fill: string, key: string) => {
+    const t = totalText(v);
+    if (!t) return null;
+    const barTop = y(v);
+    return rotateTotals ? (
+      <text
+        key={key}
+        transform={`translate(${cx}, ${barTop - 5}) rotate(-90)`}
+        fontSize={TOTAL_FONT}
+        textAnchor="start"
+        dominantBaseline="central"
+        fill={fill}
+        fontWeight={600}
+      >
+        {t}
+      </text>
+    ) : (
+      <text
+        key={key}
+        x={cx}
+        y={barTop - 5}
+        fontSize={TOTAL_FONT}
+        textAnchor="middle"
+        fill={fill}
+        fontWeight={600}
+      >
+        {t}
+      </text>
+    );
+  };
 
   // 색 인덱스는 유형별로 0부터 — 수입/지출이 서로 다른 색을 갖도록 전체 순서로 부여
   const colorIdx = new Map<string, number>();
@@ -115,6 +160,13 @@ export function TrendChart({
             <g key={d.ym}>
               {stack(incomeSeries, i, gx, '수입')}
               {stack(expenseSeries, i, gx + barW + gap, '지출')}
+              {totalLabel(d.income, gx + barW / 2, 'var(--income)', `it-${d.ym}`)}
+              {totalLabel(
+                d.expense,
+                gx + barW + gap + barW / 2,
+                'var(--expense)',
+                `et-${d.ym}`,
+              )}
               <text
                 x={gx + barW + gap / 2}
                 y={baseY + 15}
