@@ -81,6 +81,9 @@ export class AdminService {
           select: {
             id: true,
             name: true,
+            relation: true,
+            isSelf: true,
+            color: true,
             email: true,
             role: true,
             isActive: true,

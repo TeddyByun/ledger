@@ -7,12 +7,44 @@ import { useAuth } from '@/lib/auth';
 interface AdminMember {
   id: number;
   name: string;
+  relation: string | null;
+  isSelf: boolean;
+  color: string | null;
   email: string | null;
   role: string;
   isActive: boolean;
   isSuperAdmin: boolean;
   lastLoginAt: string | null;
 }
+
+const RELATIONS = [
+  { value: 'self', label: '본인' },
+  { value: 'spouse', label: '배우자' },
+  { value: 'child', label: '자녀' },
+  { value: 'parent', label: '부모' },
+  { value: 'other', label: '기타' },
+];
+const COLORS = ['#0F766E', '#245FA0', '#BE3B2A', '#B7791F', '#5B54B0', '#A8497E', '#3E7C4E'];
+interface MForm {
+  name: string;
+  relation: string;
+  isSelf: boolean;
+  color: string;
+  email: string;
+  password: string;
+  passwordConfirm: string;
+  role: 'owner' | 'member' | 'viewer';
+}
+const EMPTY_M: MForm = {
+  name: '',
+  relation: 'spouse',
+  isSelf: false,
+  color: COLORS[1]!,
+  email: '',
+  password: '',
+  passwordConfirm: '',
+  role: 'member',
+};
 interface AdminHousehold {
   id: number;
   name: string;
@@ -24,6 +56,8 @@ interface AdminHousehold {
 
 const roleLabel = (r: string) =>
   r === 'owner' ? '소유자' : r === 'viewer' ? '뷰어' : '구성원';
+const relLabel = (r: string | null) =>
+  RELATIONS.find((x) => x.value === r)?.label ?? r ?? '—';
 const fmtDate = (s: string | null) =>
   s ? new Date(s).toLocaleDateString('ko-KR') : '—';
 
@@ -56,13 +90,13 @@ export function AdminHouseholds() {
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // 가구 이름 수정 / 구성원 편집·추가
+  // 가구 이름 수정
   const [editHhId, setEditHhId] = useState<number | null>(null);
   const [editHhName, setEditHhName] = useState('');
-  const [memberEditId, setMemberEditId] = useState<number | null>(null);
-  const [memberName, setMemberName] = useState('');
-  const [addingHhId, setAddingHhId] = useState<number | null>(null);
-  const [newMemberName, setNewMemberName] = useState('');
+  // 구성원 폼 — formHhId 가구에 대해, formMemberId=null 이면 추가/아니면 수정
+  const [formHhId, setFormHhId] = useState<number | null>(null);
+  const [formMemberId, setFormMemberId] = useState<number | null>(null);
+  const [mform, setMform] = useState<MForm>(EMPTY_M);
 
   const act = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -80,29 +114,61 @@ export function AdminHouseholds() {
       setEditHhId(null);
     });
   };
-  const saveMemberName = (h: AdminHousehold, m: AdminMember) => {
-    if (!memberName.trim()) return;
+
+  const openAddMember = (h: AdminHousehold) => {
+    setFormHhId(h.id);
+    setFormMemberId(null);
+    setMform(EMPTY_M);
+    setError(null);
+  };
+  const openEditMember = (h: AdminHousehold, m: AdminMember) => {
+    setFormHhId(h.id);
+    setFormMemberId(m.id);
+    setMform({
+      name: m.name,
+      relation: m.relation ?? 'other',
+      isSelf: m.isSelf,
+      color: m.color ?? COLORS[0]!,
+      email: m.email ?? '',
+      password: '',
+      passwordConfirm: '',
+      role: (m.role as MForm['role']) ?? 'member',
+    });
+    setError(null);
+  };
+  const closeMemberForm = () => {
+    setFormHhId(null);
+    setFormMemberId(null);
+  };
+  const saveMemberForm = (h: AdminHousehold) => {
+    if (!mform.name.trim()) {
+      setError('이름을 입력하세요.');
+      return;
+    }
+    if (mform.password && mform.password !== mform.passwordConfirm) {
+      setError('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+    const body: Record<string, unknown> = {
+      name: mform.name.trim(),
+      relation: mform.relation,
+      isSelf: mform.isSelf,
+      color: mform.color,
+      role: mform.role,
+    };
+    if (mform.email.trim()) body.email = mform.email.trim();
+    if (mform.password) body.password = mform.password;
     act(async () => {
-      await api.patch(`/admin/households/${h.id}/members/${m.id}`, {
-        name: memberName.trim(),
-      });
-      setMemberEditId(null);
+      if (formMemberId == null)
+        await api.post(`/admin/households/${h.id}/members`, body);
+      else
+        await api.patch(`/admin/households/${h.id}/members/${formMemberId}`, body);
+      closeMemberForm();
     });
   };
   const delMember = (h: AdminHousehold, m: AdminMember) => {
     if (!confirm(`구성원 '${m.name}'을(를) 삭제할까요?`)) return;
     act(() => api.del(`/admin/households/${h.id}/members/${m.id}`));
-  };
-  const addMember = (h: AdminHousehold) => {
-    if (!newMemberName.trim()) return;
-    act(async () => {
-      await api.post(`/admin/households/${h.id}/members`, {
-        name: newMemberName.trim(),
-        relation: 'other',
-      });
-      setAddingHhId(null);
-      setNewMemberName('');
-    });
   };
 
   const load = () => {
@@ -390,45 +456,25 @@ export function AdminHouseholds() {
                           {m.name[0]}
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          {memberEditId === m.id ? (
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                              <input
-                                className="input"
-                                value={memberName}
-                                autoFocus
-                                onChange={(e) => setMemberName(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && saveMemberName(h, m)}
-                                style={{ maxWidth: 180 }}
-                              />
-                              <button className="btn primary sm" onClick={() => saveMemberName(h, m)}>저장</button>
-                              <button className="btn ghost sm" onClick={() => setMemberEditId(null)}>취소</button>
-                            </div>
-                          ) : (
-                            <>
-                              <b style={{ fontSize: 13.5 }}>{m.name}</b>
-                              {m.isSuperAdmin && (
-                                <span className="pill settled" style={{ marginLeft: 8 }}>운영 관리자</span>
-                              )}
-                              {!m.isActive && (
-                                <span className="pill plain" style={{ marginLeft: 6 }}>비활성</span>
-                              )}
-                              <div className="muted" style={{ fontSize: 11.5 }}>
-                                {roleLabel(m.role)}
-                                {m.email ? ` · ${m.email}` : ''}
-                                {` · 최근 로그인 ${fmtDate(m.lastLoginAt)}`}
-                              </div>
-                            </>
+                          <b style={{ fontSize: 13.5 }}>{m.name}</b>
+                          {m.isSelf && (
+                            <span className="pill settled" style={{ marginLeft: 8 }}>본인</span>
                           )}
+                          {m.isSuperAdmin && (
+                            <span className="pill settled" style={{ marginLeft: 6 }}>운영 관리자</span>
+                          )}
+                          {!m.isActive && (
+                            <span className="pill plain" style={{ marginLeft: 6 }}>비활성</span>
+                          )}
+                          <div className="muted" style={{ fontSize: 11.5 }}>
+                            {relLabel(m.relation)}
+                            {m.email ? ` · 로그인 ${roleLabel(m.role)} · ${m.email}` : ''}
+                            {` · 최근 로그인 ${fmtDate(m.lastLoginAt)}`}
+                          </div>
                         </div>
-                        {memberEditId !== m.id && !m.isSuperAdmin && (
+                        {!m.isSuperAdmin && (
                           <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
-                            <button
-                              className="btn ghost sm"
-                              onClick={() => {
-                                setMemberEditId(m.id);
-                                setMemberName(m.name);
-                              }}
-                            >
+                            <button className="btn ghost sm" onClick={() => openEditMember(h, m)}>
                               수정
                             </button>
                             <button
@@ -443,28 +489,19 @@ export function AdminHouseholds() {
                       </div>
                     ))
                   )}
-                  {addingHhId === h.id ? (
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 8px' }}>
-                      <input
-                        className="input"
-                        value={newMemberName}
-                        autoFocus
-                        placeholder="구성원 이름"
-                        onChange={(e) => setNewMemberName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && addMember(h)}
-                        style={{ maxWidth: 200 }}
-                      />
-                      <button className="btn primary sm" onClick={() => addMember(h)}>추가</button>
-                      <button className="btn ghost sm" onClick={() => setAddingHhId(null)}>취소</button>
-                    </div>
+                  {formHhId === h.id ? (
+                    <MemberFormPanel
+                      form={mform}
+                      setForm={setMform}
+                      isEdit={formMemberId != null}
+                      onSave={() => saveMemberForm(h)}
+                      onCancel={closeMemberForm}
+                    />
                   ) : (
                     <button
                       className="btn ghost sm"
                       style={{ margin: '8px' }}
-                      onClick={() => {
-                        setAddingHhId(h.id);
-                        setNewMemberName('');
-                      }}
+                      onClick={() => openAddMember(h)}
                     >
                       + 구성원 추가
                     </button>
@@ -476,5 +513,162 @@ export function AdminHouseholds() {
         </div>
       )}
     </main>
+  );
+}
+
+/** 구성원 추가/수정 폼 — 이름·관계·명의·색·로그인(이메일·권한·비밀번호). */
+function MemberFormPanel({
+  form,
+  setForm,
+  isEdit,
+  onSave,
+  onCancel,
+}: {
+  form: MForm;
+  setForm: (f: MForm) => void;
+  isEdit: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      style={{
+        margin: '8px',
+        padding: 14,
+        border: '1px solid var(--line)',
+        borderRadius: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 700 }}>
+        {isEdit ? '구성원 수정' : '구성원 추가'}
+      </div>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div className="field" style={{ minWidth: 150 }}>
+          <label>이름</label>
+          <input
+            className="input"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="선영"
+          />
+        </div>
+        <div className="field" style={{ minWidth: 120 }}>
+          <label>관계</label>
+          <select
+            className="select"
+            value={form.relation}
+            onChange={(e) => setForm({ ...form, relation: e.target.value })}
+          >
+            {RELATIONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>색 태그</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {COLORS.map((c) => (
+              <button
+                type="button"
+                key={c}
+                aria-label={c}
+                onClick={() => setForm({ ...form, color: c })}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  background: c,
+                  border:
+                    form.color === c
+                      ? '3px solid var(--ink)'
+                      : '1px solid var(--line)',
+                  cursor: 'pointer',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+        <input
+          type="checkbox"
+          checked={form.isSelf}
+          onChange={(e) => setForm({ ...form, isSelf: e.target.checked })}
+        />
+        이 구성원을 <b>본인(대표)</b>으로 지정
+      </label>
+
+      <div
+        style={{
+          borderTop: '1px dashed var(--line-2)',
+          paddingTop: 12,
+          display: 'flex',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ flexBasis: '100%', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>
+          로그인 정보 <span className="muted">(선택 — 앱에 로그인하는 구성원만)</span>
+        </div>
+        <div className="field" style={{ minWidth: 200 }}>
+          <label>이메일</label>
+          <input
+            className="input"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder="mom@example.com"
+          />
+        </div>
+        <div className="field" style={{ minWidth: 120 }}>
+          <label>권한</label>
+          <select
+            className="select"
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value as MForm['role'] })}
+          >
+            <option value="owner">소유자</option>
+            <option value="member">구성원</option>
+            <option value="viewer">뷰어</option>
+          </select>
+        </div>
+        <div className="field" style={{ minWidth: 150 }}>
+          <label>비밀번호 {isEdit && <span className="muted">(변경 시에만)</span>}</label>
+          <input
+            className="input"
+            type="password"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            placeholder="8자 이상"
+            autoComplete="new-password"
+          />
+        </div>
+        <div className="field" style={{ minWidth: 150 }}>
+          <label>비밀번호 확인</label>
+          <input
+            className="input"
+            type="password"
+            value={form.passwordConfirm}
+            onChange={(e) => setForm({ ...form, passwordConfirm: e.target.value })}
+            placeholder="한 번 더 입력"
+            autoComplete="new-password"
+          />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn primary sm" onClick={onSave}>
+          {isEdit ? '저장' : '추가'}
+        </button>
+        <button className="btn ghost sm" onClick={onCancel}>
+          취소
+        </button>
+      </div>
+    </div>
   );
 }
