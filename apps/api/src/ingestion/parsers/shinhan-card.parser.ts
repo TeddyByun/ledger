@@ -46,11 +46,30 @@ export class ShinhanCardParser implements StatementParser {
     );
     const out: NormalizedCardRow[] = [];
 
+    // 이용일이 비어있는 청구 행(연회비 등)은 명세서의 최근 이용일로 귀속 →
+    // 결제일(익월)이 아닌 '사용월' 집계에 포함되도록 한다.
+    const usageFallbackDate =
+      rows
+        .slice(h + 1)
+        .map((r) => parseDate(r?.[COL.txnDate]))
+        .filter((d): d is Date => d != null)
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? billingDate;
+
     for (let i = h + 1; i < rows.length && h >= 0; i++) {
       const row = rows[i]!;
-      const txnDate = parseDate(row[COL.txnDate]);
-      const merchant = (row[COL.merchant] ?? '').trim();
-      if (!txnDate || !merchant || /합계|소계/.test(merchant)) continue;
+      const merchantRaw = (row[COL.merchant] ?? '').trim();
+      // 가맹점명 끝의 마스킹된 카드번호 제거: "기본연회비****-****-****-253*" → "기본연회비"
+      const merchant = merchantRaw.replace(/\*{3,}.*$/, '').trim();
+      if (!merchant || /합계|소계/.test(merchant)) continue;
+
+      const label = norm(row[COL.cardLabel]); // 본인253 / 가족160
+      // 이용카드가 본인/가족(카드) 행만 거래로 인정 → 할인/요약 섹션 제외
+      if (!label || !/(본인|가족)/.test(label)) continue;
+      const cardNo = label.match(/\d+/)?.[0] ?? null;
+
+      // 연회비 등 이용일이 비어있는 청구 행도 누락 없이 반영 → 최근 이용일(사용월)로 귀속
+      const txnDate = parseDate(row[COL.txnDate]) ?? usageFallbackDate;
+      if (!txnDate) continue;
 
       const rawUsage = parseAmount(row[COL.usageAmount]) ?? 0;
       const principal = parseAmount(row[COL.principal]) ?? 0;
@@ -60,11 +79,6 @@ export class ShinhanCardParser implements StatementParser {
       const usageAmount = isOverseas ? principal : rawUsage;
       const saleType = norm(row[COL.saleType]);
       const isCanceled = saleType === '취소' || rawUsage < 0;
-
-      const label = norm(row[COL.cardLabel]); // 본인253 / 가족160
-      // 이용카드가 본인/가족(카드) 행만 거래로 인정 → 할인내역 등 다른 섹션 제외
-      if (!label || !/(본인|가족)/.test(label)) continue;
-      const cardNo = label.match(/\d+/)?.[0] ?? null;
 
       out.push({
         cardLabel: label,
