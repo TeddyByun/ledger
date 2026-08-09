@@ -287,12 +287,14 @@ export function PaymentMethods() {
               </div>
               <div className="field">
                 <label htmlFor="pm-memo">메모 (선택)</label>
-                <input
+                <textarea
                   id="pm-memo"
                   className="input"
                   value={form.memo}
                   onChange={(e) => set('memo', e.target.value)}
                   placeholder="연회비, 적립 혜택 등"
+                  rows={10}
+                  style={{ resize: 'vertical', minHeight: '11em', lineHeight: 1.5 }}
                 />
               </div>
 
