@@ -39,6 +39,8 @@ export function MultiSelect({
   const toggle = (v: string) =>
     onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
 
+  const allSelected = options.length > 0 && selected.length === options.length;
+
   const summary =
     selected.length === 0
       ? allLabel
@@ -105,16 +107,28 @@ export function MultiSelect({
             <span className="muted" style={{ fontSize: 11 }}>
               {selected.length}개 선택
             </span>
-            {selected.length > 0 && (
-              <button
-                type="button"
-                className="btn ghost sm"
-                onClick={() => onChange([])}
-                style={{ padding: '2px 8px' }}
-              >
-                전체 해제
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {options.length > 0 && !allSelected && (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => onChange(options.map((o) => o.value))}
+                  style={{ padding: '2px 8px' }}
+                >
+                  전체 선택
+                </button>
+              )}
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => onChange([])}
+                  style={{ padding: '2px 8px' }}
+                >
+                  전체 해제
+                </button>
+              )}
+            </div>
           </div>
           {options.length === 0 ? (
             <div className="muted" style={{ fontSize: 12, padding: 8 }}>
