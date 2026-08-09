@@ -28,7 +28,6 @@ const mode = (a: number[]): number | null => {
   for (const v of a) c.set(v, (c.get(v) ?? 0) + 1);
   return [...c.entries()].sort((x, y) => y[1] - x[1] || x[0] - y[0])[0]![0];
 };
-const won = (n: number) => n.toLocaleString('ko-KR');
 
 type Conf = 'high' | 'med' | 'low';
 type Flow = 'income' | 'expense';
@@ -317,29 +316,24 @@ export class CashflowService {
             .reduce((a, u) => a + Number(u.principal) + Number(u.fee), 0),
         );
 
+        // 예상 카드대금 = 전월 실제 지출을 그대로 반영한다.
+        //  ① 대상월 명세서 청구액(전월 사용분) → ② 전월 카드 이용액 → ③ 실적 없을 때만 과거 출금 중앙값.
+        //  과거 대비 적게 썼어도(예: 이번 전월만 소액) 실제 명세서·이용액을 우선한다.
         let amount = 0;
         let basis = '';
         let conf: Conf = 'med';
-        const enough = (v: number) => v > 0 && (histMed === 0 || v >= histMed * 0.6);
-        if (enough(stmtTotal)) {
+        if (stmtTotal > 0) {
           amount = stmtTotal;
           basis = `${tym} 명세서 청구액`;
           conf = 'high';
-        } else if (enough(usagePrev)) {
+        } else if (usagePrev > 0) {
           amount = usagePrev;
           basis = `${prevYm} 카드 이용액`;
           conf = 'high';
         } else if (histMed > 0) {
           amount = histMed;
-          basis =
-            stmtTotal > 0 || usagePrev > 0
-              ? `명세서 일부만 반영(${won(Math.max(stmtTotal, usagePrev))}) → 최근 3개월 실제 출금 중앙값`
-              : '최근 3개월 실제 출금 중앙값';
+          basis = '최근 3개월 실제 출금 중앙값';
           conf = 'med';
-        } else if (usagePrev > 0) {
-          amount = usagePrev;
-          basis = `${prevYm} 카드 이용액`;
-          conf = 'low';
         }
         if (amount <= 0) continue;
 
