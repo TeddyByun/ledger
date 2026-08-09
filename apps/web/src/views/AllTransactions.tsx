@@ -49,13 +49,14 @@ function monthEnd(ym: string): string {
   const day = new Date(y!, m!, 0).getDate();
   return `${ym}-${String(day).padStart(2, '0')}`;
 }
-/** 기본 조회 시작월 = 3개월 전 (YYYY-MM) */
-function defaultFromMonth(): string {
+/** 기본 조회 월 = 전월 (YYYY-MM) */
+function defaultMonth(): string {
   const d = new Date();
-  d.setMonth(d.getMonth() - 3, 1);
+  d.setMonth(d.getMonth() - 1, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-const withDefaults = (): Filters => ({ ...EMPTY, from: defaultFromMonth() });
+/** 기본 필터 — 조회 기간을 전월(시작·종료 동일)로 채움 */
+const withDefaults = (): Filters => ({ ...EMPTY, from: defaultMonth(), to: defaultMonth() });
 
 interface Summary {
   incomeTotal: number;
