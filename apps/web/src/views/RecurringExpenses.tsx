@@ -107,8 +107,10 @@ export function RecurringExpenses() {
     setRows(list);
   }, []);
 
-  useEffect(() => {
-    Promise.all([
+  const reloadAll = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return Promise.all([
       load(),
       api.get<Category[]>('/categories').then(setCats),
       api.get<PaymentMethod[]>('/payment-methods').then(setPms),
@@ -116,6 +118,10 @@ export function RecurringExpenses() {
       .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    reloadAll();
+  }, [reloadAll]);
 
   const catName = (code: string) => cats.find((c) => c.code === code)?.name ?? code;
 
@@ -263,7 +269,22 @@ export function RecurringExpenses() {
           </div>
         </div>
 
-        {error && <div className="error-banner">{error}</div>}
+        {error && (
+          <div
+            className="error-banner"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+          >
+            <span>{error}</span>
+            <button
+              className="btn ghost sm"
+              onClick={() => reloadAll()}
+              disabled={loading}
+              style={{ flex: 'none' }}
+            >
+              {loading ? '불러오는 중…' : '다시 시도'}
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="card">
