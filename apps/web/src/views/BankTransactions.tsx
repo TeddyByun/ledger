@@ -11,16 +11,16 @@ interface Filters {
   paymentMethodIds: string[];
   from: string;
   to: string;
-  txnType: string;
-  categoryCode: string;
+  txnTypes: string[];
+  categoryCodes: string[];
   q: string;
 }
 const EMPTY: Filters = {
   paymentMethodIds: [],
   from: '',
   to: '',
-  txnType: '',
-  categoryCode: '',
+  txnTypes: [],
+  categoryCodes: [],
   q: '',
 };
 
@@ -58,8 +58,8 @@ function filterParams(f: Filters): URLSearchParams {
   if (f.paymentMethodIds.length) p.set('paymentMethodIds', f.paymentMethodIds.join(','));
   if (f.from) p.set('from', `${f.from}-01`);
   if (f.to) p.set('to', monthEnd(f.to));
-  if (f.txnType) p.set('txnType', f.txnType);
-  if (f.categoryCode) p.set('categoryCode', f.categoryCode);
+  if (f.txnTypes.length) p.set('txnTypes', f.txnTypes.join(','));
+  if (f.categoryCodes.length) p.set('categoryCodes', f.categoryCodes.join(','));
   if (f.q) p.set('q', f.q);
   return p;
 }
@@ -337,35 +337,29 @@ export function BankTransactions() {
             </div>
             <div className="field" style={{ minWidth: 150 }}>
               <label>구분</label>
-              <select
-                className="select"
-                value={draft.txnType}
-                onChange={(e) => setDraft({ ...draft, txnType: e.target.value })}
-              >
-                <option value="">전체 구분</option>
-                {types.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 구분"
+                minWidth={150}
+                options={types.map((t) => ({ value: t, label: t }))}
+                selected={draft.txnTypes}
+                onChange={(v) => setDraft({ ...draft, txnTypes: v })}
+              />
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>분류</label>
-              <select
-                className="select"
-                value={draft.categoryCode}
-                onChange={(e) => setDraft({ ...draft, categoryCode: e.target.value })}
-              >
-                <option value="">전체 분류</option>
-                <option value="-">미분류 (-)</option>
-                {catOptions.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.depth === 2 ? '　└ ' : ''}
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 분류"
+                minWidth={170}
+                options={[
+                  { value: '-', label: '미분류' },
+                  ...catOptions.map((c) => ({
+                    value: c.code,
+                    label: `${c.depth === 2 ? '└ ' : ''}${c.name}`,
+                  })),
+                ]}
+                selected={draft.categoryCodes}
+                onChange={(v) => setDraft({ ...draft, categoryCodes: v })}
+              />
             </div>
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label>내용</label>

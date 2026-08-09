@@ -984,6 +984,30 @@ export class StatementTxnService {
     return [code, ...children.map((c) => c.code)];
   }
 
+  /**
+   * 다중 분류 필터 조각 — categoryCodes(콤마) 또는 단일 categoryCode.
+   * '-'(미분류)와 대분류(하위 포함)를 혼합 선택하면 OR 로 묶는다. bank/card 공용 필드.
+   */
+  private async categoryFilterFrag(
+    q: StatementTxnQueryDto,
+  ): Promise<Prisma.CardTransactionWhereInput> {
+    const raw = splitCsv(q.categoryCodes, q.categoryCode);
+    if (raw.length === 0) return {};
+    const wantUncl = raw.includes('-');
+    const expanded = new Set<string>();
+    for (const c of raw.filter((x) => x !== '-')) {
+      (await this.categoryCodes(c)).forEach((s) => expanded.add(s));
+    }
+    const conds: Prisma.CardTransactionWhereInput[] = [];
+    if (wantUncl) conds.push({ transactionId: null });
+    if (expanded.size > 0) {
+      conds.push({ transaction: { is: { categoryCode: { in: [...expanded] } } } });
+    }
+    if (conds.length === 0) return {};
+    if (conds.length === 1) return conds[0]!;
+    return { OR: conds };
+  }
+
   private async buildBankWhere(
     q: StatementTxnQueryDto,
   ): Promise<Prisma.BankTransactionWhereInput> {
@@ -991,21 +1015,16 @@ export class StatementTxnService {
     const pmIds = parseIdList(q.paymentMethodIds, q.paymentMethodId);
     if (pmIds.length === 1) where.paymentMethodId = pmIds[0];
     else if (pmIds.length > 1) where.paymentMethodId = { in: pmIds };
-    if (q.txnType) where.txnTypeRaw = q.txnType;
+    const txnTypes = splitCsv(q.txnTypes, q.txnType);
+    if (txnTypes.length === 1) where.txnTypeRaw = txnTypes[0];
+    else if (txnTypes.length > 1) where.txnTypeRaw = { in: txnTypes };
     if (q.from || q.to) {
       where.txnAt = {
         ...(q.from && { gte: new Date(`${q.from}T00:00:00.000Z`) }),
         ...(q.to && { lte: new Date(`${q.to}T23:59:59.999Z`) }),
       };
     }
-    // 분류: '-' 는 미분류(연결 거래 없음)만
-    if (q.categoryCode === '-') {
-      where.transactionId = null;
-    } else if (q.categoryCode) {
-      where.transaction = {
-        is: { categoryCode: { in: await this.categoryCodes(q.categoryCode) } },
-      };
-    }
+    Object.assign(where, await this.categoryFilterFrag(q));
     if (q.q) {
       where.description = { contains: q.q, mode: 'insensitive' };
     }
@@ -1028,14 +1047,7 @@ export class StatementTxnService {
     // 할부 여부: 원거래 연결 유무로 판단
     if (q.installment === 'yes') where.installmentPlanId = { not: null };
     else if (q.installment === 'no') where.installmentPlanId = null;
-    // 분류: '-' 는 미분류(연결 거래 없음)만
-    if (q.categoryCode === '-') {
-      where.transactionId = null;
-    } else if (q.categoryCode) {
-      where.transaction = {
-        is: { categoryCode: { in: await this.categoryCodes(q.categoryCode) } },
-      };
-    }
+    Object.assign(where, await this.categoryFilterFrag(q));
     if (q.q) {
       where.merchantName = { contains: q.q, mode: 'insensitive' };
     }
@@ -1056,6 +1068,12 @@ function parseSort<T>(
     if (make) out.push(make(dirRaw === 'asc' ? 'asc' : 'desc'));
   }
   return out;
+}
+
+/** 콤마구분 문자열(우선) 또는 단일값 → 트림·빈값 제거된 배열. */
+function splitCsv(csv?: string, single?: string): string[] {
+  const src = csv != null && csv !== '' ? csv.split(',') : single ? [single] : [];
+  return src.map((s) => s.trim()).filter(Boolean);
 }
 
 function startOfDay(d: Date): Date {

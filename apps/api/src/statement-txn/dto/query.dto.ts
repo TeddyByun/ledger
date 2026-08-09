@@ -22,10 +22,20 @@ export class StatementTxnQueryDto {
   @IsOptional()
   categoryCode?: string;
 
+  @ApiPropertyOptional({ description: "분류 코드 다중(콤마구분). '-'=미분류. 지정 시 categoryCode 대신 사용" })
+  @IsString()
+  @IsOptional()
+  categoryCodes?: string;
+
   @ApiPropertyOptional({ description: '거래 구분(txn_type_raw) 정확일치' })
   @IsString()
   @IsOptional()
   txnType?: string;
+
+  @ApiPropertyOptional({ description: '거래 구분 다중(콤마구분). 지정 시 txnType 대신 사용' })
+  @IsString()
+  @IsOptional()
+  txnTypes?: string;
 
   @ApiPropertyOptional({ description: "할부 여부 필터: 'yes'(할부만) | 'no'(일시불만)" })
   @IsString()
