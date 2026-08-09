@@ -197,6 +197,25 @@ export class CashflowService {
     const recentFrom = ymOf(new Date(Date.UTC(ty, tm - 3, 1)));
     const isOngoing = (perMonth: Map<string, number>) =>
       [...perMonth.keys()].some((y) => y >= recentFrom);
+    /**
+     * 정기가 아니라 **수시성(spot)** 이체인가 — 날짜·금액을 예측하지 않고 참고 수치로만 돌린다.
+     * 진짜 정기(급여·월세·보험·대출)는 매월 1건, 비슷한 금액이다. 반면 투자 입출금·개인 이체는
+     *  - 한 달에 여러 번 나가거나(월평균 건수 > 1.5), 또는
+     *  - 월별 금액이 극단으로 튄다(최대 ≥ 최소 × 5).
+     * (예: '키움투자' 월 2~4건, '변채민' 월 입금 3천~227만) → 정기로 오탐되던 것을 걸러낸다.
+     */
+    const isSporadic = (perMonth: Map<string, number>, txCount: number) => {
+      const months = perMonth.size;
+      if (months === 0) return false;
+      if (txCount / months > 1.5) return true;
+      const vals = [...perMonth.values()].filter((v) => v > 0);
+      if (vals.length >= 2) {
+        const mn = Math.min(...vals);
+        const mx = Math.max(...vals);
+        if (mn > 0 && mx > mn * 5) return true;
+      }
+      return false;
+    };
 
     const predicted: FlowLine[] = [];
 
@@ -226,8 +245,8 @@ export class CashflowService {
     }
     for (const g of incomeGrp.values()) {
       const months = g.perMonth.size;
-      if (!isRegularIn(months) || !isOngoing(g.perMonth)) {
-        // 가끔 들어오는 입금 → 날짜를 특정하지 않고 '기타 수입'으로 묶어 일할 반영
+      if (!isRegularIn(months) || !isOngoing(g.perMonth) || isSporadic(g.perMonth, g.days.length)) {
+        // 가끔 들어오는 입금·수시성 이체 → 날짜를 특정하지 않고 '기타 수입'으로 묶어 일할 반영
         for (const [y, v] of g.perMonth) etcIncomeByMonth.set(y, (etcIncomeByMonth.get(y) ?? 0) + v);
         continue;
       }
@@ -469,8 +488,8 @@ export class CashflowService {
     }
     for (const g of outGrp.values()) {
       const months = g.perMonth.size;
-      if (!isRegularOut(months) || !isOngoing(g.perMonth)) {
-        // 가끔 나가는 출금 → 날짜를 특정하지 않고 변동으로
+      if (!isRegularOut(months) || !isOngoing(g.perMonth) || isSporadic(g.perMonth, g.days.length)) {
+        // 가끔 나가는 출금·수시성 이체(투자·개인 송금 등) → 날짜를 특정하지 않고 변동으로
         for (const [y, v] of g.perMonth) varByMonth.set(y, (varByMonth.get(y) ?? 0) + v);
         continue;
       }
