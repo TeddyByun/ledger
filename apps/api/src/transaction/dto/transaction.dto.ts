@@ -85,6 +85,11 @@ export class TransactionQueryDto {
   @IsOptional()
   categoryCode?: string;
 
+  @ApiPropertyOptional({ description: "분류 코드 다중(콤마구분). '-'=미분류. 지정 시 categoryCode 대신 사용" })
+  @IsString()
+  @IsOptional()
+  categoryCodes?: string;
+
   @ApiPropertyOptional({ description: '결제수단 ID' })
   @Type(() => Number)
   @IsInt()

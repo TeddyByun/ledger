@@ -71,15 +71,27 @@ export class TransactionService {
     const wantBank = !query.methodType || query.methodType === 'bank';
     const wantCard = !query.methodType || query.methodType === 'card';
 
-    // 분류 필터(대분류→하위 포함)
+    // 분류 필터(다중, 대분류→하위 포함, '-'=미분류)
+    const selectedCats = (
+      query.categoryCodes
+        ? query.categoryCodes.split(',')
+        : query.categoryCode
+          ? [query.categoryCode]
+          : []
+    )
+      .map((c) => c.trim())
+      .filter(Boolean);
+    const wantUncat = selectedCats.includes('-');
+    const realCats = selectedCats.filter((c) => c !== '-');
     let catCodes: Set<string> | null = null;
-    if (query.categoryCode && query.categoryCode !== '-') {
+    if (realCats.length > 0) {
       const children = await this.prisma.category.findMany({
-        where: { parentCode: query.categoryCode },
+        where: { parentCode: { in: realCats } },
         select: { code: true },
       });
-      catCodes = new Set([query.categoryCode, ...children.map((c) => c.code)]);
+      catCodes = new Set([...realCats, ...children.map((c) => c.code)]);
     }
+    const catFilterActive = wantUncat || catCodes !== null;
 
     const bankDate =
       query.from || query.to
@@ -177,8 +189,11 @@ export class TransactionService {
     const filtered = rows.filter((r) => {
       if (r.categoryCode && excluded.has(r.categoryCode)) return false; // 집계제외 숨김
       if (query.type && r.type !== query.type) return false;
-      if (query.categoryCode === '-' && r.categoryCode) return false; // 미분류만
-      if (catCodes && !(r.categoryCode && catCodes.has(r.categoryCode))) return false;
+      if (catFilterActive) {
+        const inCats = r.categoryCode != null && catCodes?.has(r.categoryCode) === true;
+        const isUncat = r.categoryCode == null;
+        if (!((wantUncat && isUncat) || inCats)) return false; // 선택 분류 + 미분류(-)만
+      }
       if (q && !(r.description ?? '').toLowerCase().includes(q)) return false;
       return true;
     });

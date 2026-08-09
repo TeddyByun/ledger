@@ -30,7 +30,7 @@ interface Filters {
   type: string; // '' | 'income' | 'expense'
   methodType: string; // '' | 'bank' | 'card'
   paymentMethodIds: string[];
-  categoryCode: string;
+  categoryCodes: string[];
   q: string;
 }
 const EMPTY: Filters = {
@@ -39,7 +39,7 @@ const EMPTY: Filters = {
   type: '',
   methodType: '',
   paymentMethodIds: [],
-  categoryCode: '',
+  categoryCodes: [],
   q: '',
 };
 
@@ -74,7 +74,7 @@ function filterParams(f: Filters): URLSearchParams {
   if (f.type) p.set('type', f.type);
   if (f.methodType) p.set('methodType', f.methodType);
   if (f.paymentMethodIds.length) p.set('paymentMethodIds', f.paymentMethodIds.join(','));
-  if (f.categoryCode) p.set('categoryCode', f.categoryCode);
+  if (f.categoryCodes.length) p.set('categoryCodes', f.categoryCodes.join(','));
   if (f.q) p.set('q', f.q);
   return p;
 }
@@ -217,20 +217,19 @@ export function AllTransactions() {
             </div>
             <div className="field" style={{ minWidth: 170 }}>
               <label>분류</label>
-              <select
-                className="select"
-                value={draft.categoryCode}
-                onChange={(e) => setDraft({ ...draft, categoryCode: e.target.value })}
-              >
-                <option value="">전체 분류</option>
-                <option value="-">미분류 (-)</option>
-                {catOptions.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.depth === 2 ? '　└ ' : ''}
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <MultiSelect
+                allLabel="전체 분류"
+                minWidth={170}
+                options={[
+                  { value: '-', label: '미분류' },
+                  ...catOptions.map((c) => ({
+                    value: c.code,
+                    label: `${c.depth === 2 ? '└ ' : ''}${c.name}`,
+                  })),
+                ]}
+                selected={draft.categoryCodes}
+                onChange={(v) => setDraft({ ...draft, categoryCodes: v })}
+              />
             </div>
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label>내용</label>
