@@ -187,6 +187,7 @@ model PaymentMethod {
   owner       String?
   memo        String?
   excludeFromStats Boolean @default(false) @map("exclude_from_stats") // 수입·지출 집계에서 제외
+  isActive    Boolean    @default(true) @map("is_active") // false=사용 중지(신규 사용 안 함)
   createdAt   DateTime   @default(now()) @map("created_at")
 
   household           Household            @relation(fields: [householdId], references: [id])

@@ -30,6 +30,7 @@ export interface PaymentMethod {
   owner: string | null;
   memo: string | null;
   excludeFromStats?: boolean;
+  isActive?: boolean;
 }
 
 export interface HouseholdMember {

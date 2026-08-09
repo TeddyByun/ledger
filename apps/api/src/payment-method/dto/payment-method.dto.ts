@@ -51,6 +51,14 @@ export class CreatePaymentMethodDto {
   @IsBoolean()
   @IsOptional()
   excludeFromStats?: boolean;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: '사용 여부. false=사용 중지(더 이상 쓰지 않는 카드·계좌)',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }
 
 export class UpdatePaymentMethodDto extends PartialType(CreatePaymentMethodDto) {}

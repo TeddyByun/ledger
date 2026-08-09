@@ -12,6 +12,7 @@ interface Form {
   owner: string;
   memo: string;
   excludeFromStats: boolean;
+  isActive: boolean;
 }
 const EMPTY: Form = {
   name: '',
@@ -21,6 +22,7 @@ const EMPTY: Form = {
   owner: '',
   memo: '',
   excludeFromStats: false,
+  isActive: true,
 };
 
 export function PaymentMethods() {
@@ -63,6 +65,7 @@ export function PaymentMethods() {
       owner: pm.owner ?? '',
       memo: pm.memo ?? '',
       excludeFromStats: pm.excludeFromStats ?? false,
+      isActive: pm.isActive ?? true,
     });
   };
 
@@ -78,6 +81,7 @@ export function PaymentMethods() {
       owner: form.owner || undefined,
       memo: form.memo || undefined,
       excludeFromStats: form.excludeFromStats,
+      isActive: form.isActive,
     };
     try {
       if (editId != null) await api.patch(`/payment-methods/${editId}`, body);
@@ -173,10 +177,19 @@ export function PaymentMethods() {
                           cursor: 'pointer',
                           background:
                             editId === pm.id ? 'var(--brand-soft)' : undefined,
+                          opacity: pm.isActive === false ? 0.55 : undefined,
                         }}
                       >
                         <td>
                           <b>{pm.name}</b>
+                          {pm.isActive === false && (
+                            <span
+                              className="pill plain"
+                              style={{ marginLeft: 6, color: 'var(--danger, #BE3B2A)' }}
+                            >
+                              사용 중지
+                            </span>
+                          )}
                           {pm.excludeFromStats && (
                             <span className="pill plain" style={{ marginLeft: 6 }}>
                               집계 제외
@@ -296,6 +309,23 @@ export function PaymentMethods() {
                   수입·지출 집계에서 제외
                   <span className="muted" style={{ display: 'block', fontSize: 11.5 }}>
                     투자·저축 계좌처럼 실제 수입/지출이 아닌 결제수단. 추이·합계에서 빠집니다.
+                  </span>
+                </span>
+              </label>
+
+              <label
+                style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 13.5 }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!form.isActive}
+                  onChange={(e) => set('isActive', !e.target.checked)}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  사용 중지
+                  <span className="muted" style={{ display: 'block', fontSize: 11.5 }}>
+                    더 이상 쓰지 않는 카드·계좌. 과거 거래는 그대로 두고 중지 표시만 합니다.
                   </span>
                 </span>
               </label>
