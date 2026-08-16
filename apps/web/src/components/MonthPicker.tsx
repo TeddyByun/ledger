@@ -113,7 +113,6 @@ export function MonthPicker({
         onClick={() => setOpen((o) => !o)}
         style={{
           width,
-          padding: '7px 10px',
           textAlign: 'left',
           cursor: disabled ? 'default' : 'pointer',
           display: 'flex',
@@ -121,7 +120,6 @@ export function MonthPicker({
           justifyContent: 'space-between',
           gap: 6,
           fontFamily: value ? 'var(--mono)' : undefined,
-          fontSize: 12.5,
           color: value ? 'var(--ink)' : 'var(--faint)',
           ...(highlight ? { boxShadow: '0 0 0 2px var(--warn)' } : {}),
         }}

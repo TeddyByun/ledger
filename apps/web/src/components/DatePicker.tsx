@@ -116,7 +116,6 @@ export function DatePicker({
         onClick={() => setOpen((o) => !o)}
         style={{
           width,
-          padding: '7px 12px',
           textAlign: 'left',
           cursor: disabled ? 'default' : 'pointer',
           display: 'flex',
@@ -124,7 +123,6 @@ export function DatePicker({
           justifyContent: 'space-between',
           gap: 6,
           fontFamily: value ? 'var(--mono)' : undefined,
-          fontSize: 12.5,
           color: value ? 'var(--ink)' : 'var(--faint)',
         }}
       >
