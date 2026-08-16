@@ -249,8 +249,8 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
                   label={`기초 잔액${cf.opening.asOf ? ` (${cf.opening.asOf} 기준)` : ''}`}
                   value={cf.opening.balance}
                 />
-                <Metric label="예상 수입" value={cf.income.total} color="var(--income)" />
-                <Metric label="예상 지출" value={cf.expense.total} color="var(--expense)" />
+                <Metric label="예상 현금 수입" value={cf.income.total} color="var(--income)" />
+                <Metric label="예상 현금 지출" value={cf.expense.total} color="var(--expense)" />
                 <Metric
                   label="순증감"
                   value={cf.net}
@@ -288,7 +288,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
 
             {/* 1. 예상 수입 목록 */}
             <FlowSection
-              title="예상 수입"
+              title="예상 현금 수입"
               sub="이 계좌에 반복 입금되는 것 + 관리>정기수입에 등록한 항목(계좌와 무관하게 모두 표시 · 다른 계좌 입금이면 근거에 계좌명 표기 → 월말 잔액은 실제와 다를 수 있음)"
               accent="var(--income)"
               side={cf.income}
@@ -297,7 +297,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
 
             {/* 2. 예상 지출 목록 */}
             <FlowSection
-              title="예상 지출"
+              title="예상 현금 지출"
               sub="이 계좌에서 실제로 나가는 출금만 — 카드대금·정기 출금·반복 출금 (날짜 미확정 지출은 제외)"
               accent="var(--expense)"
               side={cf.expense}
