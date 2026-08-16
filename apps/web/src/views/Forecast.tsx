@@ -303,6 +303,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
               side={cf.expense}
               flow="expense"
               sortByDay
+              cumulative
             />
 
             {/* 3. 일자별 현금흐름 */}
@@ -467,6 +468,7 @@ function FlowSection({
   side,
   flow,
   sortByDay = false,
+  cumulative = false,
 }: {
   title: string;
   sub: string;
@@ -474,12 +476,18 @@ function FlowSection({
   side: FlowSide;
   flow: 'income' | 'expense';
   sortByDay?: boolean;
+  cumulative?: boolean;
 }) {
   const [showActual, setShowActual] = useState(false);
   // 기본은 금액순(서버 정렬). sortByDay면 일자 오름차순(날짜 미정=맨 뒤).
   const predictedItems = sortByDay
     ? [...side.predictedItems].sort((a, b) => (a.day ?? 99) - (b.day ?? 99))
     : side.predictedItems;
+  // 누적 예상 금액 — 표시 순서대로 위에서부터 합산
+  const cumSums = (() => {
+    let s = 0;
+    return predictedItems.map((l) => (s += l.amount));
+  })();
   return (
     <div className="card" style={{ marginBottom: 18, borderLeft: `3px solid ${accent}` }}>
       <div className="card-head">
@@ -509,6 +517,7 @@ function FlowSection({
                 <th style={{ width: 82 }}>구분</th>
                 <th>항목</th>
                 <th style={{ textAlign: 'right' }}>예상 금액</th>
+                {cumulative && <th style={{ textAlign: 'right' }}>누적 예상 지출</th>}
                 <th>근거 · 신뢰</th>
               </tr>
             </thead>
@@ -525,6 +534,11 @@ function FlowSection({
                   <td className="money" style={{ color: accent }}>
                     ₩{won(l.amount)}
                   </td>
+                  {cumulative && (
+                    <td className="money" style={{ color: accent, fontWeight: 700 }}>
+                      ₩{won(cumSums[i]!)}
+                    </td>
+                  )}
                   <td className="muted" style={{ fontSize: 12 }}>
                     {l.basis} · {CONF_LABEL[l.confidence]}
                   </td>
