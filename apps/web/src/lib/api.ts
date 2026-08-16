@@ -65,7 +65,7 @@ export class ApiError extends Error {
 async function request<T>(
   path: string,
   opts: RequestInit = {},
-  retry = true,
+  attempt = 0,
 ): Promise<T> {
   const res = await fetch(getBase() + path, {
     ...opts,
@@ -79,12 +79,12 @@ async function request<T>(
 
   if (
     res.status === 401 &&
-    retry &&
+    attempt < 2 && // 재시도가 또 401이면(경쟁으로 토큰이 순간 빈 경우) 한 번 더 리프레시
     !path.startsWith('/auth/refresh') &&
     !path.startsWith('/auth/login')
   ) {
     const restored = await tryRefresh();
-    if (restored) return request<T>(path, opts, false);
+    if (restored) return request<T>(path, opts, attempt + 1);
     // 리프레시까지 실패 = 세션 만료 → 로그인 화면으로 전환(오류 배너 대신)
     accessToken = null;
     onAuthLost?.();

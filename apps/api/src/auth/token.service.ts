@@ -81,6 +81,13 @@ export class TokenService {
     if (!rec) throw new UnauthorizedException('UNAUTHENTICATED');
 
     if (rec.revokedAt) {
+      // 회전 직후 짧은 유예 창(동시/재시도/멀티탭 리프레시 경쟁) — 세션을 죽이지 않고
+      // 새 회전을 발급한다. 창 밖(오래된 재사용)은 탈취로 보고 체인 전체 폐기.
+      const GRACE_MS = 20_000;
+      if (Date.now() - rec.revokedAt.getTime() <= GRACE_MS) {
+        const next = await this.issueRefresh(rec.memberId, rec.familyId, userAgent);
+        return { memberId: rec.memberId, ...next };
+      }
       // 재사용 감지 → 탈취 방어: 체인 전체 폐기
       await this.prisma.refreshToken.updateMany({
         where: { familyId: rec.familyId, revokedAt: null },
