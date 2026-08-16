@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { RecurringFlow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { recurringKey } from '../common/fuzzy-key.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
@@ -73,7 +74,7 @@ export class SuggestionService {
    *  - R8: 최근 3개월 연속 미발생 그룹은 제외(종료), 최근 2개월 최초 등장은 recentStart
    * 이미 등록된 matchKey(정기지출)는 제외.
    */
-  async suggest(): Promise<Suggestion[]> {
+  async suggest(flow: RecurringFlow = 'expense'): Promise<Suggestion[]> {
     const now = new Date();
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
     const endEx = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
@@ -85,7 +86,7 @@ export class SuggestionService {
     const [txns, cats, existing] = await Promise.all([
       this.prisma.transaction.findMany({
         where: {
-          type: 'expense',
+          type: flow,
           transactionDate: { gte: start, lt: endEx },
         },
         select: {
@@ -97,7 +98,7 @@ export class SuggestionService {
         },
       }),
       this.prisma.category.findMany({ select: { code: true, name: true, parentCode: true } }),
-      this.prisma.recurringExpense.findMany({ select: { matchKey: true } }),
+      this.prisma.recurringExpense.findMany({ where: { flow }, select: { matchKey: true } }),
     ]);
 
     const excluded = new Set(await excludeCategoryCodes(this.prisma));

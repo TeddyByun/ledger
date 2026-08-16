@@ -79,6 +79,12 @@ enum RecurringSource {
   manual // 수기 추가
 }
 
+// 정기 항목 방향 — 지출(expense)인지 수입(income)인지. 같은 테이블을 공유한다.
+enum RecurringFlow {
+  expense // 정기지출
+  income // 정기수입
+}
+
 // 정기지출 금액 성격 — 매월 같은 금액(fixed)인지 달마다 달라지는지(variable)
 enum AmountType {
   fixed // 고정 — 월세·구독·할부금처럼 금액이 일정
@@ -518,6 +524,7 @@ model MonthlyPaymentStat {
 model RecurringExpense {
   id              Int              @id @default(autoincrement())
   householdId     Int              @map("household_id")
+  flow            RecurringFlow    @default(expense) // expense=정기지출 / income=정기수입
   label           String
   categoryCode    String           @map("category_code")
   paymentMethodId Int?             @map("payment_method_id")
@@ -541,6 +548,7 @@ model RecurringExpense {
 
   @@index([householdId, isActive])
   @@index([householdId, categoryCode])
+  @@index([householdId, flow])
   @@map("recurring_expense")
 }
 

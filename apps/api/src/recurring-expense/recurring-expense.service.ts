@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, RecurringFlow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { recurringKey } from '../common/fuzzy-key.js';
@@ -16,8 +16,8 @@ const cmpYm = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export class RecurringExpenseService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 확정 정기지출 목록 + 이번 달 발생 상태(발생/예정/지연/종료). */
-  async findAll() {
+  /** 확정 정기지출/수입 목록 + 이번 달 발생 상태(발생/예정/지연/종료). */
+  async findAll(flow: RecurringFlow = 'expense') {
     const now = new Date();
     const ym = ymOf(now);
     const today = now.getUTCDate();
@@ -26,11 +26,12 @@ export class RecurringExpenseService {
 
     const [rows, monthTxns] = await Promise.all([
       this.prisma.recurringExpense.findMany({
+        where: { flow },
         include: { category: { select: { name: true } }, paymentMethod: { select: { name: true } } },
         orderBy: [{ isActive: 'asc' }, { cadence: 'asc' }, { amount: 'desc' }],
       }),
       this.prisma.transaction.findMany({
-        where: { type: 'expense', transactionDate: { gte: monthStart, lt: monthEnd } },
+        where: { type: flow, transactionDate: { gte: monthStart, lt: monthEnd } },
         select: { description: true, amount: true, paymentMethodId: true },
       }),
     ]);
@@ -96,9 +97,9 @@ export class RecurringExpenseService {
     });
   }
 
-  create(dto: CreateRecurringExpenseDto) {
+  create(dto: CreateRecurringExpenseDto, flow: RecurringFlow = 'expense') {
     return this.prisma.recurringExpense.create({
-      data: { ...this.toData(dto), householdId: requireTenant().householdId },
+      data: { ...this.toData(dto), flow, householdId: requireTenant().householdId },
     });
   }
 

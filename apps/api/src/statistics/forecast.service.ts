@@ -58,7 +58,7 @@ export class ForecastService {
         },
       }),
       this.prisma.category.findMany({ select: { code: true, name: true, parentCode: true } }),
-      this.prisma.recurringExpense.findMany({ where: { isActive: 'Y' } }),
+      this.prisma.recurringExpense.findMany({ where: { isActive: 'Y', flow: 'expense' } }),
       this.prisma.installmentPlan.findMany({
         select: { id: true, merchantName: true, totalMonths: true },
       }),

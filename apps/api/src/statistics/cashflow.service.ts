@@ -219,7 +219,63 @@ export class CashflowService {
 
     const predicted: FlowLine[] = [];
 
-    // ── 4. 예상 수입 — 반복 입금 탐지(최근 6개월) ────────────────────
+    /** 적요 키와 정기 항목 토큰의 느슨한 일치(부분일치 또는 공통 접두 6자 이상). */
+    const matchToken = (key: string, token: string): boolean => {
+      if (key.length < 2 || token.length < 2) return false;
+      if (key.includes(token) || token.includes(key)) return true;
+      let i = 0;
+      while (i < key.length && i < token.length && key[i] === token[i]) i++;
+      return i >= 6;
+    };
+
+    // ── 4a. 등록 정기수입(관리>정기수입) — 이 계좌로 들어오는 확정 수입 ──
+    const bankInKeys = hist
+      .filter((r) => Number(r.deposit) > 0)
+      .map((r) => ({ key: recurringKey(r.description), day: r.txnAt.getUTCDate(), ym: ymOf(r.txnAt) }));
+    const recIncomes = await this.prisma.recurringExpense.findMany({
+      where: { isActive: 'Y', flow: 'income' },
+      include: { paymentMethod: { select: { id: true, methodType: true } } },
+    });
+    const incomeTokens: string[] = [];
+    for (const r of recIncomes) {
+      const inWindow =
+        (!r.startYm || cmpYm(tym, r.startYm) >= 0) && (!r.endYm || cmpYm(tym, r.endYm) <= 0);
+      const applies = inWindow && (r.cadence === 'annual' ? r.months.includes(tm) : true);
+      if (!applies) continue;
+      const token = (r.matchKey?.trim() || recurringKey(r.label)).trim();
+      if (token.length < 2) continue;
+      const hits = bankInKeys.filter((b) => matchToken(b.key, token));
+      // 이 계좌로 지정 → 무조건 포함 / 미지정·카드 → 이 계좌 입금 이력에 매칭될 때만
+      const include =
+        r.paymentMethod?.methodType === 'bank' ? r.paymentMethod.id === scopeId : hits.length > 0;
+      if (!include) continue;
+      incomeTokens.push(token);
+      const amount = Math.round(Number(r.amount));
+      if (amount <= 0) continue;
+      const day = Math.min(
+        daysInMonth,
+        Math.max(1, r.dayOfMonth ?? (hits.length ? Math.round(median(hits.map((h) => h.day))) : 1)),
+      );
+      const isSalary = r.categoryCode === '13' || /급여|월급/.test(r.label);
+      predicted.push({
+        flow: 'income',
+        kind: isSalary ? 'salary' : 'income-recurring',
+        label: r.label,
+        amount,
+        day,
+        basis:
+          (r.cadence === 'schedule'
+            ? '확정 스케줄'
+            : r.cadence === 'annual'
+              ? `연례(${r.months.join(',')}월)`
+              : '월 정기') + (r.amountType === 'variable' ? ' · 변동(평균치)' : ' · 고정'),
+        confidence: 'high',
+        actual: false,
+        categoryCode: r.categoryCode,
+      });
+    }
+
+    // ── 4. 예상 수입 — 반복 입금 탐지(최근 6개월, 등록 정기수입과 중복 제외) ──
     interface Grp {
       label: string;
       perMonth: Map<string, number>;
@@ -243,7 +299,8 @@ export class CashflowService {
       g.days.push(r.txnAt.getUTCDate());
       if (r.transaction?.categoryCode) g.code = r.transaction.categoryCode;
     }
-    for (const g of incomeGrp.values()) {
+    for (const [gkey, g] of incomeGrp.entries()) {
+      if (incomeTokens.some((t) => matchToken(gkey, t))) continue; // 등록 정기수입으로 이미 반영
       const months = g.perMonth.size;
       if (!isRegularIn(months) || !isOngoing(g.perMonth) || isSporadic(g.perMonth, g.days.length)) {
         // 가끔 들어오는 입금·수시성 이체 → 날짜를 특정하지 않고 '기타 수입'으로 묶어 일할 반영
@@ -385,17 +442,9 @@ export class CashflowService {
     //            있으면(카드결제 → 계좌이체로 바뀐 경우) 실제 현금 흐름을 우선해 포함
     //   · 미지정 → 이 계좌 이력에 매칭될 때만 포함
     const recurrings = await this.prisma.recurringExpense.findMany({
-      where: { isActive: 'Y' },
+      where: { isActive: 'Y', flow: 'expense' },
       include: { paymentMethod: { select: { id: true, methodType: true } } },
     });
-    /** 적요 키와 정기지출 토큰의 느슨한 일치(부분일치 또는 공통 접두 6자 이상). */
-    const matchToken = (key: string, token: string): boolean => {
-      if (key.length < 2 || token.length < 2) return false;
-      if (key.includes(token) || token.includes(key)) return true;
-      let i = 0;
-      while (i < key.length && i < token.length && key[i] === token[i]) i++;
-      return i >= 6;
-    };
     /** 이 계좌의 과거 출금(카드대금 제외) — 정기지출 매칭·일자 추정용 */
     const bankOutKeys = hist
       .filter((r) => Number(r.withdrawal) > 0 && !isCardSettle(r))

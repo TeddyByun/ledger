@@ -305,7 +305,7 @@ export class StatementTxnService {
     { token: string; categoryCode: string; paymentMethodId: number | null }[]
   > {
     const recs = await this.prisma.recurringExpense.findMany({
-      where: { isActive: 'Y' },
+      where: { isActive: 'Y', flow: 'expense' },
       select: {
         label: true,
         matchKey: true,

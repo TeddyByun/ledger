@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { view: 'cards', label: '카드 관리', group: '관리' },
   { view: 'payment-methods', label: '결제수단', group: '관리' },
   { view: 'categories', label: '분류 관리', group: '관리' },
+  { view: 'recurring-incomes', label: '정기수입', group: '관리' },
   { view: 'recurring-expenses', label: '정기지출', group: '관리' },
   { view: 'classify-keywords', label: '자동분류 키워드', group: '관리' },
   { view: 'imports', label: '명세서 업로드', group: '관리' },
