@@ -44,6 +44,8 @@ interface FlowLine {
   confidence: Conf;
   actual: boolean;
   categoryCode?: string;
+  /** 실적 기간(1~actualUntil)이어도 항상 표시 — 다른 계좌로 들어오는 등록 정기수입(이 계좌 실적에 없음). */
+  always?: boolean;
 }
 
 /** 일자별 항목 */
@@ -228,13 +230,15 @@ export class CashflowService {
       return i >= 6;
     };
 
-    // ── 4a. 등록 정기수입(관리>정기수입) — 이 계좌로 들어오는 확정 수입 ──
+    // ── 4a. 등록 정기수입(관리>정기수입) — 선택한 계좌와 무관하게 모두 반영 ──
+    // (사용자 요청: 등록한 정기수입은 어느 계좌를 보든 예상 수입·일자별에 표시.
+    //  다른 계좌로 들어오는 수입도 포함하므로 월말 예상 잔액은 실제와 다를 수 있음.)
     const bankInKeys = hist
       .filter((r) => Number(r.deposit) > 0)
       .map((r) => ({ key: recurringKey(r.description), day: r.txnAt.getUTCDate(), ym: ymOf(r.txnAt) }));
     const recIncomes = await this.prisma.recurringExpense.findMany({
       where: { isActive: 'Y', flow: 'income' },
-      include: { paymentMethod: { select: { id: true, methodType: true } } },
+      include: { paymentMethod: { select: { id: true, methodType: true, name: true } } },
     });
     const incomeTokens: string[] = [];
     for (const r of recIncomes) {
@@ -244,11 +248,8 @@ export class CashflowService {
       if (!applies) continue;
       const token = (r.matchKey?.trim() || recurringKey(r.label)).trim();
       if (token.length < 2) continue;
+      // 이 계좌 입금 이력 매칭(입금일 추정용) — 없으면 등록 예상일 사용
       const hits = bankInKeys.filter((b) => matchToken(b.key, token));
-      // 이 계좌로 지정 → 무조건 포함 / 미지정·카드 → 이 계좌 입금 이력에 매칭될 때만
-      const include =
-        r.paymentMethod?.methodType === 'bank' ? r.paymentMethod.id === scopeId : hits.length > 0;
-      if (!include) continue;
       incomeTokens.push(token);
       const amount = Math.round(Number(r.amount));
       if (amount <= 0) continue;
@@ -257,6 +258,9 @@ export class CashflowService {
         Math.max(1, r.dayOfMonth ?? (hits.length ? Math.round(median(hits.map((h) => h.day))) : 1)),
       );
       const isSalary = r.categoryCode === '13' || /급여|월급/.test(r.label);
+      // 다른 계좌로 들어오는 수입이면 어느 계좌인지 근거에 표기
+      const otherAcct =
+        r.paymentMethod && r.paymentMethod.id !== scopeId ? ` · ${r.paymentMethod.name}` : '';
       predicted.push({
         flow: 'income',
         kind: isSalary ? 'salary' : 'income-recurring',
@@ -268,10 +272,14 @@ export class CashflowService {
             ? '확정 스케줄'
             : r.cadence === 'annual'
               ? `연례(${r.months.join(',')}월)`
-              : '월 정기') + (r.amountType === 'variable' ? ' · 변동(평균치)' : ' · 고정'),
+              : '월 정기') +
+          (r.amountType === 'variable' ? ' · 변동(평균치)' : ' · 고정') +
+          otherAcct,
         confidence: 'high',
         actual: false,
         categoryCode: r.categoryCode,
+        // 이 계좌 실적에 안 잡히는 다른 계좌/미지정 수입은 실적 기간이어도 항상 표시
+        always: r.paymentMethod?.id !== scopeId,
       });
     }
 
@@ -585,7 +593,7 @@ export class CashflowService {
 
     for (const l of actualLines) push(l.day!, l, l.amount);
     for (const l of predicted) {
-      if (l.day != null && l.day > actualUntil) push(l.day, l, l.amount);
+      if (l.day != null && (l.always || l.day > actualUntil)) push(l.day, l, l.amount);
     }
 
     let running = openingBalance;
@@ -621,7 +629,7 @@ export class CashflowService {
     };
     const lines = (flow: Flow) => ({
       predictedItems: predicted
-        .filter((l) => l.flow === flow && (l.day == null || l.day > actualUntil))
+        .filter((l) => l.flow === flow && (l.day == null || l.always || l.day > actualUntil))
         .sort((a, b) => b.amount - a.amount),
       actualItems: mergeActual(flow),
     });

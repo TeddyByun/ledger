@@ -289,7 +289,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
             {/* 1. 예상 수입 목록 */}
             <FlowSection
               title="예상 수입"
-              sub="이 계좌에 실제로 들어오는 입금 중 날짜·금액이 반복되는 것만 (다른 계좌에서 오는 이체 포함)"
+              sub="이 계좌에 반복 입금되는 것 + 관리>정기수입에 등록한 항목(계좌와 무관하게 모두 표시 · 다른 계좌 입금이면 근거에 계좌명 표기 → 월말 잔액은 실제와 다를 수 있음)"
               accent="var(--income)"
               side={cf.income}
               flow="income"
