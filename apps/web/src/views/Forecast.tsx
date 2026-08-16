@@ -624,10 +624,11 @@ function DailyTable({ cf }: { cf: CashflowData }) {
         </span>
         <div className="r">
           <span className="money" style={{ fontSize: 13 }}>
-            월말 예상 잔액{' '}
-            <b style={{ color: cf.closing.balance >= 0 ? 'var(--ink)' : 'var(--expense)' }}>
-              ₩{won(cf.closing.balance)}
-            </b>
+            현금 수입{' '}
+            <b style={{ color: 'var(--income)' }}>₩{won(cf.income.total)}</b>
+            <span className="muted"> · </span>
+            현금 지출{' '}
+            <b style={{ color: 'var(--expense)' }}>₩{won(cf.expense.total)}</b>
           </span>
         </div>
       </div>
