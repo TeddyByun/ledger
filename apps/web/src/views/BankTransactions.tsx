@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { useSort, SortTh } from '@/components/sortable';
+import { MonthPicker } from '@/components/MonthPicker';
 import { MultiSelect } from '@/components/MultiSelect';
 import type { BankTxn, CursorPage, PaymentMethod, Category } from '@/lib/types';
 
@@ -310,18 +311,20 @@ export function BankTransactions() {
             <div className="field">
               <label>기간 (년월)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  className="input"
-                  type="month"
-                  value={draft.from}
-                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+                <MonthPicker
+                  value={draft.from || null}
+                  onChange={(v) => setDraft({ ...draft, from: v ?? '' })}
+                  placeholder="시작 월"
+                  width={128}
+                  quickOffsets={[]}
                 />
                 <span className="muted">~</span>
-                <input
-                  className="input"
-                  type="month"
-                  value={draft.to}
-                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                <MonthPicker
+                  value={draft.to || null}
+                  onChange={(v) => setDraft({ ...draft, to: v ?? '' })}
+                  placeholder="종료 월"
+                  width={128}
+                  quickOffsets={[]}
                 />
               </div>
             </div>

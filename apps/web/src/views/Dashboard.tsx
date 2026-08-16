@@ -7,6 +7,7 @@ import { StackedBarChart, type StackSeries } from '@/components/StackedBarChart'
 import { GroupedBarChart } from '@/components/GroupedBarChart';
 import { buildColorMap } from '@/components/chart-utils';
 import type { View } from '@/components/Shell';
+import { MonthPicker } from '@/components/MonthPicker';
 
 /** 기본 기간 = 올해 1월 ~ 이번 달 */
 function thisYearRange(): { from: string; to: string } {
@@ -92,18 +93,20 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
             <div className="field">
               <label>기간 (년월)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  className="input"
-                  type="month"
-                  value={draft.from}
-                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+                <MonthPicker
+                  value={draft.from || null}
+                  onChange={(v) => setDraft({ ...draft, from: v ?? '' })}
+                  placeholder="시작 월"
+                  width={128}
+                  quickOffsets={[]}
                 />
                 <span className="muted">~</span>
-                <input
-                  className="input"
-                  type="month"
-                  value={draft.to}
-                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                <MonthPicker
+                  value={draft.to || null}
+                  onChange={(v) => setDraft({ ...draft, to: v ?? '' })}
+                  placeholder="종료 월"
+                  width={128}
+                  quickOffsets={[]}
                 />
               </div>
             </div>

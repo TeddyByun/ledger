@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import type { View } from '@/components/Shell';
+import { MonthPicker } from '@/components/MonthPicker';
 
 interface Contribution {
   kind: string;
@@ -182,11 +183,12 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
                 >
                   ‹ 이전
                 </button>
-                <input
-                  className="input"
-                  type="month"
+                <MonthPicker
                   value={ym}
-                  onChange={(e) => e.target.value && setYm(e.target.value)}
+                  onChange={(v) => v && setYm(v)}
+                  placeholder="조회 월"
+                  width={120}
+                  quickOffsets={[]}
                 />
                 <button
                   className="btn ghost sm"

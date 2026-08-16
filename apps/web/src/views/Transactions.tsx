@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { won } from '@/lib/format';
+import { DatePicker } from '@/components/DatePicker';
 import type {
   Transaction,
   CursorPage,
@@ -186,6 +187,10 @@ function NewTransaction({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!transactionDate) {
+      setError('날짜를 선택하세요.');
+      return;
+    }
     setBusy(true);
     try {
       await api.post('/transactions', {
@@ -278,12 +283,10 @@ function NewTransaction({
           </div>
           <div className="field">
             <label>날짜</label>
-            <input
-              className="input"
-              type="date"
+            <DatePicker
               value={transactionDate}
-              onChange={(e) => setTransactionDate(e.target.value)}
-              required
+              onChange={setTransactionDate}
+              placeholder="날짜 선택"
             />
           </div>
           <div className="field">

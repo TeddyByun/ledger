@@ -203,3 +203,14 @@ button.tree-caret:hover { color:var(--ink); background:var(--surface-3); box-sha
 .center-screen { min-height:100vh; display:grid; place-items:center; padding:24px; }
 
 .tbl tbody tr.row-sel { background:var(--brand-soft); }
+
+/* 커스텀 달력 (DatePicker/MonthPicker) */
+.cal-cell { border:0; background:transparent; font-family:inherit; transition:background .1s; }
+.cal-cell:not(.sel):not(:disabled):hover { background:var(--surface-3); }
+.cal-nav { border:0; background:var(--surface-2); color:var(--ink-2); width:28px; height:28px;
+  border-radius:8px; cursor:pointer; font-size:15px; line-height:1; box-shadow:var(--nm-out-sm); }
+.cal-nav:hover { color:var(--ink); }
+.cal-nav:active { box-shadow:var(--nm-in-sm); }
+.cal-foot { border:0; background:transparent; color:var(--brand-ink); cursor:pointer;
+  font-size:12.5px; font-weight:600; font-family:inherit; padding:4px 8px; border-radius:8px; }
+.cal-foot:hover { background:var(--surface-3); }
