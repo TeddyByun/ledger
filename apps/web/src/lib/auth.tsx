@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, setAccessToken, type Session } from './api';
+import { api, setAccessToken, setAuthLostHandler, type Session } from './api';
 
 interface AuthState {
   session: Session | null;
@@ -29,11 +29,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 세션이 끊기면(리프레시 실패) 로그인 화면으로 — API 계층에서 신호
+    setAuthLostHandler(() => {
+      setAccessToken(null);
+      setSession(null);
+    });
     // 새로고침 시 Refresh 쿠키로 세션 복원
     api.restore().then((s) => {
       setSession(s);
       setLoading(false);
     });
+    return () => setAuthLostHandler(null);
   }, []);
 
   const login = async (email: string, password: string) => {

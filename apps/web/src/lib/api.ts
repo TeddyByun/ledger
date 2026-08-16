@@ -33,6 +33,14 @@ export const setAccessToken = (t: string | null) => {
   accessToken = t;
 };
 
+/**
+ * 세션이 완전히 끊겼을 때(리프레시까지 실패) 호출 — AuthProvider 가 로그인 화면으로 전환.
+ */
+let onAuthLost: (() => void) | null = null;
+export const setAuthLostHandler = (fn: (() => void) | null) => {
+  onAuthLost = fn;
+};
+
 export interface Session {
   user: {
     id: number;
@@ -77,6 +85,9 @@ async function request<T>(
   ) {
     const restored = await tryRefresh();
     if (restored) return request<T>(path, opts, false);
+    // 리프레시까지 실패 = 세션 만료 → 로그인 화면으로 전환(오류 배너 대신)
+    accessToken = null;
+    onAuthLost?.();
   }
 
   const body = res.status === 204 ? null : await res.json().catch(() => null);
@@ -92,8 +103,23 @@ async function request<T>(
   return body as T;
 }
 
-/** Refresh 쿠키로 세션 복원. 성공 시 access 토큰 저장 + 세션 반환. */
-async function tryRefresh(): Promise<Session | null> {
+/**
+ * Refresh 쿠키로 세션 복원. 성공 시 access 토큰 저장 + 세션 반환.
+ *
+ * 리프레시 토큰은 서버에서 **1회용으로 회전(rotate)** 되므로, 동시에 여러 요청이 401 을
+ * 만나 각자 리프레시를 호출하면 첫 번째만 성공하고 나머지는 실패("Unauthorized")한다.
+ * → 진행 중인 리프레시를 **하나로 공유**해 동시 요청이 같은 결과를 기다리게 한다.
+ */
+let refreshPromise: Promise<Session | null> | null = null;
+function tryRefresh(): Promise<Session | null> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+async function doRefresh(): Promise<Session | null> {
   try {
     const res = await fetch(getBase() + '/auth/refresh', {
       method: 'POST',
@@ -148,7 +174,13 @@ export const api = {
         headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
       });
     let res = await send();
-    if (res.status === 401 && (await tryRefresh())) res = await send();
+    if (res.status === 401) {
+      if (await tryRefresh()) res = await send();
+      else {
+        accessToken = null;
+        onAuthLost?.();
+      }
+    }
     const body = await res.json().catch(() => null);
     if (!res.ok) {
       const err = body?.error ?? {};
@@ -169,7 +201,13 @@ export const api = {
         headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
       });
     let res = await send();
-    if (res.status === 401 && (await tryRefresh())) res = await send();
+    if (res.status === 401) {
+      if (await tryRefresh()) res = await send();
+      else {
+        accessToken = null;
+        onAuthLost?.();
+      }
+    }
     if (!res.ok) {
       throw new ApiError(res.status, 'EXPORT_FAILED', '내보내기에 실패했습니다.');
     }
