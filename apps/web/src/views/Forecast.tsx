@@ -302,6 +302,7 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
               accent="var(--expense)"
               side={cf.expense}
               flow="expense"
+              sortByDay
             />
 
             {/* 3. 일자별 현금흐름 */}
@@ -465,14 +466,20 @@ function FlowSection({
   accent,
   side,
   flow,
+  sortByDay = false,
 }: {
   title: string;
   sub: string;
   accent: string;
   side: FlowSide;
   flow: 'income' | 'expense';
+  sortByDay?: boolean;
 }) {
   const [showActual, setShowActual] = useState(false);
+  // 기본은 금액순(서버 정렬). sortByDay면 일자 오름차순(날짜 미정=맨 뒤).
+  const predictedItems = sortByDay
+    ? [...side.predictedItems].sort((a, b) => (a.day ?? 99) - (b.day ?? 99))
+    : side.predictedItems;
   return (
     <div className="card" style={{ marginBottom: 18, borderLeft: `3px solid ${accent}` }}>
       <div className="card-head">
@@ -506,7 +513,7 @@ function FlowSection({
               </tr>
             </thead>
             <tbody>
-              {side.predictedItems.map((l, i) => (
+              {predictedItems.map((l, i) => (
                 <tr key={i}>
                   <td className="mono">{l.day == null ? '—' : `${l.day}일`}</td>
                   <td>
