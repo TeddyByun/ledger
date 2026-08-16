@@ -46,6 +46,10 @@ interface FlowLine {
   categoryCode?: string;
   /** 실적 기간(1~actualUntil)이어도 항상 표시 — 다른 계좌로 들어오는 등록 정기수입(이 계좌 실적에 없음). */
   always?: boolean;
+  /** 등록 정기항목(관리>정기수입/지출) — 지난 달이어도 목록에 항상 표시(계획). */
+  planned?: boolean;
+  /** 이번 달 실제 발생액(계획 vs 실제 대조용). planned 항목에만 채운다. */
+  occurred?: number;
 }
 
 /** 일자별 항목 */
@@ -230,6 +234,22 @@ export class CashflowService {
       return i >= 6;
     };
 
+    // 이번 달 실제 거래(전 계좌) — 등록 정기항목의 '실제 발생'(계획 vs 실제) 대조용
+    const monthActualsAll = await this.prisma.bankTransaction.findMany({
+      where: { txnAt: { gte: mStart, lt: mEnd } },
+      select: { description: true, withdrawal: true, deposit: true, paymentMethodId: true },
+    });
+    /** 등록 정기항목이 이번 달 실제로 발생한 금액(토큰 매칭). pmId 지정 시 그 계좌만. */
+    const occurredFor = (token: string, pmId: number | null, flow: Flow): number => {
+      let sum = 0;
+      for (const r of monthActualsAll) {
+        if (pmId != null && r.paymentMethodId !== pmId) continue;
+        const amt = flow === 'income' ? Number(r.deposit) : Number(r.withdrawal);
+        if (amt > 0 && matchToken(recurringKey(r.description), token)) sum += amt;
+      }
+      return Math.round(sum);
+    };
+
     // ── 4a. 등록 정기수입(관리>정기수입) — 선택한 계좌와 무관하게 모두 반영 ──
     // (사용자 요청: 등록한 정기수입은 어느 계좌를 보든 예상 수입·일자별에 표시.
     //  다른 계좌로 들어오는 수입도 포함하므로 월말 예상 잔액은 실제와 다를 수 있음.)
@@ -280,6 +300,8 @@ export class CashflowService {
         categoryCode: r.categoryCode,
         // 이 계좌 실적에 안 잡히는 다른 계좌/미지정 수입은 실적 기간이어도 항상 표시
         always: r.paymentMethod?.id !== scopeId,
+        planned: true,
+        occurred: occurredFor(token, r.paymentMethod?.id ?? null, 'income'),
       });
     }
 
@@ -515,6 +537,8 @@ export class CashflowService {
         confidence: r.amountType === 'variable' ? 'med' : 'high',
         actual: false,
         categoryCode: r.categoryCode,
+        planned: true,
+        occurred: occurredFor(token, r.paymentMethod?.id ?? scopeId, 'expense'),
       });
     }
 
@@ -629,7 +653,11 @@ export class CashflowService {
     };
     const lines = (flow: Flow) => ({
       predictedItems: predicted
-        .filter((l) => l.flow === flow && (l.day == null || l.always || l.day > actualUntil))
+        .filter(
+          (l) =>
+            l.flow === flow &&
+            (l.day == null || l.always || l.planned || l.day > actualUntil),
+        )
         .sort((a, b) => b.amount - a.amount),
       actualItems: mergeActual(flow),
     });

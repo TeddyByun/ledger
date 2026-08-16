@@ -37,6 +37,8 @@ interface FlowLine {
   basis: string;
   confidence: 'high' | 'med' | 'low';
   actual: boolean;
+  planned?: boolean;
+  occurred?: number;
 }
 interface DayItem {
   flow: 'income' | 'expense';
@@ -488,6 +490,12 @@ function FlowSection({
     let s = 0;
     return predictedItems.map((l) => (s += l.amount));
   })();
+  // 등록 정기항목(계획)이 있으면 '실제 발생' 대조 컬럼 + 계획/실제 합계 표시
+  const hasOccurred = predictedItems.some((l) => l.planned);
+  const planSum = predictedItems.filter((l) => l.planned).reduce((s, l) => s + l.amount, 0);
+  const occSum = predictedItems
+    .filter((l) => l.planned)
+    .reduce((s, l) => s + (l.occurred ?? 0), 0);
   return (
     <div className="card" style={{ marginBottom: 18, borderLeft: `3px solid ${accent}` }}>
       <div className="card-head">
@@ -501,6 +509,12 @@ function FlowSection({
               · 실적 ₩{won(side.actual)} / 예측 ₩{won(side.predicted)}
             </span>
           </span>
+          {hasOccurred && (
+            <span className="money" style={{ fontSize: 12, display: 'block', marginTop: 2 }}>
+              <span className="muted">정기 계획</span> <b style={{ color: accent }}>₩{won(planSum)}</b>
+              <span className="muted"> · 실제 ₩{won(occSum)}</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -517,6 +531,7 @@ function FlowSection({
                 <th style={{ width: 82 }}>구분</th>
                 <th>항목</th>
                 <th style={{ textAlign: 'right' }}>예상 금액</th>
+                {hasOccurred && <th style={{ textAlign: 'right' }}>실제 발생</th>}
                 {cumulative && <th style={{ textAlign: 'right' }}>누적 예상 지출</th>}
                 <th>근거 · 신뢰</th>
               </tr>
@@ -534,6 +549,19 @@ function FlowSection({
                   <td className="money" style={{ color: accent }}>
                     ₩{won(l.amount)}
                   </td>
+                  {hasOccurred && (
+                    <td className="money" style={{ fontSize: 12.5 }}>
+                      {l.planned ? (
+                        l.occurred && l.occurred > 0 ? (
+                          <span style={{ color: 'var(--ink-2)' }}>₩{won(l.occurred)}</span>
+                        ) : (
+                          <span className="muted">미발생</span>
+                        )
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  )}
                   {cumulative && (
                     <td className="money" style={{ color: accent, fontWeight: 700 }}>
                       ₩{won(cumSums[i]!)}
