@@ -287,6 +287,8 @@ function NewTransaction({
               value={transactionDate}
               onChange={setTransactionDate}
               placeholder="날짜 선택"
+              allowClear={false}
+              width={180}
             />
           </div>
           <div className="field">
