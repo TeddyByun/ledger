@@ -7,7 +7,7 @@
 > 공통: Base URL `/{host}/api/v1`, 인증 `Authorization: Bearer <accessToken>`(refresh 만 httpOnly 쿠키),
 > 오류는 `common/filters/all-exceptions.filter.ts` 의 공통 포맷(API_CONVENTIONS_DESIGN §2).
 >
-> **갱신 기준: 2026-08-01** — `apps/api/src` 컨트롤러 13개(단일 파일 모듈 counterparty 포함) 전수 대조.
+> **갱신 기준: 2026-08-17** — `apps/api/src` 컨트롤러 14개(단일 파일 모듈 counterparty 포함) 전수 대조.
 
 ---
 
@@ -25,6 +25,7 @@
 | bank/card-transactions | `/bank-transactions`, `/card-transactions` | 원천 거래 목록·분류·일괄처리·불일치·엑셀 | ✅ |
 | classify-keywords | `/classify-keywords` | 자동분류 키워드(`merchant_category_map`) CRUD | ✅ |
 | recurring-expenses | `/recurring-expenses` | 정기지출 CRUD + 추천 | ✅ |
+| recurring-incomes | `/recurring-incomes` | 정기수입 CRUD + 추천(정기지출과 동일 테이블·서비스, flow=income) | ✅ |
 | statistics | `/stats` | 대시보드·추이·월별 집계·재집계·예상지출 | ✅ |
 | imports | `/imports` | 명세서 업로드·잡 상태·미분류 조회 | ✅ |
 | counterparties | `/counterparties` | 수입처/거래처 목록·등록(`GET`·`POST`, 단일 파일 모듈) | ✅ (화면 미사용) |
@@ -61,8 +62,12 @@
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
 | GET | `/admin/households` | 전 가구 목록(구성원·거래 건수 집계) |
-| POST | `/admin/households` | 가구 생성(+owner 계정 동시 생성) |
-| DELETE | `/admin/households/:id` | 가구 삭제(하위 데이터 포함) |
+| POST | `/admin/households` | 가구 생성(+선택 초기 owner 계정 동시 생성) |
+| PATCH | `/admin/households/:id` | 임의 가구명 변경 |
+| DELETE | `/admin/households/:id` | 가구 삭제(하위 데이터 캐스케이드) |
+| POST | `/admin/households/:id/members` | 임의 가구에 구성원 추가 |
+| PATCH | `/admin/households/:id/members/:mid` | 임의 가구의 구성원 수정 |
+| DELETE | `/admin/households/:id/members/:mid` | 임의 가구의 구성원 삭제 |
 
 ## 4. categories
 
@@ -89,8 +94,9 @@
 | PATCH | `/payment-methods/{id}` | 수정 |
 | DELETE | `/payment-methods/{id}` | 삭제 |
 
-- 바디: `{ name, methodType, issuer?, identifier?, cardNo?, accountNo?, owner?, memo?, excludeFromStats? }`
+- 바디: `{ name, methodType, issuer?, identifier?, cardNo?, accountNo?, owner?, memo?, excludeFromStats?, isActive? }`
 - **`excludeFromStats`**: 켜면 그 결제수단의 거래가 수입·지출 집계에서 빠지고, 자동분류 시 방향별 **'분류 제외'** 로 매핑된다(투자·저축 계좌 등).
+- **`isActive`**: `false` 면 사용 중지(더 이상 쓰지 않는 카드·계좌). `excludeFromStats`·`isActive` 는 PATCH 로 토글 가능.
 
 ## 6. transactions
 
@@ -104,7 +110,7 @@
 | PATCH | `/transactions/{id}` | 수정 |
 | DELETE | `/transactions/{id}` | 삭제 |
 
-**목록 쿼리**: `type`, `categoryCode`(대분류 지정 시 하위 포함), `paymentMethodId`, `paymentMethodIds`(콤마), `methodType`, `from`, `to`(YYYY-MM-DD), `q`, `sort`(`col:dir,col:dir`), `offset`, `limit`(≤100), `cursor`.
+**목록 쿼리**: `type`, `categoryCode`(대분류 지정 시 하위 포함), `categoryCodes`(콤마 다중, `'-'`=미분류), `paymentMethodId`, `paymentMethodIds`(콤마), `methodType`, `from`, `to`(YYYY-MM-DD), `q`, `sort`(`col:dir,col:dir`), `offset`, `limit`(≤100), `cursor`.
 
 **목록 응답**: `{ items[], page: { nextCursor, hasNext } }`(API_CONVENTIONS §3.1) · 합계는 `/summary` 로 분리 조회.
 **`/unified` 응답**: `{ items[], summary: { incomeTotal, expenseTotal, net, incomeCount, expenseCount, count } }` — offset/limit 기반.
@@ -127,7 +133,7 @@
 | PATCH | `/bank-transactions/{id}` | 은행 거래 1건 분류/수정 |
 | GET | `/bank-transactions/types` | 거래구분(`txn_type_raw`) 목록 — 필터용 |
 
-**공통 쿼리(`StatementTxnQueryDto`)**: `paymentMethodId`·`paymentMethodIds`, `categoryCode`, `txnType`, `installment`(`yes`/`no`, 카드), `from`·`to`, `q`, `sort`, `offset`, `limit`(≤100), `cursor`.
+**공통 쿼리(`StatementTxnQueryDto`)**: `paymentMethodId`·`paymentMethodIds`(콤마), `categoryCode`·`categoryCodes`(콤마 다중, `'-'`=미분류), `txnType`·`txnTypes`(콤마 다중), `installment`(`yes`/`no`, 카드), `from`·`to`, `q`, `sort`, `offset`, `limit`(≤100), `cursor`. 다중값 파라미터는 지정 시 단수 파라미터 대신 쓰인다.
 
 **분류 불일치 응답**: 내용(정규화 키)별로 묶어 서로 다른 분류·건수·금액을 반환. 은행은 **방향(출금=지출/입금=수입)이 다르면 별개 그룹**으로 취급한다.
 
@@ -174,8 +180,23 @@
 | PATCH | `/recurring-expenses/{id}` | 수정(금액·주기·만기·활성) |
 | DELETE | `/recurring-expenses/{id}` | 삭제 |
 
-- 바디: `{ label, categoryCode, paymentMethodId?, amount, cadence(monthly|annual|schedule), months?[], startYm?, endYm?, dayOfMonth?, matchKey?, source?, memo?, isActive? }`
+- 바디: `{ label, categoryCode, paymentMethodId?, amount, amountType(fixed|variable), cadence(monthly|annual|schedule), months?[], startYm?, endYm?, dayOfMonth?, matchKey?, source?, memo?, isActive? }`
 - `isActive='Y'` 인 항목만 예측(`/stats/forecast`)·자동분류에 쓰인다. 상세 규칙은 EXPENSE_FORECAST_DESIGN §4.
+
+## 10.1 recurring-incomes (정기수입)
+
+`/recurring-expenses` 와 **대칭** — 같은 테이블(`recurring_expense.flow='income'`)·같은 서비스(`RecurringExpenseService`/`SuggestionService`)를 방향만 수입으로 고정해 공유한다.
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/recurring-incomes` | 목록(이번 달 입금 발생 상태 포함) |
+| GET | `/recurring-incomes/suggestions` | **추천** — 수입 거래 이력에서 반복 패턴 탐지(미등록만) |
+| POST | `/recurring-incomes` | 등록(추천 확정 또는 수기) |
+| PATCH | `/recurring-incomes/{id}` | 수정(금액·만기·활성 토글 등) |
+| DELETE | `/recurring-incomes/{id}` | 삭제 |
+
+- 바디는 정기지출과 동일(`Create/UpdateRecurringExpenseDto`). 추천은 **수입** 거래 이력에서 뽑고, 목록은 이번 달 입금 발생 상태를 계산한다.
+- `/stats/cashflow` 의 예상 수입은 이 등록 정기수입을 기준으로 산정된다.
 
 ## 11. statistics
 
@@ -184,7 +205,7 @@
 | GET | `/stats/dashboard?year=` | **월별 거래 추이** 화면 — 올해 월별 계좌/카드/대분류 집계 |
 | GET | `/stats/monthly-trend?from=&to=` | 월별 수입·지출 추이(+대분류 구성·결제수단별 지출). 기본 올해 |
 | GET | `/stats/payment-trend?from=&to=` | **월별 결제수단별 지출 추이**. 기본 올해 |
-| GET | `/stats/cashflow?ym=` | **예상 수입·지출 + 일자별 잔액**(은행 기준, 카드는 전월 이용액→카드대금) |
+| GET | `/stats/cashflow?ym=&accountId=&ignoreActual=` | **예상 수입·지출 + 일자별 잔액**(은행 기준, 카드는 전월 이용액→카드대금). 등록 정기수입·정기지출 기반 계획 vs 실제 대조, 자기이체 제외 |
 | GET | `/stats/forecast?ym=` | **예상 지출**(규칙 엔진 — fixed/util/event/var 버킷, 소비 시점 기준) |
 | GET | `/stats/monthly?ym=` \| `?recent=` | 월 전체 요약(미지정 시 최근 N개월) |
 | GET | `/stats/monthly/category?ym=&type=` | 월 × 분류별 |
@@ -195,7 +216,7 @@
 - `from`/`to` 형식은 `YYYY-MM`(양끝 포함), 뒤집혀 오면 교환, 최대 60개월로 절단.
 - **추이·대시보드는 `transaction` 에서 직접 집계**(항상 최신), `monthly_*` 테이블은 요약 조회용.
 - 집계는 `settled` + 금액 존재 거래만. '분류 제외' 분류·집계제외 결제수단은 빠진다.
-- `/stats/cashflow` 규칙(C1~C8)·응답 구조는 EXPENSE_FORECAST_DESIGN §10.
+- `/stats/cashflow`: `accountId`(기준 은행 계좌, 미지정 시 거래 최다 주 거래 계좌), `ignoreActual`(1이면 실적 무시·월 전체 예측 — 예측 정확도 검증용). 규칙(C1~C8)·응답 구조는 EXPENSE_FORECAST_DESIGN §10.
 
 ## 12. imports (명세서 자동 입력)
 

@@ -13,6 +13,7 @@
 > | **CI/CD §3** | ❌ **미구현** | `.github/workflows/` 없음. 대신 **PM2 상시 실행**(`ecosystem.config.cjs` — `ledger-api`:4000, `ledger-web`:3000, 자동 재시작·`pm2 resurrect`)과 워크스페이스 부팅 스크립트(`scripts/coder-startup.sh`)로 운영한다. 배포 = 수동 `pnpm build` → `pm2 restart` |
 > | 관측성 §4 | ⚠️ 부분 | 헬스체크·env 검증·`traceId` 에러 봉투는 구현. **구조화 로그 수집·메트릭·Sentry 는 미도입** |
 > | 파일 저장 | ⚠️ | `StorageService` = **로컬 디스크**(`UPLOAD_DIR`). S3·구글 드라이브 어댑터 미구현 |
+> | **DB 백업 §2.4** | ✅ | PM2 작업 `ledger-db-backup`(cron `0 3 * * *`) → `pg_dump\|gzip`, 로컬 최근 2개 + 구글 드라이브(rclone `gdrive:My Dev/Ledger`) 최근 2개. 복구 `restore.sh`, 런북 `docs/DB_BACKUP_RECOVERY.md` |
 
 ---
 
@@ -136,6 +137,22 @@ export const envSchema = z.object({
 - **코드성 시드(멱등 upsert)**: `category`·`bank_txn_type`·`merchant_category_map` 시드는 `prisma/seed.ts`에서 upsert → 모든 환경 안전 재실행(DATABASE §3 시드 데이터).
 - **환경 분기**: dev는 데모 거래까지, staging/prod는 코드성 시드만. `SEED_SCOPE=code|demo` 플래그.
 - **기존 데이터 마이그레이션**: household 도입(AUTH §9)·member backfill(DOMAIN_MODEL §4)은 **일회성 data migration 스크립트**로 분리(스키마 마이그레이션과 구분, 실행 이력 기록).
+
+### 2.4 DB 백업·복구 (자동, as-built)
+
+CI/CD(§3)가 아직 없어 스냅샷·릴리스 백업 훅도 없으므로, **PM2 cron 작업으로 일일 논리 백업**을 돌려 컨테이너가 통째로 사라져도 복구 가능하게 한다. (앱 파일 저장의 `StorageService`(§1 표)와는 무관한 **운영 계층 메커니즘** — rclone + PM2.)
+
+| 항목 | 값 |
+|------|-----|
+| 작업 | PM2 `ledger-db-backup` (`--no-autorestart --cron-restart "0 3 * * *"`, 매일 03:00) |
+| 방식 | `pg_dump --no-owner --no-privileges \| gzip` → `ledger_YYYYMMDD_HHMMSS.sql.gz` (덤프에 `CREATE SCHEMA ledger` 포함) |
+| 보관 | 로컬 `/home/coder/db-backups` 최근 2개 + 구글 드라이브 최근 2개 |
+| 오프사이트 | rclone 리모트 `gdrive:My Dev/Ledger`(계정 `teddiyaki@gmail.com`). 리모트 미설정 시 로컬 백업만(graceful skip) |
+| 스크립트 | `/home/coder/db-backups/backup.sh`(백업), `restore.sh`(드라이브 스트리밍 복원, `latest`/파일명) |
+| 런북 | **`docs/DB_BACKUP_RECOVERY.md`** — 평상시 복구 + 컨테이너 소실 시 재해 복구(rclone 재인증·psql 복원·자동화 재등록) 전 과정 |
+
+- 복구는 `DROP SCHEMA ledger CASCADE` 후 `rclone cat … | gunzip | psql` 스트리밍 → 백업 시점으로 **덮어쓰기**(파괴적, 확인 프롬프트 있음). 적용 후 `pm2 restart ledger-api`.
+- 이 드라이브 사용은 **OPS 백업 저장소**일 뿐, 앱의 구글 드라이브 연동(GOOGLE_DRIVE_DESIGN — OAuth·명세서 저장·시트 가져오기)과는 별개다.
 
 ---
 

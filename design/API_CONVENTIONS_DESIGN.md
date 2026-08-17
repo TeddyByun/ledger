@@ -67,7 +67,7 @@
 
 > **as-built (2026-08-01)**: 거래 목록은 설계대로 `{ items, page: { nextCursor, hasNext } }` 커서 방식이다.
 > 다만 **원천 거래(bank/card)와 `/transactions/unified` 는 `offset`+`limit`**(≤100)을 쓰며 `page`/`pageSize` 는 쓰지 않는다.
-> 소형 목록(categories·payment-methods·classify-keywords·recurring-expenses)은 **페이지네이션 없이 전량 반환**한다.
+> 소형 목록(categories·payment-methods·classify-keywords·recurring-expenses·recurring-incomes)은 **페이지네이션 없이 전량 반환**한다.
 > 합계는 목록 응답에 넣지 않고 **`GET …/summary` 로 분리**했다(정렬·페이지와 무관하게 조회 조건 전체 합계).
 > 알 수 없는 필터 파라미터 400 정책(§3.3)은 미적용 — 현재는 무시된다.
 

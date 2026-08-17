@@ -22,17 +22,21 @@
 ## 2. 인증 방식 (Authentication)
 
 ### 2.1 토큰 구조
-- **Access Token (JWT)** — 짧은 수명(15분). `sub`(userId), `hid`(householdId), `role`, `exp`. 서버 무상태 검증.
-- **Refresh Token** — 긴 수명(30일), **불투명(opaque) 랜덤 문자열**을 DB에 해시 저장. **회전(rotation)** + **재사용 감지(reuse detection)**.
+- **Access Token (JWT)** — 짧은 수명(기본 15분, `JWT_ACCESS_TTL`). 클레임: `sub`(memberId=로그인 구성원), `hid`(householdId), `role`, `email?`, `sadm?`(슈퍼관리자, §12), `exp`. 서버 무상태 검증(`JWT_ACCESS_SECRET` 서명).
+- **Refresh Token** — 긴 수명(기본 30일, `JWT_REFRESH_TTL`), **불투명(opaque) 랜덤 문자열**(`randomBytes(48)`)을 DB에 sha256 해시 저장. **회전(rotation)** + **재사용 감지(reuse detection)** + **회전 유예 창(grace)**.
 
 ### 2.2 토큰 수명·회전
 ```
 로그인 → Access(15m) + Refresh(30d) 발급, Refresh 는 DB에 해시로 저장
 Access 만료 → POST /auth/refresh (Refresh 제출)
    → 기존 Refresh 폐기(revoke) + 새 Refresh 발급 (회전)
-   → 이미 폐기된 Refresh 재사용 시 → 해당 계정 토큰 전체 무효화 (탈취 대응)
+   → 이미 폐기된 Refresh 재사용 시:
+        ├─ 유예 창(폐기 후 ~20s) 안 → 새 회전 발급(세션 유지)   ← 동시/멀티탭/재시도 경쟁 흡수
+        └─ 유예 창 밖(오래된 재사용) → family 체인 전체 무효화(TOKEN_REUSE_DETECTED, 탈취 대응)
 로그아웃 → 제출된 Refresh 폐기
 ```
+
+> **회전 유예 창 (grace, as-built `token.service.ts` `rotate()`)**: refresh 토큰은 1회용 회전이라, 동시 요청·멀티탭·클라 재시도가 **직전에 회전된 같은 토큰**을 거의 동시에 다시 제출하는 정상 경쟁이 발생한다. 이를 탈취로 오판해 세션을 죽이지 않도록, 폐기 시각으로부터 `GRACE_MS`(20초) 안의 재사용은 **family 를 유지한 채 새 토큰을 재발급**한다. 창을 벗어난 재사용만 탈취로 보고 체인 전체를 폐기한다.
 
 ### 2.3 클라이언트별 저장 (D4/D5)
 | | Access | Refresh |
@@ -41,6 +45,15 @@ Access 만료 → POST /auth/refresh (Refresh 제출)
 | 모바일 | 메모리 | SecureStore(Keychain/Keystore) |
 
 > 웹 Refresh를 쿠키로 두면 `/auth/refresh`는 CSRF 보호 필요(§8).
+> 웹 Refresh 쿠키(as-built): `httpOnly`, `sameSite='strict'`, `path='/'`, `secure`는 `NODE_ENV==='production'` 일 때만(로컬 http 개발 허용).
+
+### 2.4 클라이언트 리프레시 처리 (웹, as-built `apps/web/src/lib/api.ts`)
+
+401 응답을 받은 요청은 자동으로 Refresh 회전을 시도해 재요청한다 — 사용자에게 오류를 노출하지 않고 세션을 복원한다.
+
+- **단일 in-flight 공유(de-dup)**: refresh 는 1회용 회전이라, 여러 요청이 동시에 401 을 만나 각자 `/auth/refresh` 를 호출하면 첫 번째만 성공하고 나머지는 실패한다. 진행 중인 refresh Promise 를 **하나로 공유**(`refreshPromise`)해 동시 401 이 같은 결과를 기다리게 한다. (서버의 회전 유예 창 §2.2 와 짝을 이뤄 경쟁을 흡수.)
+- **재시도 한도**: 재시도 후에도 401 이면(순간적으로 토큰이 빈 경쟁) refresh 를 **최대 2회**까지 재시도.
+- **세션 만료 처리**: refresh 까지 진짜 실패하면 access 토큰을 비우고 `onAuthLost()` 콜백을 호출 → `auth.tsx` 가 세션을 정리하고 **로그인 화면으로 전환**(오류 배너 대신). 업로드·다운로드 경로도 동일한 refresh→재시도→onAuthLost 흐름을 탄다.
 
 ---
 
@@ -211,7 +224,7 @@ AuthModule
 ## 8. 보안 고려사항
 
 - **비밀번호**: argon2id 해시, 최소 길이·유출 비밀번호 차단(선택), 저장 시 원문·해시만.
-- **Refresh 회전 + 재사용 감지**: 폐기된 토큰 재사용 시 family 전체 무효화(탈취 방어).
+- **Refresh 회전 + 재사용 감지 + 유예 창**: 폐기된 토큰 재사용 시 family 전체 무효화(탈취 방어). 단, 회전 직후 `GRACE_MS`(20초) 안의 재사용은 정상 경쟁(동시/멀티탭/재시도)으로 보고 세션을 유지한 채 재발급한다(§2.2). 클라는 in-flight refresh 를 공유해 이 경쟁을 최소화한다(§2.4).
 - **Rate limiting**: 로그인·재설정 요청에 IP/계정 단위 제한(`@nestjs/throttler`). 실패 누적 시 잠금.
 - **CSRF**: 웹 Refresh 쿠키 → `SameSite=Strict` + `/auth/refresh`에 CSRF 토큰(또는 커스텀 헤더 요구).
 - **CORS**: 허용 오리진 화이트리스트, 쿠키 사용 시 `credentials: true`.

@@ -15,15 +15,15 @@
 | 백엔드 | 16 | 0 |
 | 프론트엔드 | 11 | 0 |
 | 공통(Cross-cutting) | 7 | 0 |
-| 인프라/운영 | 5 | 0 |
+| 인프라/운영 | 6 | 0 |
 
 > ⚠️ 위 표는 **설계 완료** 기준이다. 설계됐지만 **구현되지 않은** 항목이 있으므로, 구현 기준 현황은 아래 §0.1 을 본다.
 
 ---
 
-## 0.1 구현 현황 (as-built, 2026-08-01)
+## 0.1 구현 현황 (as-built, 2026-08-17)
 
-코드(`apps/api` 컨트롤러 13개 · `apps/web` 화면 14개 · `schema.prisma` 테이블 20개) ↔ 설계 문서 전수 대조 결과.
+코드(`apps/api` 컨트롤러 13개 · `apps/web` 화면 16개 · `schema.prisma` 테이블 20개) ↔ 설계 문서 전수 대조 결과.
 
 ### A. 설계 O / 구현 O
 
@@ -37,7 +37,7 @@ API 에러 계약(traceId 봉투) · 커서 페이지네이션 · 로컬 dev 환
 |------|------|------|
 | **예산(Budget)** | DOMAIN_MODEL_DESIGN §2 | 테이블·API·화면 전무. 예산 소진율·초과 경고도 없음 |
 | **검토(pending) 확정 워크플로** | REVIEW_WORKFLOW_DESIGN | 잡 단위 확정 API·검토 화면 미구현 → 목록 화면 방식으로 대체(§0 as-built 절) |
-| **구글 드라이브 연동** | GOOGLE_DRIVE_DESIGN | 전체 미구현. 저장은 로컬 디스크 |
+| **구글 드라이브 연동**(앱 내 파일저장·시트 가져오기) | GOOGLE_DRIVE_DESIGN | 앱 레벨 미구현. 업로드 원본은 로컬 디스크. *단, 운영 DB 백업은 rclone 로 드라이브에 올린다 → §5* |
 | **감사 로그** | BACKEND_FEATURES_DESIGN §1 | `audit_log` 테이블 없음 |
 | **비밀번호 재설정 / 가구원 초대** | AUTH_DESIGN §5·§6 | 토큰 테이블만 존재. 초대 대신 owner 직접 생성 |
 | **CI/CD 파이프라인** | INFRA_OPS_DESIGN §3 | `.github/workflows` 없음 → PM2 수동 배포 |
@@ -66,6 +66,12 @@ API 에러 계약(traceId 봉투) · 커서 페이지네이션 · 로컬 dev 환
 | 카드사별 **전용 파서 4종** | ARCHITECTURE §5 |
 | 단일 페이지(SPA) 셸 구조 — URL 라우팅 없음 | FRONTEND_DESIGN §0.1·§0.2 |
 | **월 현금흐름 예측**(`/stats/cashflow`) — 예상 수입 탐지·카드대금(전월 이용액)·일자별 잔액 | EXPENSE_FORECAST_DESIGN §10 · API_SPEC §11 |
+| 예상 수입·지출 강화 — 등록 정기수입/지출을 **계획**으로 항상 표시 + **계획 vs 실제** 대조·합계, 자기이체 제외(이중계상 방지) | EXPENSE_FORECAST_DESIGN §10 |
+| **정기수입**(recurring income) 관리 — CRUD·추천·이번 달 발생 상태, `recurring_expense.flow='income'` 공유 테이블·전용 컨트롤러/화면 | (신규 — 정기지출과 대칭) |
+| 결제수단 **사용 중지**(`isActive`) 플래그 — 신규 사용 목록에서 제외 | DATABASE §3.1 |
+| **다중 선택 필터**(MultiSelect) — 원천·통합 거래 목록 | FRONTEND_DESIGN §0.4 |
+| 커스텀 **달력**(DatePicker/MonthPicker) — 네이티브 입력 대체(뉴모피즘 통일) | FRONTEND_DESIGN §0.1 |
+| Refresh 회전 **유예창(20s)** + 동시 refresh **de-dup**(단일 in-flight 공유) — 멀티탭·재시도 경쟁에도 세션 유지 | AUTH_DESIGN §2.2 |
 
 ---
 
@@ -90,7 +96,7 @@ API 에러 계약(traceId 봉투) · 커서 페이지네이션 · 로컬 dev 환
 - [x] 🔴 **멀티테넌시/데이터 소유권** — household 스코프, 쿼리 격리, 가구 RBAC · [AUTH_DESIGN.md](AUTH_DESIGN.md) §3·§4
 - [x] 🔴 **검토(pending) 확정 워크플로** — 확정 API + 규칙 학습(피드백) · [REVIEW_WORKFLOW_DESIGN.md](REVIEW_WORKFLOW_DESIGN.md) · ⚙️ *설계만 — 목록 화면 방식으로 대체 구현(§0.1 B)*
 - [x] 🟡 **예산(Budget) 모델·API** — 예산 설정·소진율·초과 판정 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §2 · ⚙️ *설계만 — 미구현*
-- [x] 🟡 **반복/고정 지출** — is_recurring + 자동 생성 규칙 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §3 · ⚙️ *구현 형태 상이 — `recurring_expense`(예측·자동분류용, 거래 자동생성 없음)*
+- [x] 🟡 **반복/고정 지출** — is_recurring + 자동 생성 규칙 · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §3 · ⚙️ *구현 형태 상이 — `recurring_expense`(`flow`=expense/income 으로 정기지출·정기수입 공유, 예측·자동분류용, 거래 자동생성 없음)*
 - [x] 🟡 **가족 구성원(member) 모델** — 지출 명의 귀속(본인/가족) · [DOMAIN_MODEL_DESIGN.md](DOMAIN_MODEL_DESIGN.md) §1 · ⚙️ *구성원 CRUD 만 구현, `transaction.member_id` 미사용*
 - [x] 🟡 **API 규약 표준화** — 에러 포맷/코드, 정렬·필터 컨벤션, 커서 페이지네이션 · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §1·§2·§3
 - [x] 🟡 **잡 상태 통지 방식** — 폴링 vs SSE/WebSocket, 큐 재시도·DLQ · [API_CONVENTIONS_DESIGN.md](API_CONVENTIONS_DESIGN.md) §4 · ⚙️ *폴링만 구현, SSE 미구현*
@@ -136,6 +142,7 @@ API 에러 계약(traceId 봉투) · 커서 페이지네이션 · 로컬 dev 환
 
 ### 완료
 - [x] **DB 연결·스키마** — raw.so4.kr PostgreSQL 18.4, `ledger` 스키마 전용
+- [x] **DB 백업·복구** — `pg_dump | gzip` 야간 cron(PM2 `ledger-db-backup`) → rclone 로 Google Drive 업로드·복구 스크립트 · [../docs/DB_BACKUP_RECOVERY.md](../docs/DB_BACKUP_RECOVERY.md) · ⚙️ *운영 레벨 백업 — 앱 내 드라이브 파일저장/시트가져오기(GOOGLE_DRIVE_DESIGN)와는 별개*
 
 ### 남음
 - [x] 🟡 **로컬 개발 환경** — docker-compose(PostgreSQL + Redis), Node/pnpm 설치 가이드 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §1

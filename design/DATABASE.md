@@ -26,7 +26,7 @@
 | | `card_statement` / `card_transaction` | 카드 명세서 / 명세 상세 → transaction 1:1 |
 | | `installment_plan` | 할부 원거래(청구건이 참조) |
 | | `bank_txn_type` / `merchant_category_map` | 코드성 / 자동분류 규칙. **전역** |
-| 예측 | `recurring_expense` | 정기지출(R4/R6/R7). `is_active`=예측 포함 |
+| 예측 | `recurring_expense` | 정기지출·정기수입 공용(`flow`=expense/income). R4/R6/R7. `is_active`=예측 포함 |
 | 집계 | `monthly_summary` / `monthly_category_stat` / `monthly_source_stat` / `monthly_payment_stat` | 월별 집계. **복합 PK(household_id, ym, …)** |
 | 적재 | `import_job` | 업로드 파이프라인 상태(id=문자열) |
 
@@ -82,6 +82,7 @@ erDiagram
     string account_no
     string owner "명의(자기이체 판정)"
     boolean exclude_from_stats "수입·지출 집계 제외"
+    boolean is_active "false=사용 중지"
   }
   category {
     string code PK
@@ -173,6 +174,7 @@ erDiagram
   recurring_expense {
     int id PK
     int household_id FK
+    enum flow "expense|income 지출/수입 공용"
     string label
     string category_code FK
     int payment_method_id FK
@@ -181,6 +183,7 @@ erDiagram
     enum cadence "monthly|annual|schedule"
     string end_ym "만기(R7)"
     string match_key
+    enum source "auto|manual"
     enum is_active
   }
 
@@ -283,6 +286,8 @@ erDiagram
 | 2026-07 | 분류 관리 CRUD·자동분류 키워드 CRUD 화면 도입(`category`·`merchant_category_map` 를 UI 에서 편집) | API_SPEC §4·§8 |
 | 2026-08 | 정기지출 **만기(`end_ym`)를 주기 무관 적용** — 할부 등 매월 항목도 만기 지정 | EXPENSE_FORECAST_DESIGN §4·§6.2 |
 | 2026-08 | 정기지출 **`amount_type`(고정/변동)** 추가 — 추천 시 월별 편차로 자동 판정 | EXPENSE_FORECAST_DESIGN §4 |
+| 2026-08 | **`payment_method.is_active`** — 결제수단 사용 중지(false=신규 사용 안 함) | §3.1 |
+| 2026-08 | 정기항목 **`flow`(expense/income)** 추가 — `recurring_expense` 한 테이블이 **정기지출·정기수입 공용**. 인덱스 [household_id, flow] | schema.prisma · §0.1 |
 | 2026-08 | 문서 동기화 — API_SPEC/ARCHITECTURE/FRONTEND_DESIGN as-built 반영 | (본 정비) |
 
 ---
@@ -498,6 +503,7 @@ category ──────┘
 | owner | VARCHAR(30) | NULL | 명의자 (예: 본인, 가족) |
 | memo | VARCHAR(255) | NULL | 비고(연회비·혜택 등) |
 | exclude_from_stats | BOOLEAN | DEFAULT false | **수입·지출 집계 제외** — 투자·저축 계좌 등. 이 결제수단의 거래는 전체 거래·합계·추이·월별 집계에서 빠진다(`common/exclude-payment.ts`). |
+| is_active | BOOLEAN | DEFAULT true | **사용 여부** — false=사용 중지(신규 거래에 노출 안 함). 기존 거래·이력은 유지. |
 | created_at | DATETIME | DEFAULT now | 생성 시각 |
 
 > **카드 목록 = 물리 카드(번호)별 1행.** 한 명세서에 본인·가족 카드가 섞여 있으면 각 카드를 따로 등록한다.
@@ -635,7 +641,7 @@ category ──────┘
 | branch | VARCHAR(50) | NULL | 거래점/채널 |
 | transaction_id | INTEGER | FK → transaction.id, NULL | 분류된 가계부 거래 |
 | is_classified | CHAR(1) | DEFAULT 'N' | 분류 완료 여부 ('Y'/'N') |
-| exclude_reason | VARCHAR(20) | NULL | 집계 제외 사유 (card_settlement/self_transfer) |
+| exclude_reason | VARCHAR(20) | NULL | 집계 제외 사유 (card_settlement/self_transfer/transfer) |
 | import_batch | VARCHAR(50) | NULL | 적재 배치(조회기간 등) 식별자 |
 | created_at | DATETIME | DEFAULT now | 적재 시각 |
 
@@ -894,11 +900,11 @@ INSERT INTO category (code, parent_code, name, type, depth, sort_order) VALUES
   ('10', NULL, '경조사',   'expense', 1, 10),
   ('11', NULL, '교육',     'expense', 1, 11),
   ('1101','11','도서·학술','expense', 2,  1), ('1102','11','강의·콘텐츠','expense',2,2),
-  ('18', NULL, '분류 제외','expense', 1, 12),
+  ('18', NULL, '지출 분류 제외','expense', 1, 12),
   -- 수입
   ('13', NULL, '급여',       'income', 1, 1), ('14', NULL, '상여/추가금','income',1,2),
   ('15', NULL, '캐시백/환급','income', 1, 3), ('16', NULL, '이자',       'income',1,4),
-  ('17', NULL, '기타수입',   'income', 1, 5), ('19', NULL, '분류 제외',  'income',1,6);
+  ('17', NULL, '기타수입',   'income', 1, 5), ('19', NULL, '수입 분류 제외',  'income',1,6);
 
 CREATE TABLE counterparty (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -968,7 +974,7 @@ CREATE TABLE bank_transaction (
     transaction_id    INTEGER REFERENCES "transaction"(id),
     is_classified     CHAR(1) DEFAULT 'N' CHECK (is_classified IN ('Y','N')),
     exclude_reason    VARCHAR(20)
-                        CHECK (exclude_reason IN ('card_settlement','self_transfer')),
+                        CHECK (exclude_reason IN ('card_settlement','self_transfer','transfer')),
     import_batch      VARCHAR(50),
     created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
 );

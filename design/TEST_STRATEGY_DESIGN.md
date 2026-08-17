@@ -6,7 +6,7 @@
 
 ---
 
-## 0. 현재 구현 상태 (2026-07-25)
+## 0. 현재 구현 상태 (2026-08-17)
 
 하네스는 설치·동작 확인 완료. 테스트 내용은 §2 우선순위대로 채워 나간다.
 
@@ -17,7 +17,7 @@
 | 테스트용 tsconfig | ✅ `apps/api/tsconfig.spec.json` (`pnpm typecheck:test` 로 검증) |
 | TZ·NODE_ENV 고정 | ✅ `test/setup-env.ts` + 스크립트의 `TZ=Asia/Seoul` |
 | 테스트 DB 준비/격리 훅 | ✅ 스캐폴드 — `test/integration/global-setup.ts`, `setup-db.ts` |
-| 단위 테스트 | 🟡 26건 (파서 정규화 유틸 + 신한 파서) |
+| 단위 테스트 | 🟡 29건 (readTabular 정규화 + 카드 dedup 계약 + 스키마 설계규칙) |
 | 통합 테스트 | ❌ 미작성 — §2.3(테넌시 격리)부터 |
 | e2e 테스트 | ❌ 미작성 |
 | 프론트 테스트 | ❌ 미착수 (§6) |

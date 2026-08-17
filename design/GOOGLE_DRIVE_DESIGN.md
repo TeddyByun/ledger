@@ -4,10 +4,13 @@
 > 핵심 원칙: **앱 로그인(자체 JWT)과 드라이브 연결(Google OAuth)은 완전히 별개 레이어**다.
 > 연동: [AUTH_DESIGN.md](AUTH_DESIGN.md) §11 · [INFRA_OPS_DESIGN.md](INFRA_OPS_DESIGN.md) §1.3 · [ARCHITECTURE.md](ARCHITECTURE.md) §5(적재) · [DATABASE.md](DATABASE.md) §1(원본 시트)
 
-> ⚠️ **구현 현황 (as-built, 2026-08-01): 전체 미구현.**
-> Google OAuth 연결·Picker·드라이브 폴더·시트 가져오기 모두 코드가 없다(`google` 관련 의존성 없음).
+> ⚠️ **구현 현황 (as-built, 2026-08): 전체 미구현.**
+> Google OAuth 연결·Picker·드라이브 폴더·시트 가져오기 모두 코드가 없다(`google` 관련 의존성 없음, `google_connection` 테이블·`IntegrationsModule` 없음).
 > 업로드 원본은 `ingestion/storage/storage.service.ts` 가 **로컬 디스크**(`UPLOAD_DIR`, 기본 `apps/api/uploads/`)에 저장하며,
-> 명세서는 사용자가 파일을 직접 첨부하는 방식(`POST /imports`)만 지원한다. 본 문서는 향후 설계안으로 유지.
+> 명세서는 사용자가 파일을 직접 첨부하는 방식(`POST /imports`)만 지원한다.
+> 유일하게 존재하는 흔적은 env 스키마의 `STORAGE_DRIVER: 'local' | 'google'`(기본 `local`) **플래그뿐**이며, `google` 드라이버 구현체는 아직 없다. 본 문서는 향후 설계안으로 유지.
+>
+> ℹ️ **혼동 주의**: 운영 계층에는 이미 **DB 백업을 구글 드라이브로 업로드**하는 메커니즘이 돌고 있으나(rclone `gdrive:My Dev/Ledger` + PM2 `ledger-db-backup`, INFRA_OPS §2.4), 이는 OAuth 없이 rclone 리모트로 동작하는 **OPS 백업**일 뿐 본 문서가 설계하는 **앱 기능**(가구별 OAuth 연결·명세서 저장·시트 가져오기)과는 무관하다.
 
 ---
 

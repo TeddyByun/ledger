@@ -19,7 +19,7 @@
 | 스타일/UI | Tailwind + shadcn/ui | **미도입** — `app/globals.css` 수기 CSS(뉴모피즘 다크 테마, `.btn`·`.card`·`.nav` 등 클래스) |
 | 폼/검증 | react-hook-form + zod | **미도입** — 제어 컴포넌트 + 서버 검증(class-validator) 의존 |
 | 차트 | Recharts | **미도입** — 자체 SVG 컴포넌트(`TrendChart`·`MonthlyBars`·`GroupedBarChart`·`StackedBarChart`) |
-| API 클라이언트 | openapi-typescript 생성물 | **수기** `lib/api.ts` fetch 래퍼 + `lib/types.ts` 수기 타입. 401 → `/auth/refresh` 자동 재시도는 구현됨 |
+| API 클라이언트 | openapi-typescript 생성물 | **수기** `lib/api.ts` fetch 래퍼 + `lib/types.ts` 수기 타입. 401 → `/auth/refresh` **단일 in-flight 공유**(동시 401 경쟁 방지) 자동 재시도(최대 2회) + 리프레시까지 실패 시 `setAuthLostHandler` 로 로그인 화면 전환. `upload`(multipart)·`download`(xlsx blob) 도 동일 재시도 |
 | 의존성 | — | `apps/web/package.json` = next·react·react-dom·@ledger/shared **뿐** |
 
 > 즉 현행 웹은 **의존성 없는 SPA**다. TanStack Query·shadcn·zod·Recharts 도입은 남은 과제이며,
@@ -30,7 +30,7 @@
 ```
 apps/web/src/
 ├─ app/{layout.tsx, page.tsx, globals.css}   # 셸 + 뉴모피즘 테마 CSS
-├─ components/   Shell · Sidebar · Login · MultiSelect · sortable
+├─ components/   Shell · Sidebar · Login · MultiSelect · DatePicker · MonthPicker · sortable
 │                TrendChart · MonthlyBars · GroupedBarChart · StackedBarChart · chart-utils
 ├─ views/        화면 1개 = 파일 1개 (아래 §0.3)
 └─ lib/          api.ts(fetch 래퍼·토큰) · auth.tsx(Context) · types.ts · format.ts
@@ -50,6 +50,7 @@ apps/web/src/
 | | **카드 관리** `cards` | 카드 등록·수정, 명세서에서 **감지된 카드** 매핑 |
 | | **결제수단** `payment-methods` | 계좌·카드 목록, **수입·지출 집계 제외** 지정 |
 | | **분류 관리** `categories` | 분류 코드 트리 CRUD(대/소분류·정렬·사용여부) |
+| | **정기수입** `recurring-incomes` | 정기수입 CRUD + 반복 패턴 **추천** 확정 (정기지출과 같은 테이블 `flow='income'`·같은 서비스 공유) |
 | | **정기지출** `recurring-expenses` | 정기지출 CRUD + 반복 패턴 **추천** 확정 |
 | | **자동분류 키워드** `classify-keywords` | 키워드 규칙 CRUD(패턴·매칭방식·우선순위) |
 | | **명세서 업로드** `imports` | 발급사·결제수단 선택 업로드, 잡 상태, 업로드 이력 |
@@ -57,8 +58,17 @@ apps/web/src/
 
 **설계(§5) 대비 차이**
 - **미구현**: 예산 화면, 회원가입/비밀번호 재설정 화면(로그인만), 거래 빠른 입력(+ FAB), 모바일 하단 탭, 잡 상태 SSE.
-- **설계에 없던 as-built 화면**: 월별 결제수단별 지출 추이 · 예상 지출 · 전체 거래 · 은행/카드 거래 · 카드 관리 · 정기지출 · 자동분류 키워드 · 운영 관리자 가구 관리.
+- **설계에 없던 as-built 화면**: 월별 결제수단별 지출 추이 · 예상 수입·지출 · 전체 거래 · 은행/카드 거래 · 카드 관리 · 결제수단 · 정기수입 · 정기지출 · 자동분류 키워드 · 운영 관리자 가구 관리.
 - **검토(pending) 전용 화면 없음** → 아래 §0.4.
+
+### 0.5 공용 컴포넌트 · 필터 규약 (as-built)
+
+수기 CSS SPA라 UI 라이브러리 대신 **자체 공용 컴포넌트**를 만들어 재사용한다.
+
+- **MultiSelect** (`components/MultiSelect.tsx`): 다중 선택 필터 드롭다운. **전체 선택 / 전체 해제** 토글, 선택 개수 요약 표시. 필터의 **구분(`txnTypes`) · 분류(`categoryCodes`) · 결제수단(`paymentMethodIds`)** 이 이 컴포넌트로 다중 선택된다.
+- **MonthPicker** (`components/MonthPicker.tsx`): 네이티브 `input[type=month]` 대체 — 연도 이동 + 12개월 그리드 + 빠른 선택 칩(이번 달·+12/24/36개월). `.tbl-wrap`(overflow:auto) 안에서 잘리지 않도록 **포털 + fixed 배치**. 모든 화면의 기간 필터(from/to)와 예상 화면 월 선택에 사용.
+- **DatePicker** (`components/DatePicker.tsx`): 일 단위 선택용 커스텀 달력 팝오버(네이티브 `input[type=date]` 대체). 뉴모피즘 테마 반영.
+- **필터 기본 기간**: 거래 목록(전체/은행/카드)의 기본 조회 기간 = **지난 달**(from·to 모두 전월). 대시보드는 기본 올해. 필터는 `draft` → **조회 버튼**으로 확정하는 2단계(입력 즉시 재조회 아님).
 
 ### 0.4 검토(Review) 플로 — 실제 구현
 

@@ -10,7 +10,7 @@
 > |------|------|-----------|
 > | **가족 구성원(§1)** | ⚠️ 부분 | `household_member` + 가족 관리 화면·`/household/members` CRUD 는 구현. `transaction.member_id` 컬럼은 있으나 **화면·집계에서 사용하지 않음**(명의별 지출 집계 미구현) |
 > | **예산(§2)** | ❌ 미구현 | `budget` 테이블·API·화면 모두 없음. 예산 소진율·초과 경고도 없음 |
-> | **반복/고정 지출(§3)** | ⚠️ 형태 상이 | `recurring_rule`(거래 자동 생성) 대신 **`recurring_expense`** 로 구현 — 거래를 만들지 않고 ① **예상 지출 예측**(EXPENSE_FORECAST_DESIGN) ② **자동분류 매칭 힌트**(match_key)로 쓴다. `transaction.is_recurring` 플래그는 없음 |
+> | **반복/고정 지출(§3)** | ⚠️ 형태 상이 | `recurring_rule`(거래 자동 생성) 대신 **`recurring_expense`** 로 구현 — 거래를 만들지 않고 ① **예상 지출 예측**(EXPENSE_FORECAST_DESIGN) ② **자동분류 매칭 힌트**(match_key)로 쓴다. `transaction.is_recurring` 플래그는 없음. 이후 **`flow`(expense/income)** 컬럼이 붙어 **정기지출·정기수입을 같은 테이블**에서 관리(인덱스 [household_id, flow]) |
 >
 > 아래 §1~§6 중 예산·`recurring_rule` 절은 **미구현 설계안**으로 읽는다.
 
@@ -42,23 +42,32 @@ household_member   budget            recurring_rule
 
 ### 1.1 모델
 
+> **as-built**: `User`/`Membership` 를 흡수한 실제 스키마다. 로그인 필드(email·password_hash·role·is_active·is_super_admin·last_login_at)를 nullable 로 **직접** 갖는다(별도 `linked_user_id`·`User` 관계 없음). `payment_method.member_id`(§1.2)는 미구현이라 `paymentMethods` 역참조도 없다.
+
 ```prisma
 model HouseholdMember {
-  id           Int       @id @default(autoincrement())
-  householdId  Int       @map("household_id")
-  name         String                                   // 본인, 선영, 채민, 채성
-  relation     String?                                  // self/spouse/child/parent (자유표기 허용)
-  linkedUserId Int?      @map("linked_user_id")          // 앱 사용자면 연결(없으면 NULL)
-  isSelf       Boolean   @default(false) @map("is_self") // 대표(본인) 1명
-  color        String?                                   // 대시보드 색 태그(#RRGGBB)
-  sortOrder    Int       @default(0) @map("sort_order")
-  useYn        String    @default("Y") @map("use_yn") @db.Char(1)
-  createdAt    DateTime  @default(now()) @map("created_at")
+  id           Int        @id @default(autoincrement())
+  householdId  Int        @map("household_id")
+  name         String                                    // 본인, 선영, 채민, 채성
+  relation     String?                                   // self/spouse/child/parent (자유표기 허용)
+  isSelf       Boolean    @default(false) @map("is_self") // 대표(본인) 1명
+  color        String?                                    // 대시보드 색 태그(#RRGGBB)
+  sortOrder    Int        @default(0) @map("sort_order")
+  useYn        String     @default("Y") @map("use_yn") @db.Char(1)
 
-  household Household @relation(fields: [householdId], references: [id])
-  user      User?     @relation(fields: [linkedUserId], references: [id])
-  transactions   Transaction[]
-  paymentMethods PaymentMethod[]
+  // 로그인(선택) — 값이 있으면 앱에 로그인 가능한 사용자(User/Membership 통합, 2026-07)
+  email        String?    @unique
+  passwordHash String?    @map("password_hash")
+  role         MemberRole @default(member)                // owner/member/viewer(가구 역할)
+  isActive     Boolean    @default(true) @map("is_active")
+  isSuperAdmin Boolean    @default(false) @map("is_super_admin") // 전체 운영(플랫폼) 관리자
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  household           Household            @relation(fields: [householdId], references: [id])
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  transactions        Transaction[]
 
   @@index([householdId])
   @@map("household_member")

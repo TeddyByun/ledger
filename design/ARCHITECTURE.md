@@ -98,10 +98,19 @@
 | **PaymentMethod** | 계좌·카드 관리, 명세서 감지 카드, **집계 제외** 지정 | payment_method(`exclude_from_stats`) | ✅ `payment-method/` |
 | **Ingestion(적재)** | 파일 업로드·파싱·정규화·자동분류 | bank_transaction, card_statement, card_transaction | ✅ `ingestion/` |
 | **Reconciliation(대사)** | 카드대금·자기이체·집계제외 결제수단 → **'분류 제외'** 매핑 | bank/card_transaction, exclude_reason | ✅ `ingestion/reconciliation/` |
-| **RecurringExpense(정기지출)** | 정기지출 CRUD + 반복 패턴 추천 | recurring_expense | ✅ `recurring-expense/` |
+| **RecurringExpense/Income(정기지출·정기수입)** | 정기지출·정기수입 CRUD + 반복 패턴 추천 | recurring_expense(`flow` 로 지출/수입 구분) | ✅ `recurring-expense/` (`recurring-income.controller` 가 같은 테이블·서비스 공유, `flow='income'`) |
 | **Statistics(통계)** | 월별 집계·대시보드·추이·**예상 지출 규칙 엔진** | monthly_*, transaction | ✅ `statistics/`(+`forecast.service`) |
 | **Budget(예산)** | 예산 설정·소진율 | budget | ❌ **미구현**(DOMAIN_MODEL_DESIGN §2 설계만) |
 | **Audit/Export** | 감사 로그 / 데이터 내보내기 | audit_log | 감사로그 ❌ · 내보내기는 원천 거래 **xlsx** 로 구현 |
+
+### 4.1 테넌시(가구 스코핑) — as-built
+
+가구 단위 데이터 격리는 서비스마다 `where householdId` 를 수기로 붙이지 않고, **요청 스코프 테넌트 컨텍스트 + Prisma 미들웨어**로 자동 주입한다.
+
+- **TenantContext** (`common/tenant/tenant-context.ts`): `AsyncLocalStorage<{ userId, householdId, role }>`. `auth/tenant.interceptor.ts` 가 인증된 요청마다 JWT 클레임으로 컨텍스트를 채운다(`tenantStorage.run`).
+- **PrismaService `$use` 미들웨어** (`prisma/prisma.service.ts`): `SCOPED_MODELS` 에 속한 모델의 모든 쿼리(read/write)에 현재 테넌트의 `householdId` 를 **자동 주입** — `where`/`create`/`data` 에 붙여 가구 경계를 강제한다. 컨텍스트가 없으면(공개 라우트·시스템 작업) 주입을 건너뛴다.
+- **경계 초월(운영 관리자)**: `runWithoutTenant(fn)` 은 `AsyncLocalStorage.exit` 로 스토어를 비워 자동 주입을 끄고(반드시 명시적 where/data 로 대상 가구 지정), `runWithTenant(ctx, fn)` 은 임의 가구 컨텍스트로 기존 가구 스코프 서비스를 재사용한다. Admin 모듈이 전 가구 작업에 사용.
+- **가드**: `auth/guards/` = `jwt-auth.guard` · `roles.guard`(가구 내 역할) · `super-admin.guard`(플랫폼 운영 관리자 — `isSuperAdmin`, Admin 라우트 보호).
 
 ---
 

@@ -14,7 +14,7 @@
 | **V2** | 분류(Category) 소유권 | **전역 마스터 + 운영자 전용 쓰기** | 감사 #20(아무나 전역 분류 CRUD) 해소. 가구별 분류 추가는 불가 |
 | **V3** | 식별자 | 전 테이블 `uuid` (`gen_random_uuid()`) | 기존 `Int` 자동증가 전량 재매핑 필요 |
 | **V4** | 참조 무결성 | **물리 FK 없음** — 논리 uuid 연결만 | 앱이 보장. Prisma `relationMode = "prisma"` |
-| **V5** | enum → 코드 테이블 | Prisma enum 11종 → `_ct` 5개 테이블 + `code_group` | `YesNo` 는 enum 이 아니라 boolean 으로 승격 |
+| **V5** | enum → 코드 테이블 | Prisma enum 13종 → `_ct` 5개 테이블 + `code_group` | `YesNo` 는 enum 이 아니라 boolean 으로 승격 |
 | **V6** | 시스템 역할 | `SYSTEM_ROLE` = `OPERATOR` / `USER` (가구 역할과 **별개 축**) | 최초 가입자만 OPERATOR |
 | **V7** | 자기참조 계층 | **인라인 `parent_id` 유지** (SKILL §5.4 예외 B) | `category_mt.parent_id`. `_rt` 로 빼지 않는다 |
 
@@ -30,7 +30,7 @@
 
 ## 1. 테이블 분류표 (v1 → v2)
 
-20개 → **35개**. 증가분은 전부 `_rt`(10개) 와 `_ct`(5개) 이며, enum 11종과 **서로 다른** 마스터 간 관계가 테이블로 승격된 결과다. 자기참조 계층(분류 트리)은 결정 V7 에 따라 인라인 컬럼으로 남는다.
+20개 → **35개**. 증가분은 전부 `_rt`(10개) 와 `_ct`(5개) 이며, enum 13종과 **서로 다른** 마스터 간 관계가 테이블로 승격된 결과다. 자기참조 계층(분류 트리)은 결정 V7 에 따라 인라인 컬럼으로 남는다.
 
 ### 1.1 Master (`_mt`) — 8개
 
@@ -53,7 +53,7 @@
 | `payment_ct` | `METHOD_TYPE` · `ISSUER` | `MethodType` · `issuer` 자유문자열 |
 | `transaction_ct` | `TRANSACTION_TYPE` · `TRANSACTION_STATUS` · `EXCLUDE_REASON` · `COUNTERPARTY_TYPE` | `TransactionType` · `TransactionStatus` · `ExcludeReason` · `counterparty.type` |
 | `statement_ct` | `BANK_TXN_TYPE` · `BANK_TXN_DIRECTION` · `IMPORT_STATUS` | `bank_txn_type` 테이블 · `BankTxnDirection` · `ImportJobStatus` |
-| `rule_ct` | `MATCH_TYPE` · `RECURRING_CADENCE` · `RECURRING_SOURCE` | `MatchType` · `RecurringCadence` · `RecurringSource` |
+| `rule_ct` | `MATCH_TYPE` · `RECURRING_CADENCE` · `RECURRING_SOURCE` · `RECURRING_FLOW` · `AMOUNT_TYPE` | `MatchType` · `RecurringCadence` · `RecurringSource` · `RecurringFlow` · `AmountType` |
 
 - `YesNo` enum 은 코드가 아니라 **boolean** 으로 승격한다 — `use_yn`→`is_active`, `is_classified`, `is_canceled`.
 - **코드화하지 않는 것**: `card_transaction.sale_type` / `benefit_type` / `region`, `bank_transaction.txn_type_raw` 는 **발급사 원문 보존**이 목적이라 열거형이 아니다 → `varchar` 유지.
@@ -345,6 +345,7 @@ CREATE TABLE payment_method_mt (
   card_no        varchar(20),           -- 마스킹 저장
   account_no     varchar(50),
   memo           text,
+  exclude_from_stats boolean NOT NULL DEFAULT false,  -- 수입·지출 집계 제외(투자·저축 계좌 등)
   is_active      boolean NOT NULL DEFAULT true,
   created_at     timestamptz NOT NULL DEFAULT now(),
   updated_at     timestamptz NOT NULL DEFAULT now()
@@ -399,9 +400,11 @@ CREATE INDEX ix_merchant_rule_priority ON merchant_rule_mt (priority) WHERE is_a
 CREATE TABLE recurring_expense_mt (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   label        varchar(100) NOT NULL,
-  amount       numeric(15,2) NOT NULL,
-  cadence_id   uuid NOT NULL,           -- → rule_ct.id (code_group='RECURRING_CADENCE')
-  source_id    uuid NOT NULL,           -- → rule_ct.id (code_group='RECURRING_SOURCE')
+  amount         numeric(15,2) NOT NULL,
+  flow_id        uuid NOT NULL,         -- → rule_ct.id (code_group='RECURRING_FLOW' — 지출/수입 공용)
+  amount_type_id uuid NOT NULL,         -- → rule_ct.id (code_group='AMOUNT_TYPE' — 고정/변동)
+  cadence_id     uuid NOT NULL,         -- → rule_ct.id (code_group='RECURRING_CADENCE')
+  source_id      uuid NOT NULL,         -- → rule_ct.id (code_group='RECURRING_SOURCE')
   months       int[] NOT NULL DEFAULT '{}',
   start_ym     char(7),
   end_ym       char(7),
