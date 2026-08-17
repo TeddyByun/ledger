@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { recurringKey } from '../common/fuzzy-key.js';
+import { excludeCategoryCodes } from '../common/exclude-category.js';
 
 const ymOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -127,12 +128,57 @@ export class CashflowService {
       select: { name: true },
     });
 
-    // ── 2. 이번 달 실적(은행 원천 그대로 — 잔액이 실제와 맞아야 하므로 제외 없이 전부) ──
+    // ── 2. 이번 달 실적(은행 원천). 내계좌 간 이체(자기이체)는 현금흐름에서 제외 ──
     const monthRows = await this.prisma.bankTransaction.findMany({
       where: { paymentMethodId: scopeId, txnAt: { gte: mStart, lt: mEnd } },
-      select: { txnAt: true, description: true, txnTypeRaw: true, withdrawal: true, deposit: true },
+      select: {
+        txnAt: true,
+        description: true,
+        txnTypeRaw: true,
+        withdrawal: true,
+        deposit: true,
+        transaction: { select: { categoryCode: true } },
+      },
       orderBy: [{ txnAt: 'asc' }, { id: 'asc' }],
     });
+
+    // 이번 달 실제 거래(전 계좌) — 정기항목 '실제 발생' 대조 + 자기이체 짝 판정용
+    const monthActualsAll = await this.prisma.bankTransaction.findMany({
+      where: { txnAt: { gte: mStart, lt: mEnd } },
+      select: {
+        txnAt: true,
+        description: true,
+        withdrawal: true,
+        deposit: true,
+        paymentMethodId: true,
+        transaction: { select: { categoryCode: true } },
+      },
+    });
+
+    // 자기이체(내계좌 간) 판정: '분류 제외'(수입/지출 분류 제외) 입금은 모두 자기이체 수입,
+    // 같은 금액·같은 날의 '분류 제외' 입금과 짝이 맞는 '분류 제외' 출금은 자기이체 지출.
+    // (카드대금은 분류 제외 '출금'이지만 짝 입금이 없어 유지된다.)
+    const exCodes = new Set(await excludeCategoryCodes(this.prisma));
+    const isExCat = (code?: string | null) => !!code && exCodes.has(code);
+    const exDepKeys = new Set<string>();
+    for (const r of monthActualsAll) {
+      const dep = Number(r.deposit);
+      if (dep > 0 && isExCat(r.transaction?.categoryCode)) {
+        exDepKeys.add(`${dep}|${r.txnAt.getUTCDate()}`);
+      }
+    }
+    /** 이 행이 내계좌 간 이체(자기이체)인가 — 현금흐름에서 뺀다. */
+    const isSelfTransfer = (
+      r: { deposit: unknown; withdrawal: unknown; txnAt: Date; transaction: { categoryCode: string | null } | null },
+    ): boolean => {
+      const code = r.transaction?.categoryCode;
+      if (!isExCat(code)) return false;
+      const dep = Number(r.deposit);
+      const wd = Number(r.withdrawal);
+      if (dep > 0) return true; // 분류 제외 입금 = 자기이체/제외 수입
+      if (wd > 0) return exDepKeys.has(`${wd}|${r.txnAt.getUTCDate()}`); // 짝 있는 출금 = 자기이체 지출
+      return false;
+    };
     // ignoreActual=true 면 실적을 반영하지 않고 월 전체를 예측한다(예측 검증용).
     const actualUntil = ignoreActual
       ? 0
@@ -140,6 +186,7 @@ export class CashflowService {
 
     const actualLines: FlowLine[] = [];
     for (const r of monthRows) {
+      if (isSelfTransfer(r)) continue; // 내계좌 간 이체는 현금흐름에서 제외
       const day = r.txnAt.getUTCDate();
       const wd = Number(r.withdrawal);
       const dep = Number(r.deposit);
@@ -234,11 +281,6 @@ export class CashflowService {
       return i >= 6;
     };
 
-    // 이번 달 실제 거래(전 계좌) — 등록 정기항목의 '실제 발생'(계획 vs 실제) 대조용
-    const monthActualsAll = await this.prisma.bankTransaction.findMany({
-      where: { txnAt: { gte: mStart, lt: mEnd } },
-      select: { description: true, withdrawal: true, deposit: true, paymentMethodId: true },
-    });
     /** 등록 정기항목이 이번 달 실제로 발생한 금액(토큰 매칭). pmId 지정 시 그 계좌만. */
     const occurredFor = (token: string, pmId: number | null, flow: Flow): number => {
       let sum = 0;
