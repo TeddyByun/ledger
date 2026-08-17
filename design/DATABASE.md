@@ -1105,6 +1105,9 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
   - **as-built 확장**: 키워드 규칙 앞에 ① 정기지출 매칭(`recurring_expense.match_key`) ② 이력 학습(같은 가맹점의 최신 분류)이 붙는다. 우선순위는 정기지출 → 이력 → 키워드(ARCHITECTURE §5.1).
   - **취소·0원 행도 분류**: `is_canceled='Y'` 와 0원·음수 조정행을 **금액 제한 없이** 같은 규칙으로 분류한다. 환불(음수)은 해당 분류의 지출에서 정확히 차감되므로 별도 처리하지 않는다.
 - **금액 기준 (확정)**: 가계부 지출 금액 = `principal + fee`(할인 반영 실청구 원금 + 할부 이자). 일시불은 `fee=0`이라 `principal`과 동일, 할부는 이자까지 포함(1.8 확정 정책). `usage_amount`/`benefit_amount`는 분석·혜택 통계용으로 보존.
+- **명세서를 올릴 수 없는 카드 (확정 · 2026-08)**: 가족 카드처럼 **건별 이용내역을 확보할 수 없는 카드**는 카드대금 출금 자체가 유일한 지출 기록이다. 이 경우 그 은행 출금 행을 '분류 제외'로 두지 않고 **실제 분류**(예: 주 사용처인 `0504 온라인쇼핑·마트`)로 분류한다. 대응하는 `card_transaction` 이 존재하지 않으므로 **이중 계상이 아니다.**
+  - 판별: 같은 월·같은 카드사의 `card_statement.total_amount` 와 금액이 일치하면 '명세서 있는 카드' → 제외 대상. 일치하는 명세서가 없으면 위 예외에 해당.
+  - 자동분류는 이미 거래가 연결된(`transaction_id IS NOT NULL`) 행을 건드리지 않으므로 이 수동 분류는 재실행해도 보존된다.
 - **카드대금 출금 제외 (확정)**: 은행 명세의 `타사카드`/`하나카드` 구분 출금(= 카드대금 결제)은 **카드 건별 지출과 중복**이므로 **지출 집계에서 제외**한다. 해당 `bank_transaction` 행은 `transaction`에 연결하지 않고(`transaction_id=NULL`), `exclude_reason='card_settlement'`로 표시해 실지출은 오직 `card_transaction`(카드 건별)으로만 잡는다. **자동 식별**: `card_statement.settle_account_id` + `billing_date` + `total_amount`로 은행 명세의 카드대금 출금 행과 매칭(예: 신한카드 명세 결제계좌 `하나은행47307` → 은행 `타사카드(신한카드)` 출금 제외).
 - **할부 거래 (확정: 회차별 월 집계, 이용일 기준)**: 할부는 **최초 거래월에 총액을 잡지 않고, 매 청구 회차에 해당 월의 청구액만 지출로 집계**한다. 그 달 청구된 회차 금액(`principal`)이 곧 그 달의 지출이며, `transaction.transaction_date`는 **회차 표기 이용일**(`card_transaction.txn_date`와 동일)로 생성한다 — 카드 거래·전체 거래 목록이 같은 날짜로 보이도록 통일. 청구 시점은 `settled_date`로 보존. `installment_period`(예: 12/24 → 총 24회)와 `billing_round`(예: 12 → 12회차)는 회차 추적용으로 보존한다.
 
