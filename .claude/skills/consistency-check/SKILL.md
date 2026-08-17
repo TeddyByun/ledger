@@ -129,10 +129,27 @@ GROUP BY 1,2 ORDER BY 1,4 DESC;
 ① cashflow:  opening + Σ(daily[].net) == closing
 ② cashflow:  Σ(daily[].income) == income.total,  Σ(daily[].expense) == expense.total
 ③ forecast:  abc.A + abc.B + abc.C == total (반올림 오차 ±범위 내)
-④ 목록 ↔ 요약: /transactions 전체 합 == /transactions/summary
+④ 목록 ↔ 요약: /transactions 전체 합 == /transactions/summary  ※ **전 페이지를 offset 으로 모두 수집**해야 함(limit 로 잘린 목록과 비교하면 오탐)
 ⑤ 집계 테이블 ↔ 거래: monthly_summary(ym) == transaction 직접 집계(같은 제외 규칙 적용)
+   ※ SQL 직접 검증 시 **`household_id` 필터를 반드시 명시** — 앱은 미들웨어가 자동 주입하지만 SQL 은 전 가구가 섞인다
 ⑥ 화면 간: 월별 거래 추이의 월 지출 == 결제수단별 추이의 월 합계
+⑦ **cashflow 실적 잔액 == 실제 은행 balance** ← 가장 중요. 잔액은 통장 그 자체다
 ```
+> ⚠️ ①은 **응답 내부 정합성**일 뿐이다(closing = opening + Σnet). ①이 OK여도 ⑦이 깨질 수 있다.
+> **잔액을 맞추려면 실적 구간에서 어떤 현금 이동도 빼면 안 된다**(자기이체 포함).
+> 표시상 수입/지출 합계에서 빼고 싶다면 **잔액 계산과 합계 표시를 분리**해야 한다.
+
+```bash
+# ⑦ 실적 잔액 대조 — 그 달 마지막 실제 은행 balance 와 비교
+psql "$U" -tAc "SELECT balance FROM ledger.bank_transaction WHERE payment_method_id=<계좌>
+  AND txn_at < '<익월-01>' AND balance IS NOT NULL ORDER BY txn_at DESC, id ASC LIMIT 1;"
+curl -s "…/stats/cashflow?ym=<월>&accountId=<계좌>" -H "authorization: Bearer $T" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin)['closing']['balance'])"
+# 두 값이 다르면 🔴 — 실적에서 빠진 현금 이동이 있다
+```
+> ⚠️ **실적과 예측의 기준은 반드시 같아야 한다.** 실적에서 자기이체를 빼면서 예측에서는 넣으면
+> 백테스트 오차가 그 금액만큼 통째로 벌어진다(실제로 6월 −126K → +6,687K 로 회귀한 전례).
+> `skipForForecast` 와 §2 실적 필터를 **항상 함께** 확인할 것.
 ```bash
 # ①②를 실제 응답으로 검산
 curl -s "localhost:4000/api/v1/stats/cashflow?ym=2026-08" -H "authorization: Bearer $T" | python3 -c "
@@ -147,17 +164,41 @@ print('② Σexpense == expense.total:', exp == d['expense']['total'], exp, d['e
 
 ### I3. 잔액 연속성
 ```
-직전 행 balance ± (deposit - withdrawal) == 현재 행 balance   (은행 원천, balance NULL 제외)
+직전에 잔액이 기록된 행의 balance + 그 이후 순변동 누계 == 현재 행 balance
 ```
+> ⚠️ 소박한 `LAG(balance)` 비교는 **두 가지 이유로 오탐**이 난다.
+> ① 은행 파일이 **최신순으로 적재**되어 같은 시각 내에서는 **id 가 시간 역순**이다 → 타이브레이커는 `id DESC`.
+> ② `balance` 가 **NULL 인 행**(일부 출금 행)이 있어, 그 행을 건너뛰면 금액이 통째로 빠진다 → 구간 누계로 비교.
+
 ```sql
-WITH x AS (
+WITH ord AS (
   SELECT payment_method_id pm, txn_at, id, balance, deposit, withdrawal,
-         LAG(balance) OVER (PARTITION BY payment_method_id ORDER BY txn_at, id) prev
-  FROM ledger.bank_transaction WHERE balance IS NOT NULL
+         row_number() OVER (PARTITION BY payment_method_id ORDER BY txn_at, id DESC) rn
+  FROM ledger.bank_transaction
+), g AS (   -- 직전에 balance 가 있던 지점까지를 한 구간으로 묶는다
+  SELECT *, coalesce(sum(CASE WHEN balance IS NOT NULL THEN 1 ELSE 0 END)
+       OVER (PARTITION BY pm ORDER BY rn ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) grp
+  FROM ord
+), seg AS (
+  SELECT pm, grp, max(txn_at) t1, sum(deposit - withdrawal) delta,
+         max(CASE WHEN balance IS NOT NULL THEN balance END) bal_end
+  FROM g GROUP BY pm, grp
 )
-SELECT pm, txn_at::date, prev, balance, (prev + deposit - withdrawal) expected
-FROM x WHERE prev IS NOT NULL AND prev + deposit - withdrawal <> balance
-ORDER BY txn_at LIMIT 20;   -- 결과가 있으면 누락/중복 적재 의심
+SELECT s.pm 계좌, s.t1::date 일자, p.bal_end 직전잔액, s.delta 순변동, s.bal_end 현재잔액,
+       (s.bal_end - (p.bal_end + s.delta)) 차이
+FROM seg s JOIN seg p ON p.pm=s.pm AND p.grp=s.grp-1
+WHERE s.bal_end IS NOT NULL AND p.bal_end IS NOT NULL AND s.bal_end <> p.bal_end + s.delta
+ORDER BY s.pm, s.t1;
+```
+**결과 해석 — 두 패턴을 구분한다**
+| 패턴 | 판정 | 근거 |
+|------|------|------|
+| 같은 날짜/시각의 **연속 행들의 차이 합 = 0** | ℹ️ 오탐(순서 모호) | 동일 timestamp 라 실제 순서를 알 수 없을 뿐, 잔액 자체는 정확 |
+| 차이가 **상쇄되지 않고 남음** | 🟠 데이터 누락 | 그 구간의 명세서가 미업로드 → 재업로드 필요 |
+```sql
+-- 동일 시각 다건(정렬 모호) 구간 목록 — 위 결과 해석용
+SELECT payment_method_id, txn_at, count(*), string_agg(description,' / ')
+FROM ledger.bank_transaction GROUP BY 1,2 HAVING count(*)>1 ORDER BY txn_at DESC LIMIT 10;
 ```
 
 ### I4. 시간축 · 시간대
@@ -303,3 +344,4 @@ done
 |------|------|------------------------------------|------|
 | 2026-08-02 | cashflow 최초 | 5월 −234K(0.6%) · 6월 −395K(1.0%) | 일할 분산 포함 |
 | 2026-08-02 | 일할 분산 제거 후 | 6월 **−126K(0.3%)** · 7월 −11.3M(이례적 입금) | 정확도 개선 확인 |
+| 2026-08-17 | 전체 검증(L0~L3) | 5월 +6.16M · 6월 **+6.69M** · 7월 +4.54M | 🔴 **회귀** — 실적에서 자기이체를 빼면서 예측은 포함해 기준 불일치. I2⑦ 신설 계기 |
