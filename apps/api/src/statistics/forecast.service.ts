@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { recurringKey } from '../common/fuzzy-key.js';
+import { nowKst } from '../common/kst.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
 
 const ymOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -34,7 +35,7 @@ export class ForecastService {
    * event(경조사 10) / var(변동). 각 버킷을 규칙으로 예측하고 이미 발생분은 실제값 사용.
    */
   async forecast(ym?: string) {
-    const now = new Date();
+    const now = nowKst(); // KST 기준 오늘 — 서버가 UTC 라도 한국 날짜로 판단
     const tym = ym && /^\d{4}-\d{2}$/.test(ym) ? ym : ymOf(now);
     const ty = Number(tym.slice(0, 4));
     const tm = Number(tym.slice(5, 7));

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { recurringKey } from '../common/fuzzy-key.js';
+import { nowKst } from '../common/kst.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
 
 const ymOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -51,6 +52,8 @@ interface FlowLine {
   planned?: boolean;
   /** 이번 달 실제 발생액(계획 vs 실제 대조용). planned 항목에만 채운다. */
   occurred?: number;
+  /** 내계좌 간 이체 — **잔액에는 반영하되 수입·지출 합계에서는 뺀다**(잔액 우선 정책) */
+  isTransfer?: boolean;
 }
 
 /** 일자별 항목 */
@@ -60,6 +63,7 @@ interface DayItem {
   amount: number;
   kind: FlowLine['kind'];
   actual: boolean;
+  isTransfer?: boolean;
 }
 
 /**
@@ -76,7 +80,7 @@ export class CashflowService {
   constructor(private readonly prisma: PrismaService) {}
 
   async cashflow(ym?: string, accountId?: number, ignoreActual = false) {
-    const now = new Date();
+    const now = nowKst(); // KST 기준 오늘 — 서버가 UTC 라도 한국 날짜로 판단
     const tym = ym && /^\d{4}-\d{2}$/.test(ym) ? ym : ymOf(now);
     const ty = Number(tym.slice(0, 4));
     const tm = Number(tym.slice(5, 7));
@@ -128,7 +132,9 @@ export class CashflowService {
       select: { name: true },
     });
 
-    // ── 2. 이번 달 실적(은행 원천). 내계좌 간 이체(자기이체)는 현금흐름에서 제외 ──
+    // ── 2. 이번 달 실적(은행 원천) ──
+    // 내계좌 간 이체도 **이 계좌의 잔액을 실제로 바꾸므로 잔액 계산에는 넣는다**(잔액 우선).
+    // 다만 수입·지출 '합계' 표시에서는 빼기 위해 isTransfer 로 표시만 해 둔다.
     const monthRows = await this.prisma.bankTransaction.findMany({
       where: { paymentMethodId: scopeId, txnAt: { gte: mStart, lt: mEnd } },
       select: {
@@ -167,7 +173,7 @@ export class CashflowService {
         exDepKeys.add(`${dep}|${r.txnAt.getUTCDate()}`);
       }
     }
-    /** 이 행이 내계좌 간 이체(자기이체)인가 — 현금흐름에서 뺀다. */
+    /** 이 행이 내계좌 간 이체(자기이체)인가 — 합계에서만 빼고 잔액에는 반영한다. */
     const isSelfTransfer = (
       r: { deposit: unknown; withdrawal: unknown; txnAt: Date; transaction: { categoryCode: string | null } | null },
     ): boolean => {
@@ -186,16 +192,16 @@ export class CashflowService {
 
     const actualLines: FlowLine[] = [];
     for (const r of monthRows) {
-      if (isSelfTransfer(r)) continue; // 내계좌 간 이체는 현금흐름에서 제외
+      const tr = isSelfTransfer(r); // 이체 여부 — 잔액에는 반영, 합계에서만 제외
       const day = r.txnAt.getUTCDate();
       const wd = Number(r.withdrawal);
       const dep = Number(r.deposit);
       const label = (r.description ?? '').trim() || r.txnTypeRaw || '거래';
       if (dep > 0) {
-        actualLines.push({ flow: 'income', kind: 'actual', label, amount: dep, day, basis: '실제 입금', confidence: 'high', actual: true });
+        actualLines.push({ flow: 'income', kind: 'actual', label, amount: dep, day, basis: tr ? '내계좌 간 이체 입금' : '실제 입금', confidence: 'high', actual: true, isTransfer: tr });
       }
       if (wd > 0) {
-        actualLines.push({ flow: 'expense', kind: 'actual', label, amount: wd, day, basis: '실제 출금', confidence: 'high', actual: true });
+        actualLines.push({ flow: 'expense', kind: 'actual', label, amount: wd, day, basis: tr ? '내계좌 간 이체 출금' : '실제 출금', confidence: 'high', actual: true, isTransfer: tr });
       }
     }
 
@@ -383,15 +389,19 @@ export class CashflowService {
       if (amount <= 0) continue;
       const day = Math.min(daysInMonth, Math.max(1, Math.round(median(g.days))));
       const isSalary = g.code === '13' || /급여|월급/.test(g.label);
+      const tr = isExCat(g.code); // '분류 제외'로 분류된 반복 입금 = 내계좌 간 이체
       predicted.push({
         flow: 'income',
         kind: isSalary ? 'salary' : 'income-recurring',
         label: g.label,
         amount,
         day,
-        basis: `최근 ${windowMonths}개월 중 ${months}개월 반복 · 중앙값`,
+        basis:
+          (tr ? '내계좌 간 이체 · ' : '') +
+          `최근 ${windowMonths}개월 중 ${months}개월 반복 · 중앙값`,
         confidence: months >= windowMonths - 1 ? 'high' : 'med',
         actual: false,
+        isTransfer: tr,
         ...(g.code ? { categoryCode: g.code } : {}),
       });
     }
@@ -619,13 +629,17 @@ export class CashflowService {
       const amount = Math.round(median([...g.perMonth.values()]));
       if (amount <= 0) continue;
       const day = Math.min(daysInMonth, Math.max(1, Math.round(median(g.days))));
+      const trOut = isExCat(g.code); // '분류 제외' 출금 = 내계좌 간 이체(카드대금은 §5에서 별도)
       predicted.push({
         flow: 'expense',
         kind: 'recurring',
         label: g.label,
         amount,
         day,
-        basis: `최근 ${windowMonths}개월 중 ${months}개월 반복 · 중앙값`,
+        isTransfer: trOut,
+        basis:
+          (trOut ? '내계좌 간 이체 · ' : '') +
+          `최근 ${windowMonths}개월 중 ${months}개월 반복 · 중앙값`,
         confidence: months >= windowMonths - 1 ? 'high' : 'med',
         actual: false,
         ...(g.code ? { categoryCode: g.code } : {}),
@@ -641,6 +655,8 @@ export class CashflowService {
       date: `${tym}-${String(i + 1).padStart(2, '0')}`,
       income: 0,
       expense: 0,
+      transferIn: 0,
+      transferOut: 0,
       net: 0,
       balance: 0,
       hasActual: false,
@@ -651,39 +667,57 @@ export class CashflowService {
     const push = (day: number, l: FlowLine, amount: number) => {
       const d = daily[day - 1];
       if (!d || amount <= 0) return;
-      d.items.push({ flow: l.flow, label: l.label, amount, kind: l.kind, actual: l.actual });
-      if (l.flow === 'income') d.income += amount;
+      d.items.push({ flow: l.flow, label: l.label, amount, kind: l.kind, actual: l.actual, isTransfer: l.isTransfer });
+      if (l.isTransfer) {
+        // 이체는 잔액에만 반영(합계 제외)
+        if (l.flow === 'income') d.transferIn += amount;
+        else d.transferOut += amount;
+      } else if (l.flow === 'income') d.income += amount;
       else d.expense += amount;
       if (l.actual) d.hasActual = true;
     };
 
     for (const l of actualLines) push(l.day!, l, l.amount);
     for (const l of predicted) {
-      if (l.day != null && (l.always || l.day > actualUntil)) push(l.day, l, l.amount);
+      // always = **다른 계좌**로 들어오는 등록 정기수입(목록 표시 전용).
+      // 이 계좌 잔액에는 영향이 없고, 실제로 넘어오는 돈은 '내계좌 간 이체'로 이미 잡힌다.
+      // 잔액에 더하면 같은 돈이 두 번 계산된다(잔액 우선 정책).
+      if (l.always) continue;
+      if (l.day != null && l.day > actualUntil) push(l.day, l, l.amount);
     }
 
     let running = openingBalance;
     for (const d of daily) {
-      d.net = d.income - d.expense;
+      // net = 그날 잔액 변화량(이체 포함) — 이래야 누계가 실제 통장 잔액과 맞는다
+      d.net = d.income + d.transferIn - d.expense - d.transferOut;
       running += d.net;
       d.balance = Math.round(running);
       d.income = Math.round(d.income);
       d.expense = Math.round(d.expense);
+      d.transferIn = Math.round(d.transferIn);
+      d.transferOut = Math.round(d.transferOut);
       d.net = Math.round(d.net);
     }
 
+    // 합계는 **이체를 뺀 순수 수입·지출**, 잔액은 **이체를 포함한 net 누계**를 쓴다
     const incomeTotal = daily.reduce((s, d) => s + d.income, 0);
     const expenseTotal = daily.reduce((s, d) => s + d.expense, 0);
+    const transferIn = daily.reduce((s, d) => s + d.transferIn, 0);
+    const transferOut = daily.reduce((s, d) => s + d.transferOut, 0);
     const sumOf = (flow: Flow, actual: boolean) =>
       daily.reduce(
-        (s, d) => s + d.items.filter((i) => i.flow === flow && i.actual === actual).reduce((x, i) => x + i.amount, 0),
+        (s, d) =>
+          s +
+          d.items
+            .filter((i) => i.flow === flow && i.actual === actual && !i.isTransfer)
+            .reduce((x, i) => x + i.amount, 0),
         0,
       );
 
     /** 목록용 라인 — 실적은 같은 이름끼리 합치고, 예측은 그대로. */
     const mergeActual = (flow: Flow): FlowLine[] => {
       const m = new Map<string, FlowLine>();
-      for (const l of actualLines.filter((x) => x.flow === flow)) {
+      for (const l of actualLines.filter((x) => x.flow === flow && !x.isTransfer)) {
         const cur = m.get(l.label);
         if (cur) {
           cur.amount += l.amount;
@@ -698,6 +732,7 @@ export class CashflowService {
         .filter(
           (l) =>
             l.flow === flow &&
+            !l.isTransfer &&
             (l.day == null || l.always || l.planned || l.day > actualUntil),
         )
         .sort((a, b) => b.amount - a.amount),
@@ -721,7 +756,8 @@ export class CashflowService {
         accounts,
         excludedAccounts: outOfScope.map((a) => a.name),
       },
-      closing: { balance: Math.round(openingBalance + incomeTotal - expenseTotal) },
+      // 월말 잔액 = 기초 + 전체 순변동(이체 포함) — 실제 통장 잔액과 맞아야 한다
+      closing: { balance: daily.length ? daily[daily.length - 1]!.balance : openingBalance },
       income: {
         total: Math.round(incomeTotal),
         actual: Math.round(sumOf('income', true)),
@@ -735,6 +771,12 @@ export class CashflowService {
         ...lines('expense'),
       },
       net: Math.round(incomeTotal - expenseTotal),
+      /** 내계좌 간 이체 — 잔액에는 반영되지만 위 수입·지출 합계에서는 빠진 금액 */
+      transfer: {
+        in: Math.round(transferIn),
+        out: Math.round(transferOut),
+        net: Math.round(transferIn - transferOut),
+      },
       /** 날짜를 특정할 수 없어 일자별 예측에서 뺀 흐름(참고용 월 기대값) */
       unscheduled: { income: unscheduledIncome, expense: unscheduledExpense },
       /** 월 중 잔액이 가장 낮아지는 날 — 자금 부족 시점 */

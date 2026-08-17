@@ -3,6 +3,7 @@ import type { Prisma, RecurringFlow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { requireTenant } from '../common/tenant/tenant-context.js';
 import { recurringKey } from '../common/fuzzy-key.js';
+import { nowKst } from '../common/kst.js';
 import {
   CreateRecurringExpenseDto,
   UpdateRecurringExpenseDto,
@@ -18,7 +19,7 @@ export class RecurringExpenseService {
 
   /** 확정 정기지출/수입 목록 + 이번 달 발생 상태(발생/예정/지연/종료). */
   async findAll(flow: RecurringFlow = 'expense') {
-    const now = new Date();
+    const now = nowKst(); // KST 기준 오늘 — 서버가 UTC 라도 한국 날짜로 판단
     const ym = ymOf(now);
     const today = now.getUTCDate();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));

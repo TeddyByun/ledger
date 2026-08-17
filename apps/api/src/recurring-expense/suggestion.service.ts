@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { RecurringFlow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { recurringKey } from '../common/fuzzy-key.js';
+import { nowKst } from '../common/kst.js';
 import { excludeCategoryCodes } from '../common/exclude-category.js';
 
 const ymOf = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -75,7 +76,7 @@ export class SuggestionService {
    * 이미 등록된 matchKey(정기지출)는 제외.
    */
   async suggest(flow: RecurringFlow = 'expense'): Promise<Suggestion[]> {
-    const now = new Date();
+    const now = nowKst(); // KST 기준 오늘 — 서버가 UTC 라도 한국 날짜로 판단
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
     const endEx = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
     const curYm = ymOf(now);

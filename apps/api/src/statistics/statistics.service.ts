@@ -7,6 +7,7 @@ import {
   excludeCategoryCodes,
 } from '../common/exclude-category.js';
 import { excludedPaymentMethodIds } from '../common/exclude-payment.js';
+import { nowKst } from '../common/kst.js';
 
 const YM_RE = /^\d{4}-\d{2}$/;
 
@@ -29,7 +30,7 @@ export class StatisticsService {
    */
   private resolveMonthRange(from?: string, to?: string) {
     const YM = /^\d{4}-\d{2}$/;
-    const now = new Date();
+    const now = nowKst(); // KST 기준 오늘 — 서버가 UTC 라도 한국 날짜로 판단
     const curY = now.getUTCFullYear();
     const curM = now.getUTCMonth() + 1;
     const f = from && YM.test(from) ? from : `${curY}-01`;
