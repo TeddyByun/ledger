@@ -164,6 +164,10 @@ export class ForecastService {
       status: string;
       basis: string;
       confidence: Conf;
+      /** 등록 정기항목의 금액 성격(고정/변동) — 그룹 분류에 쓴다 */
+      amountType?: 'fixed' | 'variable';
+      /** 발생 예상 일자(1~31). 등록 정기항목만 값이 있다 */
+      dayOfMonth?: number | null;
     }[] = [];
 
     // ── (1) fixed: 정기지출(R4/R6/R7) 라인아이템 ───────────────────
@@ -190,6 +194,8 @@ export class ForecastService {
         kind: r.cadence === 'schedule' ? 'R7' : r.cadence === 'annual' ? 'R6' : 'R4',
         label: r.label,
         categoryCode: r.categoryCode,
+        amountType: r.amountType,
+        dayOfMonth: r.dayOfMonth,
         predicted: Math.max(expected, occurred),
         occurred,
         remaining,
@@ -300,13 +306,20 @@ export class ForecastService {
     contributions.sort((a, b) => b.predicted - a.predicted);
 
     // 그룹: fixed(고정 확정) / certain(비고정·반드시 발생) / estimated(대략 예측)
-    const groupOf = (kind: string): 'fixed' | 'certain' | 'estimated' =>
-      ['R3', 'R4', 'R6', 'R7'].includes(kind)
-        ? 'fixed'
-        : kind === 'R2'
-          ? 'certain'
-          : 'estimated';
-    const contribOut = contributions.map((c) => ({ ...c, group: groupOf(c.kind) }));
+    //  - **금액 성격이 우선**한다. 정기항목이라도 amount_type='variable' 이면 금액이 흔들리므로
+    //    '고정 비용'이 아니라 '반드시 발생하지만 금액은 변동'(certain)으로 내린다.
+    //  - 할부(R3)는 회차 금액이 확정이라 항상 fixed.
+    const groupOf = (c: { kind: string; amountType?: 'fixed' | 'variable' }):
+      | 'fixed'
+      | 'certain'
+      | 'estimated' => {
+      if (c.kind === 'R3') return 'fixed';
+      if (['R4', 'R6', 'R7'].includes(c.kind)) {
+        return c.amountType === 'variable' ? 'certain' : 'fixed';
+      }
+      return c.kind === 'R2' ? 'certain' : 'estimated';
+    };
+    const contribOut = contributions.map((c) => ({ ...c, group: groupOf(c) }));
 
     return {
       ym: tym,

@@ -17,6 +17,8 @@ interface Contribution {
   status: string;
   basis: string;
   confidence: 'high' | 'med' | 'low';
+  amountType?: 'fixed' | 'variable';
+  dayOfMonth?: number | null;
 }
 interface ForecastData {
   ym: string;
@@ -399,14 +401,14 @@ export function Forecast(_props: { onNavigate: (v: View) => void }) {
                 </div>
 
                 <ContribSection
-                  title="고정 비용 (확정)"
-                  sub="정기지출·할부·대출/적금 등 금액이 확정된 항목"
+                  title="정기 발생 고정 금액 지출"
+                  sub="할부·대출/적금·구독처럼 매달 같은 금액이 나가는 항목 (관리>정기지출에서 금액변동=고정)"
                   accent="var(--c4)"
                   rows={data.contributions.filter((c) => c.group === 'fixed')}
                 />
                 <ContribSection
-                  title="반드시 발생하는 비용 (비고정)"
-                  sub="공과금처럼 매월 꼭 나가지만 금액은 변동하는 항목 (전년 동월·최근 추세 기준)"
+                  title="정기 발생 변동 금액 지출"
+                  sub="꼭 나가지만 금액이 달마다 달라지는 항목 — 공과금, 그리고 정기지출 중 금액변동=변동인 것"
                   accent="var(--c6)"
                   rows={data.contributions.filter((c) => c.group === 'certain')}
                 />
@@ -789,6 +791,7 @@ function ContribSection({
           <thead>
             <tr>
               <th>구분</th>
+              <th style={{ width: 74 }}>예상일</th>
               <th>항목</th>
               <th style={{ textAlign: 'right' }}>예상</th>
               <th style={{ textAlign: 'right' }}>발생</th>
@@ -799,8 +802,31 @@ function ContribSection({
           <tbody>
             {rows.map((c, i) => (
               <tr key={i}>
-                <td>
+                <td style={{ whiteSpace: 'nowrap' }}>
                   <span className="pill plain">{KIND_LABEL[c.kind] ?? c.kind}</span>
+                  {c.amountType && (
+                    <span
+                      className="pill plain"
+                      style={{
+                        marginLeft: 4,
+                        color: c.amountType === 'variable' ? 'var(--warn)' : 'var(--muted)',
+                      }}
+                      title={
+                        c.amountType === 'variable'
+                          ? '금액이 달마다 달라짐 — 등록 금액은 평균치'
+                          : '매달 같은 금액'
+                      }
+                    >
+                      {c.amountType === 'variable' ? '변동' : '고정'}
+                    </span>
+                  )}
+                </td>
+                <td
+                  className="mono"
+                  style={{ fontSize: 12.5, color: c.dayOfMonth ? 'var(--ink-2)' : 'var(--faint)' }}
+                  title={c.dayOfMonth ? '관리>정기지출에 등록된 예상 지출일' : '지출일 미지정'}
+                >
+                  {c.dayOfMonth ? `${c.dayOfMonth}일` : '—'}
                 </td>
                 <td>
                   <b>{c.label}</b>
