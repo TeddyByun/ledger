@@ -137,7 +137,7 @@
         │
 ⑦ Review        사용자: 미분류·이상 건 확인/수정 (UI)  → 확정
         │
-⑧ Aggregate     해당 월 monthly_* 재집계(rebuild)
+⑧ (집계 단계 없음)  모든 통계는 조회 시 transaction 에서 직접 집계 — 2026-08 저장형 집계 제거
         │
         ▼  status=completed  (클라이언트는 폴링 또는 푸시로 알림)
 ```
@@ -157,7 +157,7 @@
 | ⑤ Auto-Classify | `classification/classifier.service` (`merchant_category_map` 우선순위 매칭) + `statement-txn.service` 의 정기지출·이력 매칭 → `transaction` 생성 or pending |
 | ⑥ Reconcile | `reconciliation/reconciler.service` (카드대금·자기이체·집계제외 결제수단 → **'분류 제외' 분류로 매핑**, 폴백 `exclude_reason`) |
 | ⑦ Review | `GET /imports/:jobId/pending` + **as-built 주경로**: 은행/카드 거래 화면의 인라인 분류·일괄 분류·자동분류 재실행 |
-| ⑧ Aggregate | `StatisticsService.rebuild(ym)` — 영향 월 재집계 |
+| ⑧ Aggregate | **없음** — 저장형 집계(`monthly_*`·`rebuild`) 제거(2026-08). 통계는 조회 시 직접 집계(DATABASE §8) |
 | 큐/워커 | `pipeline/import.processor` (BullMQ `@Processor`), `pipeline/import.queue` |
 
 > **파서(as-built)**: 은행은 `GenericBankParser`, 카드는 **발급사별 전용 파서 4종**(`hana-card` / `hyundai-card` / `shinhan-card` / `samsung-card`)을 `parser.registry` 에서 매핑한다. 공통 로직(헤더 탐색·금액/날짜 파싱·dedupHash)은 `generic.ts` · `tabular.ts` 에 모아 두고, 카드사별 헤더 별칭·특이 포맷(청구회차·사용월/청구월 분리 등)만 각 파서가 갖는다.
@@ -177,7 +177,6 @@
 2) 이력 학습      과거 같은 내용(은행은 방향별)의 최신 분류 (exact → fuzzy)
 3) 키워드 규칙    merchant_category_map (priority 오름차순, 공백 무시)
 4) 잔여 당행송금  1~3 에 안 걸린 '당행송금' → exclude_reason='transfer'
-5) 영향 월 rebuild
 ```
 
 - **명시적 신호 우선**: 정기지출·이력·키워드가 당행송금 제외보다 우선한다. 이미 `transfer` 로 제외된 행도 재분류 대상에 포함해, 키워드를 나중에 등록해도 소급 반영된다.

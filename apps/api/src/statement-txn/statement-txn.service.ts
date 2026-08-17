@@ -214,8 +214,6 @@ export class StatementTxnService {
         });
       }
     }
-
-    await this.stats.rebuild(ym);
     return this.findBankOne(id);
   }
 
@@ -269,7 +267,6 @@ export class StatementTxnService {
       months.add(b.txnAt.toISOString().slice(0, 7));
       updated++;
     }
-    for (const ym of months) await this.stats.rebuild(ym);
     return { updated };
   }
 
@@ -292,7 +289,6 @@ export class StatementTxnService {
     if (txIds.length) {
       await this.prisma.transaction.deleteMany({ where: { id: { in: txIds } } });
     }
-    for (const ym of months) await this.stats.rebuild(ym);
     return { deleted: rows.length };
   }
 
@@ -365,9 +361,9 @@ export class StatementTxnService {
     const months = new Set<string>();
 
     // 0) 결제수단 집계 제외 → '분류 제외', 카드대금·본인 계좌 간 이체 → '분류 제외'
-    await this.reconciler.classifyExcludedBankPms(months);
-    const cardSettle = await this.reconciler.classifyCardSettlements(months);
-    const selfTransfer = await this.reconciler.classifySelfTransfers(months);
+    await this.reconciler.classifyExcludedBankPms();
+    const cardSettle = await this.reconciler.classifyCardSettlements();
+    const selfTransfer = await this.reconciler.classifySelfTransfers();
 
     // 이력 맵 구성 — 방향(출금/입금)별 정규화 내용 → 최신 분류코드
     const history = await this.prisma.bankTransaction.findMany({
@@ -466,8 +462,6 @@ export class StatementTxnService {
       },
       data: { excludeReason: 'transfer', isClassified: 'Y' },
     });
-
-    for (const ym of months) await this.stats.rebuild(ym);
     return {
       classifiedCardSettlement: cardSettle,
       classifiedSelfTransfer: selfTransfer,
@@ -755,7 +749,6 @@ export class StatementTxnService {
       months.add(day.toISOString().slice(0, 7));
       updated++;
     }
-    for (const ym of months) await this.stats.rebuild(ym);
     return { updated };
   }
 
@@ -777,7 +770,6 @@ export class StatementTxnService {
     if (txIds.length) {
       await this.prisma.transaction.deleteMany({ where: { id: { in: txIds } } });
     }
-    for (const ym of months) await this.stats.rebuild(ym);
     return { deleted: rows.length };
   }
 
@@ -793,7 +785,7 @@ export class StatementTxnService {
     const months = new Set<string>();
 
     // 0) 결제수단 집계 제외 카드 → '지출 분류 제외' (pending 조회 전에 먼저 확정)
-    await this.reconciler.classifyExcludedCardPms(months);
+    await this.reconciler.classifyExcludedCardPms();
 
     // 1) 이력 맵 — 가맹점명(정규화) → 최신 분류코드 (exact + fuzzy)
     const history = await this.prisma.cardTransaction.findMany({
@@ -869,8 +861,6 @@ export class StatementTxnService {
       else if (source === 'history') byHistory++;
       else byRule++;
     }
-
-    for (const ym of months) await this.stats.rebuild(ym);
     return {
       classifiedByRecurring: byRecurring,
       classifiedByHistory: byHistory,

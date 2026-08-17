@@ -7,10 +7,6 @@ import { PrismaClient } from '@prisma/client';
 
 /** truncate 대상 — 자식 → 부모 순서. CASCADE 를 쓰므로 순서 자체는 보험이다. */
 const DOMAIN_TABLES = [
-  'monthly_payment_stat',
-  'monthly_source_stat',
-  'monthly_category_stat',
-  'monthly_summary',
   'installment_plan',
   'card_transaction',
   'card_statement',

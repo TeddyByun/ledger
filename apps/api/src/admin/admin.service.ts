@@ -172,10 +172,6 @@ export class AdminService {
         await tx.installmentPlan.deleteMany(w);
         await tx.cardStatement.deleteMany(w);
         await tx.recurringExpense.deleteMany(w);
-        await tx.monthlyCategoryStat.deleteMany(w);
-        await tx.monthlySourceStat.deleteMany(w);
-        await tx.monthlyPaymentStat.deleteMany(w);
-        await tx.monthlySummary.deleteMany(w);
         await tx.importJob.deleteMany(w);
         await tx.counterparty.deleteMany(w);
         await tx.paymentMethod.deleteMany(w);

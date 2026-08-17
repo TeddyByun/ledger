@@ -11,7 +11,7 @@
 
 > 이하 §1~ 는 원본 스프레드시트 기반의 **최초 설계(V1) 유도 과정**이다. 이 §0 은 그 이후 멀티테넌시·인증·예측·집계까지 반영된 **실제 구현 스키마**(`apps/api/prisma/schema.prisma` = 정본, 테이블 20개)를 요약한다. 미래 재설계 제안은 `DATABASE_V2_DESIGN.md`(`_mt/_ct/_tt` 규칙, 미구현) 참조.
 
-### 0.1 테이블 인벤토리 (20개)
+### 0.1 테이블 인벤토리 (16개)
 
 | 도메인 | 테이블 | 비고 |
 |--------|--------|------|
@@ -27,7 +27,7 @@
 | | `installment_plan` | 할부 원거래(청구건이 참조) |
 | | `bank_txn_type` / `merchant_category_map` | 코드성 / 자동분류 규칙. **전역** |
 | 예측 | `recurring_expense` | 정기지출·정기수입 공용(`flow`=expense/income). R4/R6/R7. `is_active`=예측 포함 |
-| 집계 | `monthly_summary` / `monthly_category_stat` / `monthly_source_stat` / `monthly_payment_stat` | 월별 집계. **복합 PK(household_id, ym, …)** |
+
 | 적재 | `import_job` | 업로드 파이프라인 상태(id=문자열) |
 
 - **테넌시**: `PrismaService.$use` 미들웨어가 `SCOPED_MODELS` 대상에 `household_id` 자동 주입(생성=data, 조회/수정/삭제=where). **제외**: `household`(자기 자신), 코드성(`category`·`bank_txn_type`·`merchant_category_map`). → 전역 슈퍼관리자 조회는 이 스코프 밖 라우트(`/admin/*`)에서 수행.
@@ -187,34 +187,6 @@ erDiagram
     enum is_active
   }
 
-  %% ── 월별 집계 (복합 PK) ──
-  monthly_summary {
-    int household_id PK "FK"
-    string ym PK
-    decimal income_total
-    decimal expense_total
-    decimal net_amount
-  }
-  monthly_category_stat {
-    int household_id PK "FK"
-    string ym PK
-    string category_code PK "FK"
-    decimal amount_total
-  }
-  monthly_source_stat {
-    int household_id PK "FK"
-    string ym PK
-    int counterparty_id PK "FK"
-    decimal amount_total
-  }
-  monthly_payment_stat {
-    int household_id PK "FK"
-    string ym PK
-    int payment_method_id PK "FK"
-    decimal income_total
-    decimal expense_total
-  }
-
   %% ── 적재 ──
   import_job {
     string id PK
@@ -237,19 +209,13 @@ erDiagram
   household ||--o{ installment_plan : ""
   household ||--o{ recurring_expense : ""
   household ||--o{ import_job : ""
-  household ||--o{ monthly_summary : ""
-  household ||--o{ monthly_category_stat : ""
-  household ||--o{ monthly_source_stat : ""
-  household ||--o{ monthly_payment_stat : ""
 
   category ||--o{ category : "parent(트리)"
   category ||--o{ transaction : ""
   category ||--o{ merchant_category_map : ""
   category ||--o{ recurring_expense : ""
-  category ||--o{ monthly_category_stat : ""
 
   counterparty ||--o{ transaction : ""
-  counterparty ||--o{ monthly_source_stat : ""
 
   payment_method ||--o{ transaction : ""
   payment_method ||--o{ bank_transaction : ""
@@ -258,7 +224,6 @@ erDiagram
   payment_method ||--o{ card_transaction : ""
   payment_method ||--o{ installment_plan : ""
   payment_method ||--o{ recurring_expense : ""
-  payment_method ||--o{ monthly_payment_stat : ""
 
   household_member ||--o{ transaction : "명의"
   bank_txn_type ||--o{ bank_transaction : ""
@@ -289,6 +254,9 @@ erDiagram
 | 2026-08 | **`payment_method.is_active`** — 결제수단 사용 중지(false=신규 사용 안 함) | §3.1 |
 | 2026-08 | 정기항목 **`flow`(expense/income)** 추가 — `recurring_expense` 한 테이블이 **정기지출·정기수입 공용**. 인덱스 [household_id, flow] | schema.prisma · §0.1 |
 | 2026-08 | 문서 동기화 — API_SPEC/ARCHITECTURE/FRONTEND_DESIGN as-built 반영 | (본 정비) |
+| 2026-08-17 | **저장형 월별 집계 4종 제거** — 직접 집계로 단일화(이중 경로의 제외 규칙 불일치 해소) | §8 · 마이그레이션 `drop_monthly_stats` |
+| 2026-08-17 | 예상 수입·지출 **잔액 우선** — 내계좌 간 이체를 잔액에 반영, 합계에서만 제외 | EXPENSE_FORECAST §10 |
+| 2026-08-17 | **KST 기준 '오늘/이번 달'** — `common/kst.ts` | (검증 I4) |
 
 ---
 
@@ -1115,183 +1083,19 @@ CREATE INDEX idx_mcm_priority ON merchant_category_map(priority);
 
 ---
 
-## 8. 월별 요약 통계 테이블
+## 8. 월별 요약 통계 테이블 — **제거됨 (2026-08-17)**
 
-월별 대시보드용 **집계(aggregate) 테이블**. 거래 적재/분류가 끝난 뒤 월 단위로 재집계하여 채운다. 요청 차원(지출 분류·수입처·카드별·은행별)을 **전체 요약 1 + 차원별 3** 테이블로 커버한다.
+> `monthly_summary` · `monthly_category_stat` · `monthly_source_stat` · `monthly_payment_stat` 4종과
+> `rebuild()` · `GET/POST /stats/monthly*` 를 **모두 제거**했다.
+> (마이그레이션 `20260817000000_drop_monthly_stats`)
+>
+> **제거 이유**
+> 1. 같은 값을 구하는 경로가 둘(직접 집계 / 저장형)이었고 **규칙이 어긋나 있었다** — 저장형만
+>    '분류 제외'(18/19) 필터가 빠져 카드대금·자기이체가 합산돼 값이 2배 이상 부풀려졌다(감사 #8).
+> 2. 화면은 모두 **직접 집계**를 쓰고 있어 저장형은 사실상 죽은 코드였다.
+> 3. 데이터 규모(월 수백 건)에서 직접 집계 부하가 없다.
+>
+> **부수 효과**: 업로드·분류·삭제 때마다 돌던 재집계(`rebuild`)가 사라져 그 경로가 단순·빨라졌다.
+> 재도입이 필요해지면 **직접 집계 경로와 같은 제외 헬퍼**(`common/exclude-category.ts` ·
+> `common/exclude-payment.ts`)를 반드시 공유해야 한다.
 
-### 8.0 설계 방식
-- **저장형 집계 테이블 채택**: 대시보드 조회 성능을 위해 `transaction`을 미리 합산해 저장. (대안: SQL VIEW = 항상 최신이나 매 조회 시 집계 → 데이터 많아지면 느림.)
-- **갱신 시점**: 업로드·분류 후 해당 월(`ym`)을 **삭제 후 재삽입(rebuild)**. 배치 또는 트리거로 수행.
-- **집계 대상(필터)**: `transaction` 중 `amount IS NOT NULL AND status='settled'`만 합산. 정보성 행(`status='info'`)·자기이체·카드대금(`bank_transaction.exclude_reason`)은 애초 `transaction`에 미연결이라 자동 제외.
-- **기준월(`ym`)**: 카드 할부는 청구월, 그 외는 `transaction_date`의 `YYYY-MM`.
-
-### 8.1 `monthly_summary` — 월 전체 요약
-| 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
-| ym | CHAR(7) | **PK** | 기준월 (예: 2026-03) |
-| income_total | DECIMAL(15,2) | DEFAULT 0 | 총수입 |
-| expense_total | DECIMAL(15,2) | DEFAULT 0 | 총지출 |
-| net_amount | DECIMAL(15,2) | DEFAULT 0 | 순액 (수입−지출) |
-| income_count | INTEGER | DEFAULT 0 | 수입 건수 |
-| expense_count | INTEGER | DEFAULT 0 | 지출 건수 |
-| transfer_excluded | DECIMAL(15,2) | DEFAULT 0 | 집계 제외 자기이체 합 (참고) |
-| card_settle_excluded | DECIMAL(15,2) | DEFAULT 0 | 집계 제외 카드대금 합 (참고) |
-| updated_at | DATETIME | DEFAULT now | 재집계 시각 |
-
-### 8.2 `monthly_category_stat` — 월 × 분류(지출/수입)
-| 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
-| ym | CHAR(7) | PK(복합) | 기준월 |
-| category_code | VARCHAR(10) | PK(복합), FK → category.code | 분류 코드 |
-| type | VARCHAR(10) | NOT NULL | income / expense |
-| amount_total | DECIMAL(15,2) | DEFAULT 0 | 분류별 합계 |
-| tx_count | INTEGER | DEFAULT 0 | 건수 |
-| ratio | DECIMAL(5,2) | NULL | 해당 월 동일 type 내 비중(%) |
-
-> 대분류만 보고 싶으면 `category.parent_code`로 롤업, 소분류(예: 0501)까지 보고 싶으면 그대로 사용.
-
-### 8.3 `monthly_source_stat` — 월 × 수입처
-| 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
-| ym | CHAR(7) | PK(복합) | 기준월 |
-| counterparty_id | INTEGER | PK(복합), FK → counterparty.id | 수입처 |
-| amount_total | DECIMAL(15,2) | DEFAULT 0 | 수입처별 입금 합계 |
-| tx_count | INTEGER | DEFAULT 0 | 건수 |
-
-### 8.4 `monthly_payment_stat` — 월 × 결제수단 (카드별·은행별 공통)
-| 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
-| ym | CHAR(7) | PK(복합) | 기준월 |
-| payment_method_id | INTEGER | PK(복합), FK → payment_method.id | 결제수단 |
-| method_type | VARCHAR(10) | NOT NULL | bank / card (카드별/은행별 필터) |
-| income_total | DECIMAL(15,2) | DEFAULT 0 | 입금 합계 (은행 계좌) |
-| expense_total | DECIMAL(15,2) | DEFAULT 0 | 지출 합계 (카드·계좌) |
-| tx_count | INTEGER | DEFAULT 0 | 건수 |
-
-> `method_type='card'`로 필터 = **카드별 요약**, `='bank'`로 필터 = **은행별 요약**. 한 테이블로 두 차원 모두 제공.
-
-### 8.5 재집계 SQL (월 rebuild 예시, `:ym` 파라미터)
-```sql
--- 1) 전체 요약
-DELETE FROM monthly_summary WHERE ym = :ym;
-INSERT INTO monthly_summary (ym, income_total, expense_total, net_amount,
-                             income_count, expense_count)
-SELECT :ym,
-       COALESCE(SUM(CASE WHEN type='income'  THEN amount END),0),
-       COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0),
-       COALESCE(SUM(CASE WHEN type='income'  THEN amount END),0)
-         - COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0),
-       SUM(CASE WHEN type='income'  THEN 1 ELSE 0 END),
-       SUM(CASE WHEN type='expense' THEN 1 ELSE 0 END)
-FROM "transaction"
-WHERE amount IS NOT NULL AND status='settled'
-  AND strftime('%Y-%m', transaction_date) = :ym;
-
--- 2) 분류별
-DELETE FROM monthly_category_stat WHERE ym = :ym;
-INSERT INTO monthly_category_stat (ym, category_code, type, amount_total, tx_count)
-SELECT :ym, category_code, type, SUM(amount), COUNT(*)
-FROM "transaction"
-WHERE amount IS NOT NULL AND status='settled'
-  AND strftime('%Y-%m', transaction_date) = :ym
-GROUP BY category_code, type;
-
--- 3) 수입처별
-DELETE FROM monthly_source_stat WHERE ym = :ym;
-INSERT INTO monthly_source_stat (ym, counterparty_id, amount_total, tx_count)
-SELECT :ym, counterparty_id, SUM(amount), COUNT(*)
-FROM "transaction"
-WHERE amount IS NOT NULL AND status='settled' AND type='income'
-  AND counterparty_id IS NOT NULL
-  AND strftime('%Y-%m', transaction_date) = :ym
-GROUP BY counterparty_id;
-
--- 4) 결제수단별 (카드/은행)
-DELETE FROM monthly_payment_stat WHERE ym = :ym;
-INSERT INTO monthly_payment_stat (ym, payment_method_id, method_type,
-                                  income_total, expense_total, tx_count)
-SELECT :ym, t.payment_method_id, pm.method_type,
-       COALESCE(SUM(CASE WHEN t.type='income'  THEN t.amount END),0),
-       COALESCE(SUM(CASE WHEN t.type='expense' THEN t.amount END),0),
-       COUNT(*)
-FROM "transaction" t
-JOIN payment_method pm ON pm.id = t.payment_method_id
-WHERE t.amount IS NOT NULL AND t.status='settled'
-  AND strftime('%Y-%m', t.transaction_date) = :ym
-GROUP BY t.payment_method_id, pm.method_type;
-
--- 5) 분류별 비중(ratio) 갱신
-UPDATE monthly_category_stat
-   SET ratio = ROUND(100.0 * amount_total /
-        NULLIF((SELECT SUM(amount_total) FROM monthly_category_stat m2
-                 WHERE m2.ym = monthly_category_stat.ym
-                   AND m2.type = monthly_category_stat.type), 0), 2)
- WHERE ym = :ym;
-```
-
-### 8.6 DDL
-```sql
-CREATE TABLE monthly_summary (
-    ym                   CHAR(7) PRIMARY KEY,
-    income_total         DECIMAL(15,2) DEFAULT 0,
-    expense_total        DECIMAL(15,2) DEFAULT 0,
-    net_amount           DECIMAL(15,2) DEFAULT 0,
-    income_count         INTEGER DEFAULT 0,
-    expense_count        INTEGER DEFAULT 0,
-    transfer_excluded    DECIMAL(15,2) DEFAULT 0,
-    card_settle_excluded DECIMAL(15,2) DEFAULT 0,
-    updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE monthly_category_stat (
-    ym            CHAR(7) NOT NULL,
-    category_code VARCHAR(10) NOT NULL REFERENCES category(code),
-    type          VARCHAR(10) NOT NULL CHECK (type IN ('income','expense')),
-    amount_total  DECIMAL(15,2) DEFAULT 0,
-    tx_count      INTEGER DEFAULT 0,
-    ratio         DECIMAL(5,2),
-    PRIMARY KEY (ym, category_code)
-);
-
-CREATE TABLE monthly_source_stat (
-    ym              CHAR(7) NOT NULL,
-    counterparty_id INTEGER NOT NULL REFERENCES counterparty(id),
-    amount_total    DECIMAL(15,2) DEFAULT 0,
-    tx_count        INTEGER DEFAULT 0,
-    PRIMARY KEY (ym, counterparty_id)
-);
-
-CREATE TABLE monthly_payment_stat (
-    ym                CHAR(7) NOT NULL,
-    payment_method_id INTEGER NOT NULL REFERENCES payment_method(id),
-    method_type       VARCHAR(10) NOT NULL CHECK (method_type IN ('bank','card')),
-    income_total      DECIMAL(15,2) DEFAULT 0,
-    expense_total     DECIMAL(15,2) DEFAULT 0,
-    tx_count          INTEGER DEFAULT 0,
-    PRIMARY KEY (ym, payment_method_id)
-);
-```
-
-### 8.7 대시보드 조회 예시
-```sql
--- 이번 달 분류별 지출 TOP (대분류 롤업)
-SELECT COALESCE(c.parent_code, c.code) AS 대분류,
-       SUM(s.amount_total) AS 지출합, SUM(s.tx_count) AS 건수
-FROM monthly_category_stat s
-JOIN category c ON c.code = s.category_code
-WHERE s.ym = '2026-03' AND s.type = 'expense'
-GROUP BY COALESCE(c.parent_code, c.code)
-ORDER BY 지출합 DESC;
-
--- 카드별 이번 달 지출
-SELECT pm.name AS 카드, p.expense_total
-FROM monthly_payment_stat p
-JOIN payment_method pm ON pm.id = p.payment_method_id
-WHERE p.ym = '2026-03' AND p.method_type = 'card'
-ORDER BY p.expense_total DESC;
-
--- 최근 6개월 수입·지출 추이
-SELECT ym, income_total, expense_total, net_amount
-FROM monthly_summary
-ORDER BY ym DESC LIMIT 6;
-```

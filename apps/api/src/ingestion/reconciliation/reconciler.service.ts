@@ -40,7 +40,6 @@ export class ReconcilerService {
   private async classifyAsExclusion(
     b: BankRowLite,
     codes: { expense?: string; income?: string },
-    months: Set<string>,
   ): Promise<boolean> {
     const isExpense = Number(b.withdrawal) > 0;
     const amount = isExpense ? Number(b.withdrawal) : Number(b.deposit);
@@ -65,15 +64,14 @@ export class ReconcilerService {
       // 분류 제외 거래로 확정하면서 구버전 exclude_reason 표시는 정리
       data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
     });
-    months.add(b.txnAt.toISOString().slice(0, 7));
     return true;
   }
 
   /**
    * 카드대금 결제 출금(구분명에 '카드') → '분류 제외'(지출)로 자동 분류.
-   * 분류된 월을 months 에 추가. 반환값은 처리한 행 수.
+   * 반환값은 처리한 행 수.
    */
-  async classifyCardSettlements(months: Set<string>): Promise<number> {
+  async classifyCardSettlements(): Promise<number> {
     const rows = await this.prisma.bankTransaction.findMany({
       where: {
         withdrawal: { gt: 0 },
@@ -96,7 +94,7 @@ export class ReconcilerService {
     }
     let count = 0;
     for (const b of rows) {
-      if (await this.classifyAsExclusion(b, codes, months)) count++;
+      if (await this.classifyAsExclusion(b, codes)) count++;
     }
     return count;
   }
@@ -105,9 +103,9 @@ export class ReconcilerService {
    * 본인 계좌 간 이체 — 같은 이름(내용)·같은 날·동일 금액의 (출금 A) ↔ (입금 B)를 한 쌍으로 인식.
    * 두 계좌 모두 본인 명의일 때, 출금→'지출 분류 제외'·입금→'수입 분류 제외'로 보정한다.
    * 이미 분류/제외된 행도 대상에 포함(계좌를 나눠 업로드해 한쪽이 먼저 분류돼도 짝을 맞춤).
-   * 분류된 월을 months 에 추가(호출자가 집계 재계산). 반환값은 보정한 행 수.
+   * 반환값은 보정한 행 수.
    */
-  async classifySelfTransfers(months: Set<string>): Promise<number> {
+  async classifySelfTransfers(): Promise<number> {
     const codes = await this.exclusionCodes();
     let count = 0;
 
@@ -117,7 +115,7 @@ export class ReconcilerService {
         where: { transactionId: null, excludeReason: 'self_transfer' },
       });
       for (const b of marked) {
-        if (await this.classifyAsExclusion(b, codes, months)) count++;
+        if (await this.classifyAsExclusion(b, codes)) count++;
       }
     }
     if (!codes.expense && !codes.income) return count; // 분류 제외 카테고리 없으면 종료
@@ -174,8 +172,8 @@ export class ReconcilerService {
       if (!pair) continue;
       used.add(w.id);
       used.add(pair.id);
-      if (await this.ensureBankExclusion(w, codes, months)) count++;
-      if (await this.ensureBankExclusion(pair, codes, months)) count++;
+      if (await this.ensureBankExclusion(w, codes)) count++;
+      if (await this.ensureBankExclusion(pair, codes)) count++;
     }
     return count;
   }
@@ -188,7 +186,6 @@ export class ReconcilerService {
       transaction?: { categoryCode: string } | null;
     },
     codes: { expense?: string; income?: string },
-    months: Set<string>,
   ): Promise<boolean> {
     const isExpense = Number(row.withdrawal) > 0;
     const target = isExpense ? codes.expense : codes.income;
@@ -228,7 +225,6 @@ export class ReconcilerService {
         data: { transactionId: tx.id, isClassified: 'Y', excludeReason: null },
       });
     }
-    months.add(row.txnAt.toISOString().slice(0, 7));
     return true;
   }
 
@@ -236,7 +232,7 @@ export class ReconcilerService {
    * 집계 제외 결제수단(exclude_from_stats)의 은행 거래 → 방향별 '분류 제외'로 매핑.
    * 출금=지출 분류 제외 / 입금=수입 분류 제외. 이미 다른 분류면 교체.
    */
-  async classifyExcludedBankPms(months: Set<string>): Promise<number> {
+  async classifyExcludedBankPms(): Promise<number> {
     const codes = await this.exclusionCodes();
     if (!codes.expense && !codes.income) return 0;
     const excludedPm = await excludedPaymentMethodIds(this.prisma);
@@ -249,7 +245,7 @@ export class ReconcilerService {
     let count = 0;
     for (const r of rows) {
       if (Number(r.withdrawal) <= 0 && Number(r.deposit) <= 0) continue;
-      if (await this.ensureBankExclusion(r, codes, months)) count++;
+      if (await this.ensureBankExclusion(r, codes)) count++;
     }
     return count;
   }
@@ -258,7 +254,7 @@ export class ReconcilerService {
    * 집계 제외 결제수단의 카드 거래 → '지출 분류 제외'로 매핑(카드는 항상 지출).
    * 취소행 제외. 이미 다른 분류면 교체.
    */
-  async classifyExcludedCardPms(months: Set<string>): Promise<number> {
+  async classifyExcludedCardPms(): Promise<number> {
     const codes = await this.exclusionCodes();
     if (!codes.expense) return 0;
     const excludedPm = await excludedPaymentMethodIds(this.prisma);
@@ -297,7 +293,6 @@ export class ReconcilerService {
           data: { transactionId: tx.id, isClassified: 'Y' },
         });
       }
-      months.add(c.txnDate.toISOString().slice(0, 7));
       count++;
     }
     return count;

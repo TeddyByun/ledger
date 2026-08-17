@@ -112,10 +112,6 @@ model Household {
 
   @@map("household")
   recurringExpenses RecurringExpense[]
-  monthlySummaries    MonthlySummary[]
-  monthlyCategoryStats MonthlyCategoryStat[]
-  monthlySourceStats  MonthlySourceStat[]
-  monthlyPaymentStats MonthlyPaymentStat[]
 }
 
 /// 가족 구성원 = 사람. 지출 명의(본인/배우자/자녀) + 선택적 로그인(email/passwordHash 있으면 앱 사용자).
@@ -203,7 +199,6 @@ model PaymentMethod {
   settledStatements   CardStatement[]      @relation("SettleAccount")
   cardTransactions    CardTransaction[]
   installmentPlans    InstallmentPlan[]
-  monthlyPaymentStats MonthlyPaymentStat[]
 
   @@unique([householdId, name])
   @@map("payment_method")
@@ -224,7 +219,6 @@ model Category {
 
   transactions  Transaction[]
   merchantRules MerchantCategoryMap[]
-  monthlyStats  MonthlyCategoryStat[]
 
   @@index([parentCode])
   @@map("category")
@@ -239,7 +233,6 @@ model Counterparty {
 
   household    Household           @relation(fields: [householdId], references: [id])
   transactions Transaction[]
-  monthlyStats MonthlySourceStat[]
 
   @@unique([householdId, name])
   @@map("counterparty")
@@ -448,73 +441,6 @@ model MerchantCategoryMap {
 
   @@index([priority])
   @@map("merchant_category_map")
-}
-
-// ─────────────────────────────────────────────
-// 월별 요약 통계 (집계 테이블)
-// ─────────────────────────────────────────────
-model MonthlySummary {
-  householdId        Int      @map("household_id")
-  ym                 String   @db.Char(7)
-  incomeTotal        Decimal  @default(0) @map("income_total") @db.Decimal(15, 2)
-  expenseTotal       Decimal  @default(0) @map("expense_total") @db.Decimal(15, 2)
-  netAmount          Decimal  @default(0) @map("net_amount") @db.Decimal(15, 2)
-  incomeCount        Int      @default(0) @map("income_count")
-  expenseCount       Int      @default(0) @map("expense_count")
-  transferExcluded   Decimal  @default(0) @map("transfer_excluded") @db.Decimal(15, 2)
-  cardSettleExcluded Decimal  @default(0) @map("card_settle_excluded") @db.Decimal(15, 2)
-  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
-
-  household Household @relation(fields: [householdId], references: [id])
-
-  @@id([householdId, ym])
-  @@map("monthly_summary")
-}
-
-model MonthlyCategoryStat {
-  householdId  Int             @map("household_id")
-  ym           String          @db.Char(7)
-  categoryCode String          @map("category_code")
-  type         TransactionType
-  amountTotal  Decimal         @default(0) @map("amount_total") @db.Decimal(15, 2)
-  txCount      Int             @default(0) @map("tx_count")
-  ratio        Decimal?        @db.Decimal(5, 2)
-
-  household Household @relation(fields: [householdId], references: [id])
-  category  Category  @relation(fields: [categoryCode], references: [code])
-
-  @@id([householdId, ym, categoryCode])
-  @@map("monthly_category_stat")
-}
-
-model MonthlySourceStat {
-  householdId    Int     @map("household_id")
-  ym             String  @db.Char(7)
-  counterpartyId Int     @map("counterparty_id")
-  amountTotal    Decimal @default(0) @map("amount_total") @db.Decimal(15, 2)
-  txCount        Int     @default(0) @map("tx_count")
-
-  household    Household    @relation(fields: [householdId], references: [id])
-  counterparty Counterparty @relation(fields: [counterpartyId], references: [id])
-
-  @@id([householdId, ym, counterpartyId])
-  @@map("monthly_source_stat")
-}
-
-model MonthlyPaymentStat {
-  householdId     Int        @map("household_id")
-  ym              String     @db.Char(7)
-  paymentMethodId Int        @map("payment_method_id")
-  methodType      MethodType @map("method_type")
-  incomeTotal     Decimal    @default(0) @map("income_total") @db.Decimal(15, 2)
-  expenseTotal    Decimal    @default(0) @map("expense_total") @db.Decimal(15, 2)
-  txCount         Int        @default(0) @map("tx_count")
-
-  household     Household     @relation(fields: [householdId], references: [id])
-  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
-
-  @@id([householdId, ym, paymentMethodId])
-  @@map("monthly_payment_stat")
 }
 
 // ─────────────────────────────────────────────

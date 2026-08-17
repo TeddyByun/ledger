@@ -26,7 +26,7 @@
 | classify-keywords | `/classify-keywords` | 자동분류 키워드(`merchant_category_map`) CRUD | ✅ |
 | recurring-expenses | `/recurring-expenses` | 정기지출 CRUD + 추천 | ✅ |
 | recurring-incomes | `/recurring-incomes` | 정기수입 CRUD + 추천(정기지출과 동일 테이블·서비스, flow=income) | ✅ |
-| statistics | `/stats` | 대시보드·추이·월별 집계·재집계·예상지출 | ✅ |
+| statistics | `/stats` | 대시보드·추이·예상 수입·지출·현금흐름 (**모두 직접 집계**) | ✅ |
 | imports | `/imports` | 명세서 업로드·잡 상태·미분류 조회 | ✅ |
 | counterparties | `/counterparties` | 수입처/거래처 목록·등록(`GET`·`POST`, 단일 파일 모듈) | ✅ (화면 미사용) |
 
@@ -163,7 +163,6 @@
 2) 이력 학습       과거 같은 내용(방향별)의 최신 분류를 그대로 적용 (exact → fuzzy)
 3) 키워드 규칙     merchant_category_map (우선순위 오름차순)
 4) 잔여 당행송금   위 1~3 에 안 걸린 '당행송금' → exclude_reason='transfer'
-5) 영향 월 rebuild
 ```
 
 - **우선순위 원칙**: 명시적 분류 신호(정기지출·이력·키워드)가 당행송금 제외보다 **우선**한다. 이미 `transfer` 로 제외된 행도 재분류 대상에 포함(키워드 등록 후 소급 반영).
@@ -207,14 +206,9 @@
 | GET | `/stats/payment-trend?from=&to=` | **월별 결제수단별 지출 추이**. 기본 올해 |
 | GET | `/stats/cashflow?ym=&accountId=&ignoreActual=` | **예상 수입·지출 + 일자별 잔액**(은행 기준, 카드는 전월 이용액→카드대금). 등록 정기수입·정기지출 기반 계획 vs 실제 대조, 자기이체 제외 |
 | GET | `/stats/forecast?ym=` | **예상 지출**(규칙 엔진 — fixed/util/event/var 버킷, 소비 시점 기준) |
-| GET | `/stats/monthly?ym=` \| `?recent=` | 월 전체 요약(미지정 시 최근 N개월) |
-| GET | `/stats/monthly/category?ym=&type=` | 월 × 분류별 |
-| GET | `/stats/monthly/source?ym=` | 월 × 수입처별 |
-| GET | `/stats/monthly/payment?ym=&methodType=` | 월 × 결제수단별 |
-| POST | `/stats/monthly/{ym}/rebuild` | 월 요약 재집계 |
 
 - `from`/`to` 형식은 `YYYY-MM`(양끝 포함), 뒤집혀 오면 교환, 최대 60개월로 절단.
-- **추이·대시보드는 `transaction` 에서 직접 집계**(항상 최신), `monthly_*` 테이블은 요약 조회용.
+- **모든 통계는 `transaction` 에서 직접 집계**한다(항상 최신). 저장형 집계 테이블(`monthly_*`)과 `rebuild` API 는 **2026-08 제거**됐다 — 이중 경로의 규칙 불일치(제외 필터 누락)를 없애기 위함.
 - 집계는 `settled` + 금액 존재 거래만. '분류 제외' 분류·집계제외 결제수단은 빠진다.
 - `/stats/cashflow`: `accountId`(기준 은행 계좌, 미지정 시 거래 최다 주 거래 계좌), `ignoreActual`(1이면 실적 무시·월 전체 예측 — 예측 정확도 검증용). 규칙(C1~C8)·응답 구조는 EXPENSE_FORECAST_DESIGN §10.
 

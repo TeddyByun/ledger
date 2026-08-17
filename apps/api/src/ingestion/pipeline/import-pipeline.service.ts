@@ -178,7 +178,6 @@ export class ImportPipelineService {
       await this.statementTxn.autoClassifyCard();
 
       // 월 재집계
-      for (const ym of months) await this.stats.rebuild(ym);
 
       await this.prisma.importJob.update({
         where: { id: jobId },
@@ -345,8 +344,8 @@ export class ImportPipelineService {
     }
 
     // 2) 대사 — 카드대금·자기이체를 '분류 제외'로 자동 분류
-    await this.reconciler.classifyCardSettlements(months);
-    await this.reconciler.classifySelfTransfers(months);
+    await this.reconciler.classifyCardSettlements();
+    await this.reconciler.classifySelfTransfers();
 
     // 3) 미제외·미분류 행 → 거래 생성
     const staged = await this.prisma.bankTransaction.findMany({

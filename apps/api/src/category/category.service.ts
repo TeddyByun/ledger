@@ -133,13 +133,12 @@ export class CategoryService {
     if (childCount > 0)
       throw new BadRequestException('하위 분류가 있어 삭제할 수 없습니다. 하위 분류를 먼저 삭제하세요.');
 
-    const [txnCount, ruleCount, statCount] = await Promise.all([
+    const [txnCount, ruleCount] = await Promise.all([
       this.prisma.transaction.count({ where: { categoryCode: code } }),
       this.prisma.merchantCategoryMap.count({ where: { categoryCode: code } }),
-      this.prisma.monthlyCategoryStat.count({ where: { categoryCode: code } }),
     ]);
 
-    if (txnCount + ruleCount + statCount > 0) {
+    if (txnCount + ruleCount > 0) {
       const updated = await this.prisma.category.update({
         where: { code },
         data: { useYn: 'N' },
