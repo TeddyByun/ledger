@@ -60,19 +60,10 @@ describe('ShinhanCardParser', () => {
     expect(result.kind === 'card' && result.statement.rows).toHaveLength(0);
   });
 
-  // ── 알려진 결함: 감사보고서 P1 #7 (shinhan-card.parser.ts:85) ──
-  // hana/hyundai/samsung 은 billingRound 를 해시에 포함하는데 신한만 누락됐다.
-  // 수정(회차·할부기간 추가) 후 `.failing` 을 떼면 그대로 회귀 테스트가 된다.
-  it.failing('회차가 다르면 dedupHash 도 달라야 한다 (미수정)', () => {
-    const round1 = parseOne('1', '1,000');
-    const round2 = parseOne('2', '700'); // 회차별 이자도 다르다
-
-    expect(round2.dedupHash).not.toBe(round1.dedupHash);
+  it('할부 회차가 다르면 별도 청구건으로 구분한다', () => {
+    expect(parseOne('2').dedupHash).not.toBe(parseOne('1').dedupHash);
   });
-
-  it('현재는 회차가 달라도 해시가 동일하다 — 유실 재현', () => {
-    // 위 결함이 실제로 존재함을 명시적으로 고정해 둔다.
-    // #7 을 수정하면 이 테스트를 삭제하고 위 `.failing` 을 정식 테스트로 승격한다.
-    expect(parseOne('2', '700').dedupHash).toBe(parseOne('1', '1,000').dedupHash);
+  it('같은 할부 회차를 다시 파싱하면 같은 키다', () => {
+    expect(parseOne('2').dedupHash).toBe(parseOne('2').dedupHash);
   });
 });

@@ -18,8 +18,11 @@ export function locateHeader(
     const columns: ColumnMap = {};
     let score = 0;
     for (const field of fields) {
-      const col = row.findIndex((cell) =>
-        aliases[field]!.some((a) => cell.replace(/\s/g, '').includes(a.replace(/\s/g, ''))),
+      const names = aliases[field]!.map((a) => a.replace(/\s/g, ''));
+      // '예상적립/할인율'보다 '예상적립/할인'처럼 정확한 열 이름을 우선한다.
+      const exact = row.findIndex((cell) => names.includes(cell.replace(/\s/g, '')));
+      const col = exact >= 0 ? exact : row.findIndex((cell) =>
+        names.some((name) => cell.replace(/\s/g, '').includes(name)),
       );
       if (col >= 0 && columns[field] === undefined) {
         columns[field] = col;

@@ -1,235 +1,146 @@
-# DB 백업 & 복구 매뉴얼 (Ledger)
+# Ledger 백업·복구
 
-> 이 문서는 **컨테이너가 완전히 삭제되어도** 백업(구글 드라이브)만으로 DB를 되살릴 수 있도록,
-> 백업 구성·복구 절차·스크립트 원문을 전부 담고 있다. GitHub에 보관하는 것이 목적.
-> 최종 갱신: 2026-08 기준 구성.
+2026-09-25 기준. 운영 DB는 워크스페이스 밖의 Docker 호스트에서 실행된다.
+SSH 로그인 정보는 코드·문서·백업 서비스에 저장하지 않는다.
 
----
+## 현재 자동 백업 정책
 
-## 1. 한눈에 요약
-
-| 항목 | 값 |
+| 항목 | 구성 |
 |---|---|
-| 대상 DB | PostgreSQL `ledger` (스키마 `ledger`) |
-| 접속 | `postgresql://ledger:ledger@localhost:5432/ledger?schema=ledger` (앱 `.env`의 `DATABASE_URL`) |
-| 백업 방식 | `pg_dump --no-owner --no-privileges \| gzip` |
-| 파일명 | `ledger_YYYYMMDD_HHMMSS.sql.gz` (덤프에 `CREATE SCHEMA ledger` 포함) |
-| 스케줄 | 컨테이너 PM2 작업 `ledger-db-backup`, cron `0 3 * * *` (매일 03:00) |
-| 보관 | 로컬 최근 2개 + 구글 드라이브 최근 2개 |
-| 드라이브 위치 | **내 드라이브 > My Dev > Ledger** (계정 `teddiyaki@gmail.com`, rclone 리모트 `gdrive`) |
-| 스크립트 | `/home/coder/db-backups/backup.sh`(백업), `/home/coder/db-backups/restore.sh`(복구) |
+| 실행 위치 | Docker 호스트의 `ledger-db-backup.service` / `ledger-db-backup.timer` |
+| 일정 | 매일 03:00, `Asia/Seoul`; 호스트 정지 중 놓친 일정은 부팅 후 실행 (`Persistent=true`) |
+| DB 대상 | 호스트 PostgreSQL 컨테이너의 `ledger` DB 전체, PostgreSQL 18 |
+| 앱 대상 | Coder 홈 영구 볼륨의 `ledger` 디렉터리. 앱 컨테이너가 꺼져 있어도 읽을 수 있음 |
+| 포함 | DB, 소스와 Git 이력, 미커밋 파일, 환경 설정, 업로드 원본, 백업 서비스 복구 설정 |
+| 제외 | 의존성, 빌드 결과, 캐시, 로그, SSH 인증 정보, 백업 암호화 키, rclone 인증 파일 |
+| 암호화 | 전체 묶음을 GPG AES-256으로 암호화; 무작위 복구 키는 별도 파일로 보관 |
+| 로컬 | 호스트 `/var/backups/ledger`, 최근 14개 |
+| 원격 | 기존 개인 Google Drive의 `My Dev/Ledger/secure-snapshots`, 최근 30개 |
+| 검증 | DB 스냅샷과 동일 시점의 테이블 행 수·내용 지문을 별도 PostgreSQL 컨테이너에 복원하여 비교 |
+| 업로드 검증 | 암호문을 다시 내려받아 비교하는 `rclone check --download` |
+| 삭제 조건 | 새 백업의 복원·암호화·업로드 검증이 모두 성공한 뒤 이 작업의 파일 이름만 정리 |
+| 실패 처리 | 비정상 종료 기록, 15분 간격으로 최대 2회 추가 재시도. 기존 정상 백업 유지 |
 
-> **가장 중요한 안정 참조값**: 드라이브 폴더 `My Dev/Ledger` 와 접속 문자열.
-> 도커 볼륨 경로(`/var/lib/docker/volumes/coder-...-home/_data`)는 워크스페이스를 새로 만들면 바뀔 수 있다.
+백업 데이터는 작업 중에만 권한 700의 임시 디렉터리에 존재하며 작업 종료 시 제거한다.
+영구 저장되는 새 자동 백업은 암호화 파일과 SHA-256 파일이다. 로그에는 비밀번호와 거래 내용을 기록하지 않는다.
+복원 검증 컨테이너는 네트워크와 외부 포트 없이 실행하고 검증 후 삭제한다.
+운영 DB는 읽기 전용 스냅샷으로 조회하며 복원 대상으로 사용하지 않는다.
 
----
+호스트가 꺼지거나 PostgreSQL 컨테이너가 실행되지 않으면 백업할 수 없다.
+별도 외부 알림 채널은 설정하지 않았으므로 systemd 실패 상태와 최근 성공 시각을 확인한다.
+이 작업은 `ledger-runtime.timer` 등 앱 자동 기동 설정을 변경하지 않는다.
 
-## 2. 환경 구조 (호스트 vs 컨테이너)
+## 설치·상태 확인
 
-- **컨테이너**(`coder@HouseholdLedger`): 앱·PostgreSQL·rclone·백업 스크립트·백업 파일이 **여기** 있다.
-  - 앱: `/home/coder/ledger`
-  - 백업: `/home/coder/db-backups`
-  - rclone 설정: `/home/coder/.config/rclone/rclone.conf` (리모트 `gdrive`)
-- **호스트**(`teddy@so4...`): 도커 호스트. 컨테이너 `/home/coder`는 도커 볼륨에 있어
-  호스트에서는 `sudo`로 `/var/lib/docker/volumes/coder-...-home/_data` 아래에서 보인다.
-- 복구/백업 명령은 **반드시 컨테이너 안(coder 사용자)** 에서 실행한다.
-  호스트에서 실행하려면: `sudo docker exec -it -u coder <컨테이너> bash ...`
-
----
-
-## 3. 평상시 복구 (컨테이너·DB가 살아 있는 경우)
-
-가장 간단하게, 드라이브에서 **바로 스트리밍 복원**한다.
+원본은 `scripts/backup/`에 있다. Docker 호스트에 Python 3, Docker, GPG,
+rclone, Git, tar/gzip/sha256sum이 필요하다. 아래는 **호스트**에서 실행한다.
 
 ```bash
-# (컨테이너 안에서)
-bash ~/db-backups/restore.sh          # 드라이브 백업 목록 보기
-bash ~/db-backups/restore.sh latest   # 가장 최근 백업으로 복원 (yes 확인)
-pm2 restart ledger-api                # 앱 반영
+sudo python3 <저장소 경로>/scripts/backup/install-host-backup.py \
+  --app-container <워크스페이스 컨테이너 이름>
+
+# 먼저 한 번 실행하여 성공 확인
+sudo systemctl start ledger-db-backup.service
+sudo systemctl show ledger-db-backup.service -p Result -p ExecMainStatus
+sudo systemctl enable --now ledger-db-backup.timer
+
+# 일정과 결과 점검
+sudo systemctl list-timers --all ledger-db-backup.timer --no-pager
+sudo journalctl -u ledger-db-backup.service -n 50 --no-pager
+sudo cat /var/backups/ledger/local-status.json  # 최근 로컬 암호화·복원 검증 성공
+sudo cat /var/backups/ledger/status.json        # 최근 원격 업로드까지 성공
 ```
 
-수동으로 하려면:
+설치기는 워크스페이스의 영구 홈 볼륨 경로를 찾아 `/etc/ledger-backup/config.json`에 저장한다.
+새 워크스페이스가 다른 홈 볼륨을 사용하면 설치기를 다시 실행하여 경로를 갱신한다.
+Docker는 호스트의 로컬 소켓을 명시적으로 사용하므로 개인 Docker context에 영향받지 않는다.
+`/etc/ledger-backup/rclone.conf`는 기존 리모트 인증을 별도 복사한 권한 600 파일이다.
+인증 만료·해제 시 이 파일의 인증을 갱신해야 한다.
+공용 rclone OAuth 프로젝트는 이번 점검에서 Google API `rateLimitExceeded`를 반환했다.
+이 오류는 암호화된 로컬 백업을 무효화하지 않지만 원격 백업 성공으로 처리하지 않는다.
+전용 Google OAuth 클라이언트를 사용하는 설정으로 갱신하면 공용 프로젝트 의존성을 없앨 수 있다.
+방법은 [rclone 공식 안내](https://rclone.org/drive/#making-your-own-client-id)를 참고한다.
+인증 파일의 비밀값은 출력하거나 커밋하지 말고 `/etc/ledger-backup/rclone.conf`에서만 관리한다. 기존 9월 7일·8일 SQL 백업과
+수동 `snapshots/` 폴더는 새 작업의 보관 정리 대상이 아니다.
+
+## 복구 키 보관
+
+복구 키는 다음 두 위치에만 별도로 저장한다. 둘 다 파일 권한 600이다.
+
+- 호스트: `/etc/ledger-backup/recovery.key` (root만 접근)
+- 워크스페이스: `~/.config/ledger-backup/recovery.key` (소유자만 접근)
+
+키는 소스 저장소와 Google Drive 백업 묶음에 포함하지 않는다.
+**호스트 전체를 잃어도 복구할 수 있도록 이 키를 별도의 비밀번호 관리자나 안전한 장치에도 보관해야 한다.**
+키를 잃으면 암호화 백업을 복원할 수 없다. 키를 임의로 재생성하거나 덮어쓰지 않는다.
+SSH 암호는 이 암호화 키와 관계없으며 자동 백업에 필요하지 않다.
+
+## 복구
+
+운영 DB에 덮어쓰지 말고 PostgreSQL 18 이상의 **새 빈 DB**에 먼저 복원한다.
+환경 설정·금융 데이터가 복호화되므로 복구 폴더도 권한 700으로 만든다.
+
 ```bash
-export PGPASSWORD=ledger
-FILE=$(rclone lsf "gdrive:My Dev/Ledger" --files-only | grep '^ledger_.*\.sql\.gz$' | sort | tail -1)
-psql -h localhost -U ledger -d ledger -c "DROP SCHEMA IF EXISTS ledger CASCADE;"
-rclone cat "gdrive:My Dev/Ledger/$FILE" | gunzip | psql -h localhost -U ledger -d ledger
+umask 077
+mkdir -m 700 ledger-restore
+cd ledger-restore
+# UTC 시각이 붙은 파일명을 선택
+BACKUP_FILE=ledger_<UTC시각>.tar.gpg
+rclone copyto "gdrive:My Dev/Ledger/secure-snapshots/$BACKUP_FILE" "$BACKUP_FILE"
+rclone copyto "gdrive:My Dev/Ledger/secure-snapshots/$BACKUP_FILE.sha256" "$BACKUP_FILE.sha256"
+sha256sum --check "$BACKUP_FILE.sha256"
+
+gpg --batch --pinentry-mode loopback --passphrase-file /안전한/경로/recovery.key \
+  --output snapshot.tar --decrypt "$BACKUP_FILE"
+tar -xf snapshot.tar
 ```
 
----
+`manifest.json`의 `artifacts`에 기록된 `database.dump`, `application.tar.gz` 해시를 확인한다.
+`host-backup-configuration/`에는 백업 코드·systemd 파일·접속 위치 설정이 포함된다.
+실제 암호화 키와 rclone 인증 파일은 포함되지 않는다.
 
-## 4. 🔥 재해 복구 (컨테이너가 완전히 사라진 경우 — 처음부터)
-
-> 시나리오: 워크스페이스/컨테이너가 삭제되어 DB도 스크립트도 없다. 있는 것은 **구글 드라이브의 백업 파일뿐**.
-
-### 4-1. PostgreSQL 준비
-아무 PostgreSQL이나 되지만, 접속 정보가 앱의 `DATABASE_URL`과 맞아야 한다.
-- 사용자 `ledger` / 비밀번호 `ledger` / DB `ledger`.
-
-리포의 `docker-compose.yml`로 띄우는 방법(권장):
 ```bash
-cd ledger                 # 리포 클론한 위치
-docker compose up -d postgres    # postgres:18 컨테이너(ledger-postgres) 기동, 포트 5432
+# PGHOST / PGPORT / PGUSER / PGPASSWORD는 복구용 서버 값 사용
+createdb ledger_restore
+pg_restore --no-owner --no-privileges --exit-on-error --single-transaction \
+  --dbname=ledger_restore database.dump
+mkdir -m 700 restored-app
+tar -xzf application.tar.gz -C restored-app
 ```
-또는 직접 설치한 PostgreSQL에서:
+
+`manifest.json`의 테이블별 행 개수와 내용 지문을 비교한다.
+지문은 세션 시간대 `UTC`, `DateStyle = ISO, YMD`에서 계산한다.
+
 ```sql
-CREATE USER ledger WITH PASSWORD 'ledger';
-CREATE DATABASE ledger OWNER ledger;
-```
-> 새 DB에는 스키마가 없으므로, 아래 복원 시 덤프의 `CREATE SCHEMA ledger`가 스키마를 새로 만든다.
-
-### 4-2. rclone + 드라이브 인증 준비
-```bash
-# 설치
-curl https://rclone.org/install.sh | sudo bash     # 또는: sudo apt install -y rclone
-
-# 리모트 'gdrive' 생성 (구글 계정 teddiyaki@gmail.com)
-rclone config
-#  n → name: gdrive → Storage: drive → client_id/secret: (Enter)
-#  scope: drive.file → Use auto config?: n  (헤드리스면 반드시 No)
-#  → 브라우저 있는 PC에서  rclone authorize "drive"  실행해 토큰 받아 붙여넣기
-#  Shared Drive?: n → Keep?: y
-rclone listremotes         # gdrive: 나오면 OK
+SELECT count(*)::text AS rows,
+       md5(coalesce(string_agg(md5(row_to_json(t)::text), ''
+           ORDER BY md5(row_to_json(t)::text)), '')) AS fingerprint
+FROM ledger."transaction" t;
 ```
 
-### 4-3. 백업 받아 복원
-```bash
-export PGPASSWORD=ledger
+`.env`를 복구 서버 환경에 맞춰 조정하고 의존성 설치, Prisma 클라이언트 생성,
+API·웹 빌드를 수행한 뒤 검증이 끝나면 운영 연결을 전환한다.
+DB 로그인 역할·소유권·접근 권한과 Redis 대기 작업은 별도로 복구해야 한다.
 
-# 가장 최근 백업 파일명 확인
-rclone lsf "gdrive:My Dev/Ledger" --files-only | grep '^ledger_.*\.sql\.gz$' | sort
-FILE=<위 목록에서 가장 최근 파일>
+## 수동 로컬 백업과 과거 구성
 
-# 복원 (드라이브 → gunzip → psql)
-rclone cat "gdrive:My Dev/Ledger/$FILE" | gunzip | psql -h localhost -U ledger -d ledger
-```
-> 이미 스키마가 있어 "already exists" 오류가 나면 먼저:
-> `psql -h localhost -U ledger -d ledger -c "DROP SCHEMA IF EXISTS ledger CASCADE;"`
-
-### 4-4. 앱 재구동 & 백업 자동화 재설정
-```bash
-# 앱 (예: pnpm 설치 후)
-cd ledger && pnpm install
-pnpm --filter @ledger/api build && pnpm --filter @ledger/web build
-pm2 start ...     # 기존 방식대로 ledger-api / ledger-web 기동
-
-# 백업 스크립트 재배치 (§6 원문 참고) 후 자동화 등록
-mkdir -p ~/db-backups   # backup.sh, restore.sh 저장(아래 원문)
-chmod +x ~/db-backups/*.sh
-pm2 start ~/db-backups/backup.sh --name ledger-db-backup \
-  --interpreter bash --no-autorestart --cron-restart "0 3 * * *"
-pm2 save
-```
-
----
-
-## 5. 검증
-```bash
-export PGPASSWORD=ledger
-# 테이블 개수 / 주요 데이터 확인
-psql -h localhost -U ledger -d ledger -c "\dt ledger.*" | head
-psql -h localhost -U ledger -d ledger -c "select count(*) from ledger.transaction;"
-```
-앱에 로그인해 거래·예상 화면이 정상인지 확인.
-
----
-
-## 6. 스크립트 원문 (컨테이너가 없어도 그대로 재생성 가능)
-
-### 6-1. `~/db-backups/backup.sh` — 백업 + 드라이브 업로드
-```bash
-#!/usr/bin/env bash
-# Ledger DB 일일 백업(컨테이너 PM2 실행) — pg_dump → gzip, 로컬 최근 2개 + 구글 드라이브 업로드(최근 2개).
-set -uo pipefail
-
-DIR="/home/coder/db-backups"
-DB_HOST="localhost"; DB_USER="ledger"; DB_NAME="ledger"
-export PGPASSWORD="ledger"
-KEEP=2
-REMOTE="gdrive"
-REMOTE_DIR="My Dev/Ledger"
-
-mkdir -p "$DIR"
-TS="$(date +%Y%m%d_%H%M%S)"
-OUT="$DIR/ledger_${TS}.sql.gz"
-log() { echo "$(date '+%F %T')  $*" >> "$DIR/backup.log"; }
-
-if pg_dump -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" --no-owner --no-privileges | gzip > "$OUT"; then
-  log "OK  $OUT ($(du -h "$OUT" | cut -f1))"
-else
-  log "FAIL  pg_dump 실패"; rm -f "$OUT"; exit 1
-fi
-
-ls -1t "$DIR"/ledger_*.sql.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
-
-if command -v rclone >/dev/null && rclone listremotes 2>/dev/null | grep -q "^${REMOTE}:"; then
-  if rclone copy "$OUT" "${REMOTE}:${REMOTE_DIR}" --no-traverse 2>>"$DIR/backup.log"; then
-    log "UP  ${REMOTE}:${REMOTE_DIR}/$(basename "$OUT")"
-  else
-    log "UPFAIL  드라이브 업로드 실패"
-  fi
-  rclone lsf "${REMOTE}:${REMOTE_DIR}" --files-only 2>/dev/null \
-    | grep -E '^ledger_.*\.sql\.gz$' | sort | head -n -"$KEEP" \
-    | while read -r f; do rclone deletefile "${REMOTE}:${REMOTE_DIR}/$f" 2>/dev/null; done
-else
-  log "SKIP  rclone 리모트('${REMOTE}') 미설정 — 로컬 백업만"
-fi
-```
-
-### 6-2. `~/db-backups/restore.sh` — 드라이브에서 복구
-```bash
-#!/usr/bin/env bash
-# Ledger DB 복구 — 구글 드라이브의 백업을 현재 DB로 복원(스트리밍).
-#   bash restore.sh            # 목록
-#   bash restore.sh latest     # 최근 백업 복원
-#   bash restore.sh <파일명>
-set -uo pipefail
-REMOTE="gdrive"; REMOTE_DIR="My Dev/Ledger"
-export PGPASSWORD="ledger"
-psql_() { psql -h localhost -U ledger -d ledger "$@"; }
-
-if [ $# -eq 0 ]; then
-  echo "드라이브 백업 목록 (${REMOTE}:${REMOTE_DIR}):"
-  rclone lsf "${REMOTE}:${REMOTE_DIR}" --files-only 2>/dev/null | grep -E '^ledger_.*\.sql\.gz$' | sort
-  echo; echo "복원:  bash $0 <파일명>    또는    bash $0 latest"; exit 0
-fi
-
-FILE="$1"
-if [ "$FILE" = "latest" ]; then
-  FILE="$(rclone lsf "${REMOTE}:${REMOTE_DIR}" --files-only 2>/dev/null | grep -E '^ledger_.*\.sql\.gz$' | sort | tail -1)"
-  [ -n "$FILE" ] || { echo "드라이브에 백업이 없습니다."; exit 1; }
-fi
-
-echo "복원 대상: ${REMOTE}:${REMOTE_DIR}/${FILE}"
-echo "⚠ 현재 'ledger' 스키마를 삭제하고 이 백업으로 덮어씁니다(되돌릴 수 없음)."
-printf "계속하려면 yes 를 입력: "; read -r ans
-[ "$ans" = "yes" ] || { echo "취소됨."; exit 1; }
-
-psql_ -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS ledger CASCADE;" >/dev/null || { echo "❌ 스키마 삭제 실패"; exit 1; }
-if rclone cat "${REMOTE}:${REMOTE_DIR}/${FILE}" | gunzip | psql_ -v ON_ERROR_STOP=1 >/dev/null; then
-  echo "✅ 복원 완료. 앱 반영: pm2 restart ledger-api"
-else
-  echo "❌ 복원 실패."; exit 1
-fi
-```
-
----
-
-## 7. 빠른 치트시트
+`scripts/backup-current.mjs`는 현재 앱의 `.env`를 읽어 로컬 스냅샷을 만든다.
+Node.js 20 이상, 설치된 API 의존성, PostgreSQL 18 클라이언트가 필요하다.
 
 ```bash
-# 목록
-rclone lsf "gdrive:My Dev/Ledger" --files-only | sort
-
-# 즉시 백업 1회
-bash ~/db-backups/backup.sh
-
-# 최근 백업으로 복구
-bash ~/db-backups/restore.sh latest && pm2 restart ledger-api
-
-# 호스트에서 컨테이너 안 복구 실행
-CID=$(sudo docker ps -q --filter volume=coder-9273aa84-f606-4ca6-9913-33836d844b98-home)
-sudo docker exec -it -u coder "$CID" bash ~/db-backups/restore.sh latest
+node --env-file=.env scripts/backup-current.mjs
 ```
 
-> 주의: 복구는 **현재 데이터를 백업 시점으로 덮어쓴다.** 실행 전 정말 그 시점으로 되돌릴지 확인할 것.
+도구가 PATH에 없다면 `PG_BIN`을 지정한다. 결과는
+`~/db-backups/snapshots/<UTC 시각>/`에 저장되며 **암호화되지 않은 로컬 백업**이다.
+평문 백업의 원격 업로드 기능은 제공하지 않는다.
+원격 백업에는 위 호스트의 암호화 작업을 사용한다.
+
+9월 25일 최초 점검에서 과거 컨테이너·Google Drive 백업의 마지막 성공 기록은
+9월 8일이었고, 운영 문서에 적혀 있던 호스트 `ledger-db-backup.timer`는 존재하지 않았다.
+기존 `~/db-backups/backup.sh`, `restore.sh`는 `localhost`와 과거 인증 설정을
+하드코딩한 구성이라 현재 운영 DB에 사용하지 않는다. 과거 스크립트에는
+업로드 실패가 성공으로 끝나거나 원격 확인 전에 파일을 정리할 수 있는 문제도 있었다.
+
+기존 `ledger_*.sql.gz` 파일을 복구하려면 `set -o pipefail`을 지정하고,
+새 빈 DB에 `gzip -dc <파일> | psql --set=ON_ERROR_STOP=1 --dbname=ledger_restore`로 복원한다.

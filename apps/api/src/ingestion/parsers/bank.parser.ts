@@ -60,12 +60,6 @@ export class GenericBankParser implements StatementParser {
       const txnTypeRaw = (cell(row, columns, 'txnTypeRaw') ?? '').trim() || null;
       const branch = (cell(row, columns, 'branch') ?? '').trim() || null;
 
-      // dedup 키는 '날짜'(시각 제외) 기준 — 시각을 넣으면 재업로드 중복방지가 깨지고
-      // 기존 데이터와도 어긋난다. 시각은 txnAt 에만 담아 정렬/표시에 쓴다.
-      const dateKey = new Date(
-        Date.UTC(txnAt.getUTCFullYear(), txnAt.getUTCMonth(), txnAt.getUTCDate()),
-      ).toISOString();
-
       out.push({
         txnAt,
         txnTypeRaw,
@@ -76,10 +70,10 @@ export class GenericBankParser implements StatementParser {
         branch,
         dedupHash: dedupHash([
           this.issuer,
-          dateKey,
+          account.accountNo,
+          txnAt.toISOString(),
           withdrawal,
           deposit,
-          balance,
           description,
         ]),
       });

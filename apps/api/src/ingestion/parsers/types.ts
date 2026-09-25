@@ -14,6 +14,7 @@ export interface NormalizedBankRow {
 
 /** 정규화된 카드 이용내역 (→ card_transaction) */
 export interface NormalizedCardRow {
+  approvalNo?: string | null; // 원본에 있는 승인번호로 실제 별도 결제를 구분
   cardLabel: string | null;
   cardNo: string | null; // 라벨에서 추출한 카드 식별번호(뒤 4자리) — 카드 목록 매핑 키
   txnDate: Date;

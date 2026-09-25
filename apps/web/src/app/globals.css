@@ -55,7 +55,14 @@ h1,h2,h3,h4 { margin:0; letter-spacing:-.02em; }
 .app { display:grid; grid-template-columns:250px 1fr; min-height:100vh; }
 .sidebar { background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
   border-right:1px solid var(--line); padding:22px 16px;
-  display:flex; flex-direction:column; gap:5px; position:sticky; top:0; height:100vh; }
+  display:flex; flex-direction:column; gap:5px; position:sticky; top:0;
+  height:100vh; height:100dvh; min-height:0; overflow-y:auto; overflow-x:hidden;
+  overscroll-behavior-y:contain; scrollbar-gutter:stable; scrollbar-width:thin;
+  scrollbar-color:var(--faint) transparent; }
+.sidebar > * { flex-shrink:0; }
+.sidebar::-webkit-scrollbar { width:8px; }
+.sidebar::-webkit-scrollbar-thumb { background:var(--faint); border-radius:8px; }
+.sidebar::-webkit-scrollbar-track { background:transparent; }
 .logo { display:flex; align-items:center; gap:12px; padding:6px 6px 18px; }
 .logo .mark { width:42px; height:42px; border-radius:14px; background:var(--grad);
   display:grid; place-items:center; color:#fff; font-weight:800; font-size:20px;
@@ -70,13 +77,24 @@ h1,h2,h3,h4 { margin:0; letter-spacing:-.02em; }
   box-shadow:0 6px 14px -4px rgba(168,85,247,.55); }
 .hh .info { line-height:1.3; flex:1; min-width:0; }
 .hh .info b { font-size:13.5px; } .hh .info span { display:block; font-size:11px; color:var(--muted); }
-.nav-label { font-size:15px; font-weight:800; letter-spacing:-0.01em;
-  color:var(--ink); padding:16px 10px 8px; }
+.sidebar-nav { margin-bottom:14px; }
+.nav-group + .nav-group { margin-top:10px; }
+.nav-group-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px;
+  width:100%; border:0; border-radius:var(--r-sm); background:transparent; text-align:left;
+  font-family:inherit; font-size:15px; font-weight:800; letter-spacing:-.01em;
+  color:var(--ink); padding:12px 10px; cursor:pointer; }
+.nav-group-toggle:hover { background:var(--surface-2); }
+.nav-group-toggle.current { color:var(--brand-ink); }
+.nav-chevron { flex:none; }
+.nav-group-toggle[aria-expanded="false"] .nav-chevron { transform:rotate(-90deg); }
 .nav { display:flex; flex-direction:column; gap:4px; }
-.nav a { display:flex; align-items:center; gap:11px; padding:11px 14px 11px 26px; border-radius:var(--r-sm);
-  color:var(--ink-2); font-size:12.5px; font-weight:600; cursor:pointer; transition:all .14s ease; }
-.nav a:hover { color:var(--ink); box-shadow:var(--nm-out-sm); }
-.nav a.active { color:#fff; background:var(--grad); font-weight:700;
+.nav[hidden] { display:none; }
+.nav-item { display:flex; align-items:center; gap:11px; width:100%; padding:11px 14px 11px 26px;
+  border:0; border-radius:var(--r-sm); background:transparent; text-align:left;
+  color:var(--ink-2); font-family:inherit; font-size:12.5px; line-height:1.5; font-weight:600;
+  cursor:pointer; transition:background .14s ease,color .14s ease,box-shadow .14s ease; }
+.nav-item:hover { color:var(--ink); box-shadow:var(--nm-out-sm); }
+.nav-item.active { color:#fff; background:var(--grad); font-weight:700;
   box-shadow:0 10px 22px -8px rgba(168,85,247,.6), var(--nm-out-sm); }
 .side-foot { margin-top:auto; padding-top:14px; border-top:1px solid var(--line); }
 .userchip { display:flex; align-items:center; gap:10px; padding:10px; border-radius:var(--r-sm);
@@ -214,3 +232,67 @@ button.tree-caret:hover { color:var(--ink); background:var(--surface-3); box-sha
 .cal-foot { border:0; background:transparent; color:var(--brand-ink); cursor:pointer;
   font-size:12.5px; font-weight:600; font-family:inherit; padding:4px 8px; border-radius:8px; }
 .cal-foot:hover { background:var(--surface-3); }
+
+/* 선택 계좌 현금흐름: 기준 예상 → 실적 반영 후 예상 */
+.cashflow-summary { margin-bottom:24px; }
+.cashflow-summary-context,.cashflow-card-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+.cashflow-summary-context { color:var(--ink-2); margin:0 2px 14px; font-size:13px; }
+.cashflow-summary-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.cashflow-flow-card { --flow-color:var(--income); border-top:3px solid var(--flow-color); min-width:0; }
+.cashflow-expense { --flow-color:var(--expense); }
+.cashflow-card-heading h3 { font-size:15px; }
+.cashflow-card-heading>.muted { font-size:12px; }
+.cashflow-label { display:block; color:var(--muted); font-size:12px; font-weight:500; margin-bottom:5px; }
+.cashflow-comparison { display:grid; grid-template-columns:minmax(0,.9fr) 20px minmax(0,1.2fr); gap:12px; align-items:center; margin-top:22px; }
+.cashflow-baseline { display:block; font-size:19px; color:var(--ink-2); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.cashflow-revised { display:block; font-size:28px; line-height:1.25; color:var(--flow-color); font-variant-numeric:tabular-nums; letter-spacing:-.03em; overflow-wrap:anywhere; }
+.cashflow-arrow,.cashflow-plus { color:var(--muted); text-align:center; }
+.cashflow-delta { margin-top:8px; color:var(--ink-2); text-align:right; font-size:12px; }
+.cashflow-components { display:grid; grid-template-columns:1fr 20px 1fr; align-items:center; gap:12px; border-top:1px solid var(--line); padding-top:18px; margin-top:18px; }
+.cashflow-components b { font-size:17px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.cashflow-progress { margin-top:16px; height:9px; border-radius:5px; overflow:hidden; background:repeating-linear-gradient(135deg,var(--surface-3),var(--surface-3) 4px,var(--line-2) 4px,var(--line-2) 8px); }
+.cashflow-progress>span { display:block; height:100%; background:var(--flow-color); }
+.cashflow-progress-caption { display:flex; justify-content:space-between; font-size:10.5px; color:var(--muted); margin-top:5px; }
+.cashflow-footnote { margin:12px 0 0; color:var(--ink-2); font-size:12px; }
+.cashflow-balance-card { margin-top:18px; }
+.cashflow-balance-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) minmax(0,1.3fr); gap:20px; margin-top:20px; }
+.cashflow-balance-grid b { display:block; font-size:19px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.cashflow-balance-grid small { display:block; font-size:11px; color:var(--muted); margin-top:5px; }
+.cashflow-closing strong { display:block; font-size:26px; letter-spacing:-.03em; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.cashflow-net-equation { border-top:1px solid var(--line); margin-top:20px; padding-top:15px; }
+.cashflow-net-equation>div { display:flex; flex-wrap:wrap; align-items:center; gap:14px; color:var(--ink-2); }
+.cashflow-net-equation b { font-size:20px; font-variant-numeric:tabular-nums; }
+.cashflow-net-equation p { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.cashflow-lowest { display:flex; flex-wrap:wrap; gap:7px; margin-top:14px; font-size:12px; color:var(--muted); }
+.cashflow-lowest b { color:var(--warn); font-variant-numeric:tabular-nums; }
+.cashflow-summary-note { margin:14px 2px 8px; font-size:12px; line-height:1.7; color:var(--ink-2); }
+.cashflow-uncertain { padding:10px 12px; border:1px solid var(--line); border-radius:10px; font-size:12px; color:var(--muted); }
+.cashflow-uncertain summary { cursor:pointer; }
+.cashflow-uncertain p { margin:8px 0 0; line-height:1.6; }
+.cashflow-detail-heading { display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:16px; }
+.cashflow-detail-heading h3 { font-size:15px; }
+.cashflow-detail-heading p { font-size:12px; color:var(--muted); margin:5px 0 0; }
+.cashflow-reference { margin:0 0 18px; padding:15px 20px; background:var(--surface-2); border:1px dashed var(--line-2); border-radius:var(--r); }
+.cashflow-reference summary { cursor:pointer; color:var(--ink-2); font-size:13px; font-weight:600; }
+.cashflow-reference p { font-size:12px; color:var(--muted); }
+@media(max-width:1100px) { .cashflow-summary-grid { grid-template-columns:1fr; } .cashflow-balance-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:540px) { .cashflow-revised { font-size:23px; } .cashflow-baseline { font-size:16px; } .cashflow-comparison,.cashflow-components { gap:8px; } .cashflow-components b { font-size:15px; } .cashflow-balance-grid { gap:18px 10px; } .cashflow-closing strong { font-size:22px; } }
+.cashflow-spending-equation { margin:14px 2px 20px; color:var(--ink-2); font-size:12px; line-height:1.7; }
+.cashflow-spending-equation p { margin:4px 0; }
+.cashflow-tabs { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0 16px; }
+.cashflow-tabs [aria-selected="true"] { box-shadow:var(--nm-in); color:var(--brand-ink); border-color:var(--brand); }
+.cashflow-occurrences { font-size:11px; margin-top:5px; color:var(--ink-2); min-width:100px; }
+.cashflow-occurrences summary { cursor:pointer; }
+.cashflow-occurrences div { padding:5px 0; border-bottom:1px solid var(--line); }
+
+
+/* 월별 거래 추이 — 그래프별 조회 기간 합계 */
+.trend-summary { padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid var(--line); }
+.trend-summary-period { display:flex; flex-wrap:wrap; gap:6px 12px; margin-bottom:12px; color:var(--ink-2); font-size:12px; font-weight:600; }
+.trend-summary-period span { color:var(--muted); font-weight:400; }
+.trend-summary-items { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr)); gap:12px; margin:0; }
+.trend-summary-item { min-width:0; padding:14px 16px; border-radius:var(--r-sm); background:var(--surface-2); }
+.trend-summary-item dt { display:flex; align-items:center; gap:8px; color:var(--ink-2); font-size:12px; overflow-wrap:anywhere; }
+.trend-summary-dot { flex:none; width:9px; height:9px; border-radius:3px; }
+.trend-summary-item dd { margin:8px 0 0; font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.02em; overflow-wrap:anywhere; }
+.trend-summary-prominent .trend-summary-item dd { font-size:28px; }

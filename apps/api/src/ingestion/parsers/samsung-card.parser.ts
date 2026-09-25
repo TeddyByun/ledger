@@ -1,5 +1,6 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
+import { parseCardApprovals } from './card-approvals.js';
+import { parseAmount, parseDateTime } from './tabular.js';
 import { cell, dedupHash, locateHeader } from './generic.js';
 import type {
   FieldAliasMap,
@@ -38,6 +39,8 @@ export class SamsungCardParser implements StatementParser {
   readonly issuer = Issuer.SAMSUNG_CARD;
 
   parse(rows: string[][], ctx: ParseContext): ParseResult {
+    const approvals = parseCardApprovals(rows, { ...ctx, issuer: this.issuer });
+    if (approvals) return approvals;
     const { headerIndex, columns } = locateHeader(rows, ALIASES);
     const out: NormalizedCardRow[] = [];
     let lastInstallment: NormalizedCardRow | null = null;
@@ -85,7 +88,7 @@ export class SamsungCardParser implements StatementParser {
         continue;
       }
 
-      const txnDate = parseDate(cell(row, columns, 'txnDate'));
+      const txnDate = parseDateTime(cell(row, columns, 'txnDate'));
       if (!txnDate) continue;
 
       const usageAmount = parseAmount(cell(row, columns, 'usageAmount')) ?? 0;

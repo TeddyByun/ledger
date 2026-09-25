@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
+import { cardAmounts } from '@ledger/shared';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StatisticsService } from '../statistics/statistics.service.js';
@@ -619,15 +620,19 @@ export class StatementTxnService {
   /** 카드 조회 조건에 해당하는 전체 거래의 합계(이용금액·결제금액=원금+수수료·건수). */
   async findCardSummary(query: StatementTxnQueryDto) {
     const where = await this.buildCardWhere(query);
-    const agg = await this.prisma.cardTransaction.aggregate({
+    const rows = await this.prisma.cardTransaction.findMany({
       where,
-      _sum: { usageAmount: true, principal: true, fee: true },
-      _count: true,
+      select: { usageAmount: true, principal: true, fee: true, installmentPeriod: true, isCanceled: true },
     });
-    const usageAmount = Number(agg._sum.usageAmount ?? 0);
-    const payAmount =
-      Number(agg._sum.principal ?? 0) + Number(agg._sum.fee ?? 0);
-    return { count: agg._count, usageAmount, payAmount };
+    // 할인을 수수료와 상계하면 실제 할인액이 줄어 보이므로 각 항목을 따로 합산한다.
+    return rows.reduce((sum, row) => {
+      const amounts = cardAmounts(row);
+      sum.usageAmount += amounts.usageAmount;
+      sum.discountAmount += amounts.discountAmount;
+      sum.feeAmount += amounts.feeAmount;
+      sum.payAmount += amounts.payAmount;
+      return sum;
+    }, { count: rows.length, usageAmount: 0, discountAmount: 0, feeAmount: 0, payAmount: 0 });
   }
 
   /**
@@ -943,11 +948,11 @@ export class StatementTxnService {
       { header: '할부회차', key: 'round', width: 10 },
       { header: '이용금액', key: 'usage', width: 14 },
       { header: '할인금액', key: 'discount', width: 12 },
+      { header: '수수료(이자)', key: 'fee', width: 14 },
       { header: '결제금액', key: 'pay', width: 14 },
     ];
     for (const c of rows) {
-      const usage = Number(c.usageAmount);
-      const pay = Number(c.principal) + Number(c.fee);
+      const amounts = cardAmounts(c);
       const hasInst = /\d/.test(c.installmentPeriod ?? '');
       ws.addRow({
         date: c.txnDate.toISOString().slice(0, 10),
@@ -956,12 +961,13 @@ export class StatementTxnService {
         category: c.transaction?.category?.name ?? '',
         months: hasInst ? `${c.installmentPeriod}개월` : '일시불',
         round: hasInst && /\d/.test(c.billingRound ?? '') ? c.billingRound : '',
-        usage,
-        discount: usage - pay, // +는 할인, -는 수수료
-        pay,
+        usage: amounts.usageAmount,
+        discount: -amounts.discountAmount || 0, // 화면과 동일하게 할인은 차감 부호로 표시
+        fee: amounts.feeAmount,
+        pay: amounts.payAmount,
       });
     }
-    formatSheet(ws, ['G', 'H', 'I']);
+    formatSheet(ws, ['G', 'H', 'I', 'J']);
     return Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer);
   }
 

@@ -3,11 +3,41 @@
  *
  * 여기서 깨지면 모든 발급사 파서가 함께 틀어지므로 최우선 회귀 지점이다.
  */
+import * as XLSX from 'xlsx';
 import {
+  readTabular,
   parseAmount,
   parseDate,
   parseDateTime,
 } from '../../../src/ingestion/parsers/tabular.js';
+
+describe('readTabular — 실제 엑셀 형식', () => {
+  it.each(['xlsx', 'biff8'] as const)('%s의 셀 값과 여러 시트를 유지한다', async (bookType) => {
+    const wb = XLSX.utils.book_new();
+    const first = [['이용가맹점', '이용금액'], ['테스트 </td   >', 12_500]];
+    const second = [['이용가맹점', '이용금액'], ['테스트카페', -1_000]];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(first), '일시불');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(second), '할부');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType }) as Buffer;
+
+    const rows = await readTabular(buffer, bookType === 'xlsx' ? 'test.xlsx' : 'test.xls');
+
+    expect(rows).toEqual([...first, ...second].map((row) => row.map(String)));
+  });
+});
+
+describe('엑셀 날짜 셀의 원래 일시', () => {
+  it.each(['xlsx', 'biff8'] as const)('%s에 날짜만 표시되어도 숨겨진 시각을 보존한다', async (bookType) => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([['이용일'], [null], [''], [46247 + (10 * 3600 + 12 * 60) / 86400]]);
+    ws['A4']!.z = 'm/d/yy';
+    XLSX.utils.book_append_sheet(wb, ws, '내역');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType }) as Buffer;
+    const rows = await readTabular(buffer, bookType === 'xlsx' ? 'test.xlsx' : 'test.xls');
+    const date = rows.map((r) => parseDateTime(r[0])).find(Boolean);
+    expect(date?.toISOString()).toBe('2026-08-13T10:12:00.000Z');
+  });
+});
 
 describe('parseAmount', () => {
   it.each([
@@ -45,6 +75,10 @@ describe('parseDate — 발급사별 표기 정규화', () => {
     ['2026/03/01', utc(2026, 3, 1)],
     ['2026년 03월 01일', utc(2026, 3, 1)],
     ['20260301', utc(2026, 3, 1)], // 삼성 무구분자
+    ['8/13/26', utc(2026, 8, 13)],
+    ['8/1/26', utc(2026, 8, 1)],
+    ['12/31/2026', utc(2026, 12, 31)],
+    ['26/08/13', utc(2026, 8, 13)],
     ['26-01-04', utc(2026, 1, 4)], // 2자리 연도
   ])('%s 를 파싱한다', (raw, expected) => {
     expect(parseDate(raw)).toEqual(expected);
@@ -62,16 +96,11 @@ describe('parseDate — 발급사별 표기 정규화', () => {
     expect(parseDate('합계')).toBeNull();
   });
 
-  // ── 알려진 미구현 (감사보고서 '미검증 저순위' — tabular.ts:106) ──
-  // test.failing 은 본문이 실패할 때 통과한다. 구현이 고쳐지면 이 테스트가
-  // 빨개지므로, 그때 `.failing` 을 떼면 정상 회귀 테스트가 된다.
-  it.failing('2자리 연도 + 시각 조합을 파싱한다 (미구현)', () => {
-    // 2자리 연도 정규식이 `$` 로 끝나 뒤에 시각이 붙으면 매칭에 실패한다.
+  it('2자리 연도 + 시각 조합을 파싱한다', () => {
     expect(parseDate('26.03.15 14:22')).toEqual(utc(2026, 3, 15));
   });
 
-  it.failing('월·일 범위를 검증한다 (미구현)', () => {
-    // 현재는 Date.UTC 가 자동 롤오버해 2027-02-14 같은 엉뚱한 날짜가 된다.
+  it('월·일 범위를 검증한다', () => {
     expect(parseDate('2026.13.45')).toBeNull();
   });
 });
@@ -87,9 +116,7 @@ describe('parseDateTime — 은행 거래일시', () => {
     expect(parseDateTime('2026-03-21')?.toISOString()).toBe('2026-03-21T00:00:00.000Z');
   });
 
-  it('비정상 시각은 무시하고 날짜만 반환', () => {
-    expect(parseDateTime('2026-03-21 99:99')?.toISOString()).toBe(
-      '2026-03-21T00:00:00.000Z',
-    );
+  it('비정상 시각을 자정으로 조작하지 않는다', () => {
+    expect(parseDateTime('2026-03-21 99:99')).toBeNull();
   });
 });

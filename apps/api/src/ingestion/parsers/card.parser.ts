@@ -1,5 +1,5 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
+import { parseAmount, parseDateTime } from './tabular.js';
 import { cell, dedupHash, locateHeader } from './generic.js';
 import type {
   FieldAliasMap,
@@ -40,7 +40,7 @@ export class GenericCardParser implements StatementParser {
     if (headerIndex >= 0) {
       for (let i = headerIndex + 1; i < rows.length; i++) {
         const row = rows[i]!;
-        const txnDate = parseDate(cell(row, columns, 'txnDate'));
+        const txnDate = parseDateTime(cell(row, columns, 'txnDate'));
         const merchant = (cell(row, columns, 'merchantName') ?? '').trim();
         if (!txnDate || !merchant) continue; // 소계/합계/공백 행 skip
 

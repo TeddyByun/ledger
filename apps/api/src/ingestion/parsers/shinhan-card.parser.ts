@@ -1,6 +1,6 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
-import { dedupHash } from './generic.js';
+import { parseAmount, parseDateTime } from './tabular.js';
+import { dedupHash, locateHeader } from './generic.js';
 import type {
   NormalizedCardRow,
   ParseContext,
@@ -36,12 +36,22 @@ export class ShinhanCardParser implements StatementParser {
   readonly issuer = Issuer.SHINHAN_CARD;
 
   parse(rows: string[][], ctx: ParseContext): ParseResult {
+    // 다음달 예정 명세서는 정식 명세서와 열 순서·이름이 다르다.
+    const upcoming = locateHeader(rows, {
+      txnDate: ['거래일자'], cardLabel: ['이용카드'], merchant: ['이용가맹점'],
+      usageAmount: ['거래금액'], installmentPeriod: ['이용개월'],
+      billingRound: ['청구회차'], principal: ['결제금액'],
+      fee: ['수수료(이자)'], saleType: ['거래구분'],
+    });
+    const isUpcoming = upcoming.columns.txnDate !== undefined &&
+      upcoming.columns.usageAmount !== undefined && upcoming.columns.principal !== undefined;
+    const columns = isUpcoming ? upcoming.columns : COL;
     const statementYm = this.extractYm(rows, ctx);
     const billingDate = this.extractBillingDate(rows, statementYm);
     const total = this.extractTotal(rows);
 
     // 상세내역 헤더("이용일" + "이용가맹점") 위치
-    const h = rows.findIndex(
+    const h = isUpcoming ? upcoming.headerIndex : rows.findIndex(
       (r) => r.some((c) => c.includes('이용일')) && r.some((c) => c.includes('이용가맹점')),
     );
     const out: NormalizedCardRow[] = [];
@@ -51,33 +61,35 @@ export class ShinhanCardParser implements StatementParser {
     const usageFallbackDate =
       rows
         .slice(h + 1)
-        .map((r) => parseDate(r?.[COL.txnDate]))
+        .map((r) => parseDateTime(r?.[columns.txnDate!]))
         .filter((d): d is Date => d != null)
-        .sort((a, b) => b.getTime() - a.getTime())[0] ?? billingDate;
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 
     for (let i = h + 1; i < rows.length && h >= 0; i++) {
       const row = rows[i]!;
-      const merchantRaw = (row[COL.merchant] ?? '').trim();
+      const merchantRaw = (row[columns.merchant!] ?? '').trim();
       // 가맹점명 끝의 마스킹된 카드번호 제거: "기본연회비****-****-****-253*" → "기본연회비"
       const merchant = merchantRaw.replace(/\*{3,}.*$/, '').trim();
       if (!merchant || /합계|소계/.test(merchant)) continue;
 
-      const label = norm(row[COL.cardLabel]); // 본인253 / 가족160
+      const label = norm(row[columns.cardLabel!]); // 본인253 / 가족160
       // 이용카드가 본인/가족(카드) 행만 거래로 인정 → 할인/요약 섹션 제외
       if (!label || !/(본인|가족)/.test(label)) continue;
       const cardNo = label.match(/\d+/)?.[0] ?? null;
 
-      // 연회비 등 이용일이 비어있는 청구 행도 누락 없이 반영 → 최근 이용일(사용월)로 귀속
-      const txnDate = parseDate(row[COL.txnDate]) ?? usageFallbackDate;
-      if (!txnDate) continue;
+      // 일반 거래의 날짜를 읽지 못하면 업로드 전체를 중단한다. 청구월 1일로 대체하지 않는다.
+      const rawDate = (row[columns.txnDate!] ?? '').trim();
+      const datedAdjustment = !rawDate && /연회비|미리입금|포인트.*납부|할인.*금액/.test(merchant);
+      const txnDate = parseDateTime(rawDate) ?? (datedAdjustment ? usageFallbackDate : null);
+      if (!txnDate) throw new Error(`신한카드 ${i + 1}행(${merchant})의 이용일 '${rawDate || '빈 값'}'을 읽을 수 없습니다. 거래일을 임의로 대체하지 않았습니다.`);
 
-      const rawUsage = parseAmount(row[COL.usageAmount]) ?? 0;
-      const principal = parseAmount(row[COL.principal]) ?? 0;
-      const fee = parseAmount(row[COL.fee]) ?? 0;
+      const rawUsage = parseAmount(row[columns.usageAmount!]) ?? 0;
+      const principal = parseAmount(row[columns.principal!]) ?? 0;
+      const fee = parseAmount(row[columns.fee!]) ?? 0;
       // 해외이용: 이용금액 칸이 외화(원금보다 작음) → 원화 원금을 이용금액으로.
       const isOverseas = principal > 0 && rawUsage > 0 && rawUsage < principal;
       const usageAmount = isOverseas ? principal : rawUsage;
-      const saleType = norm(row[COL.saleType]);
+      const saleType = norm(row[columns.saleType!]);
       const isCanceled = saleType === '취소' || rawUsage < 0;
 
       out.push({
@@ -88,8 +100,11 @@ export class ShinhanCardParser implements StatementParser {
         usageAmount,
         principal,
         fee,
-        installmentPeriod: norm(row[COL.installmentPeriod]),
-        billingRound: norm(row[COL.billingRound]),
+        // 예정 명세서는 일시불의 개월·회차를 0으로 기록한다.
+        installmentPeriod: isUpcoming && Number(row[columns.installmentPeriod!]) <= 1
+          ? null : norm(row[columns.installmentPeriod!]),
+        billingRound: isUpcoming && Number(row[columns.billingRound!]) <= 0
+          ? null : norm(row[columns.billingRound!]),
         benefitType: saleType, // 할인/취소
         benefitAmount: 0, // 신한은 원금에 할인 반영(별도 금액 미제공)
         region: isOverseas ? '해외' : null,
@@ -103,6 +118,8 @@ export class ShinhanCardParser implements StatementParser {
           usageAmount,
           principal,
           cardNo,
+          norm(row[columns.installmentPeriod!]),
+          norm(row[columns.billingRound!]),
         ]),
       });
     }
@@ -139,7 +156,7 @@ export class ShinhanCardParser implements StatementParser {
           return new Date(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!));
         }
       }
-    return ym ? new Date(`${ym}-01T00:00:00Z`) : null;
+    return null;
   }
 
   /** "입금할 금액 … 802748" → 합계. */

@@ -5,7 +5,8 @@ import { api } from '@/lib/api';
 import { TrendChart, type TrendMonth, type TrendSeries } from '@/components/TrendChart';
 import { StackedBarChart, type StackSeries } from '@/components/StackedBarChart';
 import { GroupedBarChart } from '@/components/GroupedBarChart';
-import { buildColorMap } from '@/components/chart-utils';
+import { won } from '@/lib/format';
+import { buildColorMap, colorOf } from '@/components/chart-utils';
 import type { View } from '@/components/Shell';
 import { MonthPicker } from '@/components/MonthPicker';
 
@@ -30,25 +31,33 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
     const p = new URLSearchParams();
     if (f.from) p.set('from', f.from);
     if (f.to) p.set('to', f.to);
-    const d = await api.get<{
+    return api.get<{
       months: TrendMonth[];
       series: TrendSeries[];
       paymentSeries: StackSeries[];
     }>(`/stats/monthly-trend?${p.toString()}`);
-    setTrend(d.months);
-    setTrendSeries(d.series ?? []);
-    setPaymentSeries(d.paymentSeries ?? []);
   }, []);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
     setError(null);
     load(applied)
+      .then((data) => {
+        if (!active) return;
+        setTrend(data.months);
+        setTrendSeries(data.series ?? []);
+        setPaymentSeries(data.paymentSeries ?? []);
+      })
       .catch((e) => {
+        if (!active) return;
         setTrend(null);
+        setTrendSeries([]);
+        setPaymentSeries([]);
         setError((e as Error).message);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [applied, load]);
 
   const search = () => setApplied(draft);
@@ -59,12 +68,15 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
   };
 
   const range =
-    trend && trend.length > 0 ? `${trend[0]!.ym} ~ ${trend[trend.length - 1]!.ym}` : '올해';
+    trend && trend.length > 0 ? `${trend[0]!.ym} ~ ${trend[trend.length - 1]!.ym}` : `${applied.from || '올해 1월'} ~ ${applied.to || '이번 달'}`;
 
   // 분류 색을 한 번만 배정해 두 차트(누적/비교)가 같은 분류에 같은 색을 쓰게 한다.
   // '기타'는 회색이고 팔레트 슬롯을 소비하지 않아 8색을 넘겨 순환하지 않는다.
   const catColors = buildColorMap(trendSeries.map((s) => s.key));
   const expenseSeries = trendSeries.filter((s) => s.type === 'expense');
+  const totalIncome = (trend ?? []).reduce((sum, month) => sum + month.income, 0);
+  const totalExpense = (trend ?? []).reduce((sum, month) => sum + month.expense, 0);
+  const sumValues = (values: number[]) => values.reduce((sum, value) => sum + value, 0);
 
   return (
     <>
@@ -127,7 +139,7 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
           <div className="card">
             <div className="skeleton" style={{ height: 120 }} />
           </div>
-        ) : (
+        ) : error ? null : (
           <>
             {/* 1. 월별 수입·지출 (분류별 누적) */}
             <Section
@@ -135,10 +147,14 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
               sub="월마다 왼쪽=수입, 오른쪽=지출. 각 막대는 분류별로 누적되며 전체 높이가 그 달 총액입니다."
               empty={!trend || trend.every((m) => m.income === 0 && m.expense === 0)}
               emptyMsg="집계할 거래가 없습니다."
+              summary={(
+                <PeriodSummary range={range} prominent items={[
+                  { key: 'income', label: '총 수입금액', amount: totalIncome, color: 'var(--income)' },
+                  { key: 'expense', label: '총 지출금액', amount: totalExpense, color: 'var(--expense)' },
+                ]} />
+              )}
             >
-              <div className="card">
-                {trend && <TrendChart data={trend} series={trendSeries} colors={catColors} />}
-              </div>
+              {trend && <TrendChart data={trend} series={trendSeries} colors={catColors} />}
             </Section>
 
             {/* 2. 결제수단별 월별 지출 (누적) */}
@@ -147,16 +163,22 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
               sub="월별 총지출을 결제수단(계좌·카드)별로 누적. 막대 전체 높이가 그 달 총지출입니다."
               empty={!trend || paymentSeries.length === 0}
               emptyMsg="집계할 지출이 없습니다."
+              summary={(
+                <PeriodSummary range={range} items={paymentSeries.map((series, index) => ({
+                  key: series.key,
+                  label: series.name,
+                  amount: sumValues(series.values),
+                  color: colorOf(series.key, index),
+                }))} />
+              )}
             >
-              <div className="card">
-                {trend && (
-                  <StackedBarChart
-                    months={trend.map((m) => m.ym)}
-                    series={paymentSeries}
-                    unitLabel="지출"
-                  />
-                )}
-              </div>
+              {trend && (
+                <StackedBarChart
+                  months={trend.map((m) => m.ym)}
+                  series={paymentSeries}
+                  unitLabel="지출"
+                />
+              )}
             </Section>
 
             {/* 3. 대분류별 월별 지출 비교 (그룹 막대) */}
@@ -165,21 +187,27 @@ export function Dashboard(_props: { onNavigate: (v: View) => void }) {
               sub="월마다 대분류 막대가 나란히 표시되어 분류 간 지출 규모를 비교할 수 있습니다."
               empty={!trend || expenseSeries.length === 0}
               emptyMsg="집계할 지출이 없습니다."
+              summary={(
+                <PeriodSummary range={range} items={expenseSeries.map((series) => ({
+                  key: series.key,
+                  label: series.name,
+                  amount: sumValues(series.values),
+                  color: catColors[series.key]!,
+                }))} />
+              )}
             >
-              <div className="card">
-                {trend && (
-                  <GroupedBarChart
-                    months={trend.map((m) => m.ym)}
-                    series={expenseSeries.map((s) => ({
-                      key: s.key,
-                      name: s.name,
-                      values: s.values,
-                    }))}
-                    colors={catColors}
-                    unitLabel="지출"
-                  />
-                )}
-              </div>
+              {trend && (
+                <GroupedBarChart
+                  months={trend.map((m) => m.ym)}
+                  series={expenseSeries.map((s) => ({
+                    key: s.key,
+                    name: s.name,
+                    values: s.values,
+                  }))}
+                  colors={catColors}
+                  unitLabel="지출"
+                />
+              )}
             </Section>
           </>
         )}
@@ -193,31 +221,59 @@ function Section({
   sub,
   empty,
   emptyMsg,
+  summary,
   children,
 }: {
   title: string;
   sub: string;
   empty: boolean;
   emptyMsg: string;
+  summary: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div style={{ marginBottom: 22 }}>
+    <section aria-label={title} style={{ marginBottom: 22 }}>
       <div style={{ marginBottom: 10 }}>
         <h2 style={{ fontSize: 16, margin: 0 }}>{title}</h2>
         <div className="muted" style={{ fontSize: 12 }}>
           {sub}
         </div>
       </div>
-      {empty ? (
-        <div className="card">
+      <div className="card">
+        {summary}
+        {empty ? (
           <div className="empty">
             <p>{emptyMsg}</p>
           </div>
-        </div>
-      ) : (
-        children
-      )}
+        ) : children}
+      </div>
+    </section>
+  );
+}
+
+
+function PeriodSummary({ range, items, prominent = false }: {
+  range: string;
+  items: { key: string; label: string; amount: number; color: string }[];
+  prominent?: boolean;
+}) {
+  const totals = items.length ? items : [
+    { key: 'empty', label: '총 지출금액', amount: 0, color: 'var(--expense)' },
+  ];
+  return (
+    <div className={`trend-summary${prominent ? ' trend-summary-prominent' : ''}`} role="group" aria-label="조회 기간 합계">
+      <div className="trend-summary-period">조회 기간 합계 <span>{range}</span></div>
+      <dl className="trend-summary-items">
+        {totals.map((item) => (
+          <div className="trend-summary-item" key={item.key}>
+            <dt>
+              <span className="trend-summary-dot" style={{ background: item.color }} aria-hidden="true" />
+              {item.label}
+            </dt>
+            <dd style={prominent ? { color: item.color } : undefined}>₩{won(item.amount)}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

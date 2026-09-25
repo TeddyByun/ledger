@@ -16,13 +16,13 @@ export class StatisticsController {
 
   @Get('cashflow')
   @ApiOperation({
-    summary: '월 현금흐름 — 예상 수입·지출 + 일자별 잔액(은행 기준, 카드는 전월 이용액→카드대금)',
+    summary: '기준 통장 합산 현금흐름과 은행·카드 소비 기준 예상',
   })
   @ApiQuery({ name: 'ym', required: false, example: '2026-08' })
   @ApiQuery({
     name: 'accountId',
     required: false,
-    description: '기준 은행 계좌 ID. 미지정 시 거래가 가장 많은 주 거래 계좌',
+    description: '하위 호환용. 현재는 결제수단에서 집계 제외하지 않은 기준 통장을 모두 합산합니다.',
   })
   @ApiQuery({
     name: 'ignoreActual',
@@ -42,7 +42,7 @@ export class StatisticsController {
   }
 
   @Get('forecast')
-  @ApiOperation({ summary: '예상 지출 — 규칙 엔진(정기/할부/공과/경조/변동)' })
+  @ApiOperation({ summary: '소비 예상 지출 — 기준 통장 외부 출금(카드대금 제외) + 금월 카드 거래' })
   @ApiQuery({ name: 'ym', required: false, example: '2026-07' })
   forecast(@Query('ym') ym?: string) {
     return this.forecastSvc.forecast(ym);

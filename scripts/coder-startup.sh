@@ -49,11 +49,14 @@ wait_tcp() {
   done
   return 1
 }
-if wait_tcp 127.0.0.1 5432 60; then
-  log "postgres:5432 준비됨"
-else
-  log "WARN postgres:5432 미도달 — API 가 재시도할 수 있음 (docker compose up -d 확인 필요)"
-fi
+for dependency_port in 5432 6379; do
+  if wait_tcp host.docker.internal "$dependency_port" 60; then
+    log "host.docker.internal:$dependency_port 준비됨"
+  else
+    log "ERROR 호스트 서비스 $dependency_port 미도달"
+    exit 1
+  fi
+done
 
 # ── 3) 빌드 산출물 확인 (없으면 빌드) ────────────────────────────
 if [ ! -f "$ROOT/apps/api/dist/main.js" ]; then
@@ -80,4 +83,8 @@ for _ in $(seq 1 30); do
 done
 log "헬스체크 — api:$([ $ok_api -eq 1 ] && echo OK || echo FAIL) web:$([ $ok_web -eq 1 ] && echo OK || echo FAIL)"
 pm2 status --no-color 2>/dev/null | sed 's/^/    /'
+if [ "$ok_api" -ne 1 ] || [ "$ok_web" -ne 1 ]; then
+  log "ERROR 헬스체크 실패"
+  exit 1
+fi
 log "startup 완료"

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useId, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import type { View } from '@/components/Shell';
 
@@ -39,7 +40,19 @@ export function Sidebar({
   const user = session?.user;
   const nav = user?.isSuperAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
 
-  let lastGroup = '';
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const menuId = useId();
+  const groups = [...new Set(nav.map((item) => item.group))];
+  const activeGroup = nav.find((item) => item.view === view)?.group;
+
+  // 본문 바로가기로 이동한 경우에도 현재 메뉴가 접힌 그룹 안에 숨지 않도록 한다.
+  useEffect(() => {
+    if (activeGroup) {
+      setCollapsedGroups((current) => current[activeGroup]
+        ? { ...current, [activeGroup]: false }
+        : current);
+    }
+  }, [view, activeGroup]);
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -57,23 +70,44 @@ export function Sidebar({
         </div>
       </div>
 
-      {nav.map((item) => {
-        const showLabel = item.group !== lastGroup;
-        lastGroup = item.group;
-        return (
-          <div key={item.view}>
-            {showLabel && <div className="nav-label">{item.group}</div>}
-            <nav className="nav">
-              <a
-                className={view === item.view ? 'active' : ''}
-                onClick={() => onNavigate(item.view)}
+      <nav className="sidebar-nav" aria-label="주 메뉴">
+        {groups.map((group, index) => {
+          const expanded = !collapsedGroups[group];
+          const panelId = `${menuId}-group-${index}`;
+          return (
+            <div className="nav-group" key={group}>
+              <button
+                type="button"
+                className={`nav-group-toggle${activeGroup === group ? ' current' : ''}`}
+                aria-expanded={expanded}
+                aria-controls={panelId}
+                onClick={() => setCollapsedGroups((current) => ({
+                  ...current,
+                  [group]: !current[group],
+                }))}
               >
-                {item.label}
-              </a>
-            </nav>
-          </div>
-        );
-      })}
+                <span>{group}</span>
+                <svg className="nav-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="m4 6 4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <div className="nav" id={panelId} hidden={!expanded}>
+                {nav.filter((item) => item.group === group).map((item) => (
+                  <button
+                    type="button"
+                    key={item.view}
+                    className={`nav-item${view === item.view ? ' active' : ''}`}
+                    aria-current={view === item.view ? 'page' : undefined}
+                    onClick={() => onNavigate(item.view)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
 
       <div className="side-foot">
         <div className="userchip">

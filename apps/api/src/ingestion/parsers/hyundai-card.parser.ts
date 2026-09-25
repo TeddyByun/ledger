@@ -1,6 +1,6 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
-import { cell, dedupHash, locateHeader } from './generic.js';
+import { parseAmount, parseDateTime } from './tabular.js';
+import { cell, dedupHash, locateHeader, type ColumnMap } from './generic.js';
 import type {
   FieldAliasMap,
   NormalizedCardRow,
@@ -42,8 +42,8 @@ export class HyundaiCardParser implements StatementParser {
 
   parse(rows: string[][], ctx: ParseContext): ParseResult {
     const statementYm = this.extractYm(rows, ctx);
-    const { total, count } = this.extractTotal(rows);
     const { headerIndex, columns } = locateHeader(rows, ALIASES);
+    const { total, count } = this.extractTotal(rows, columns);
     const out: NormalizedCardRow[] = [];
 
     for (let i = headerIndex + 1; i < rows.length; i++) {
@@ -54,7 +54,7 @@ export class HyundaiCardParser implements StatementParser {
       // 소계/합계 행 스킵
       if (!merchant || /소계|합계/.test(merchant)) continue;
 
-      let txnDate = parseDate(rawDate);
+      let txnDate = parseDateTime(rawDate);
       if (!txnDate && /^\d{4,6}$/.test(rawDate)) {
         const n = Number(rawDate);
         if (n > 40000 && n < 60000) txnDate = excelSerialToDate(n);
@@ -81,7 +81,8 @@ export class HyundaiCardParser implements StatementParser {
       }
 
       out.push({
-        cardLabel: norm(cell(row, columns, 'cardLabel')),
+        // 예정 명세서의 본인V/본인L도 정식 명세서와 같은 카드로 매칭한다.
+        cardLabel: norm(cell(row, columns, 'cardLabel'))?.replace(/^(본인|가족)[VL](?=\s)/, '$1') ?? null,
         cardNo: null, // 현대 명세서는 이용카드에 번호 없음
         txnDate,
         merchantName: merchant,
@@ -135,16 +136,16 @@ export class HyundaiCardParser implements StatementParser {
   }
 
   /** "총 합계 32 건 … 781446" → 합계·건수. */
-  private extractTotal(rows: string[][]): { total: number | null; count: number | null } {
+  private extractTotal(rows: string[][], columns: ColumnMap): { total: number | null; count: number | null } {
     for (const row of rows) {
       const joined = row.join(' ');
       if (/총\s*합계/.test(joined)) {
         const cnt = joined.match(/(\d+)\s*건/);
-        const nums = row
-          .map((c) => parseAmount(c))
-          .filter((n): n is number => n !== null && n > 0);
+        const principal = parseAmount(cell(row, columns, 'principal'));
+        const fee = parseAmount(cell(row, columns, 'fee')) ?? 0;
         return {
-          total: nums.length ? Math.max(...nums) : null,
+          // 할부 잔액이 청구액보다 클 수 있으므로 결제원금 열에서 읽는다.
+          total: principal === null ? null : principal + fee,
           count: cnt ? +cnt[1]! : null,
         };
       }

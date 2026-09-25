@@ -55,3 +55,11 @@ uploads/
 .claude/settings.local.json
 감사보고서.md
 메모-채성.md
+
+# 백업 데이터·복구 키·Python 실행 캐시
+*.dump
+*.sql.gz
+*.tar.gpg
+**/recovery.key
+**/rclone.conf
+__pycache__/

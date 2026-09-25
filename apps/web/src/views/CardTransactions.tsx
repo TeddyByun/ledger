@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { cardAmounts } from '@ledger/shared';
 import { api } from '@/lib/api';
 import { won } from '@/lib/format';
 import { useSort, SortTh } from '@/components/sortable';
@@ -28,6 +29,8 @@ const EMPTY: Filters = {
 interface CardSummary {
   count: number;
   usageAmount: number;
+  discountAmount: number;
+  feeAmount: number;
   payAmount: number;
 }
 interface ConflictItem {
@@ -258,7 +261,7 @@ export function CardTransactions() {
         <div className="page-head">
           <div className="titles">
             <h1>카드 거래 내역</h1>
-            <p>카드 이용내역 · 결제금액(원금+수수료). 조건으로 검색하세요.</p>
+            <p>할인은 차감하고 수수료·이자는 별도로 더합니다. 할부 금액은 이번 회차 기준입니다.</p>
           </div>
           <div className="actions">
             <button className="btn" onClick={exportXlsx}>
@@ -421,7 +424,7 @@ export function CardTransactions() {
         )}
 
         <div className="tbl-wrap">
-          <table className="tbl">
+          <table className="tbl" style={{ minWidth: 1180 }}>
             <thead>
               <tr>
                 <th style={{ width: 32, textAlign: 'center' }}>
@@ -440,19 +443,20 @@ export function CardTransactions() {
                 <SortTh col="round" sort={sort} onSort={toggle}>할부회차</SortTh>
                 <SortTh col="usage" sort={sort} onSort={toggle} align="right">이용금액</SortTh>
                 <th style={{ textAlign: 'right' }}>할인금액</th>
+                <th style={{ textAlign: 'right' }}>수수료(이자)</th>
                 <SortTh col="pay" sort={sort} onSort={toggle} align="right">결제금액</SortTh>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} style={{ padding: 24 }}>
+                  <td colSpan={11} style={{ padding: 24 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={10}>
+                  <td colSpan={11}>
                     <div className="empty">
                       <h3>카드 거래가 없습니다</h3>
                       <p>조건을 바꾸거나 “명세서 업로드”에서 카드 명세서를 올리세요.</p>
@@ -461,8 +465,7 @@ export function CardTransactions() {
                 </tr>
               ) : (
                 items.map((c) => {
-                  const pay = Number(c.principal) + Number(c.fee);
-                  const discount = Number(c.usageAmount) - pay; // 할인 = 이용금액 − 결제금액
+                  const { usageAmount: usage, discountAmount: discount, feeAmount: fee, payAmount: pay } = cardAmounts(c);
                   return (
                     <tr
                       key={c.id}
@@ -500,25 +503,19 @@ export function CardTransactions() {
                       <td className="muted">{installmentMonths(c)}</td>
                       <td className="muted">{installmentRound(c)}</td>
                       <td className="money" style={{ color: 'var(--ink-2)' }}>
-                        {signed(Number(c.usageAmount))}
+                        {signed(usage)}
                       </td>
                       <td
                         className="money"
-                        style={{
-                          color:
-                            discount > 0
-                              ? 'var(--income)'
-                              : discount < 0
-                                ? 'var(--expense)'
-                                : 'var(--muted)',
-                        }}
-                        title={discount < 0 ? '해외이용수수료 등' : undefined}
+                        style={{ color: discount > 0 ? 'var(--income)' : 'var(--muted)' }}
                       >
-                        {discount > 0
-                          ? `−₩${won(discount)}`
-                          : discount < 0
-                            ? `+₩${won(-discount)}`
-                            : '—'}
+                        {discount > 0 ? `−₩${won(discount)}` : '—'}
+                      </td>
+                      <td
+                        className="money"
+                        style={{ color: fee > 0 ? 'var(--expense)' : fee < 0 ? 'var(--income)' : 'var(--muted)' }}
+                      >
+                        {fee > 0 ? `+₩${won(fee)}` : fee < 0 ? `−₩${won(-fee)}` : '—'}
                       </td>
                       <td className={`money ${pay < 0 ? 'inc' : 'exp'}`}>
                         {pay < 0 ? `+₩${won(-pay)}` : `−₩${won(pay)}`}
@@ -537,17 +534,12 @@ export function CardTransactions() {
                   <td className="money" style={{ color: 'var(--ink-2)' }}>
                     ₩{won(summary.usageAmount)}
                   </td>
-                  {(() => {
-                    const d = summary.usageAmount - summary.payAmount;
-                    return (
-                      <td
-                        className="money"
-                        style={{ color: d > 0 ? 'var(--income)' : d < 0 ? 'var(--expense)' : 'var(--muted)' }}
-                      >
-                        {d > 0 ? `−₩${won(d)}` : d < 0 ? `+₩${won(-d)}` : '—'}
-                      </td>
-                    );
-                  })()}
+                  <td className="money" style={{ color: summary.discountAmount > 0 ? 'var(--income)' : 'var(--muted)' }}>
+                    {summary.discountAmount > 0 ? `−₩${won(summary.discountAmount)}` : '—'}
+                  </td>
+                  <td className="money" style={{ color: summary.feeAmount > 0 ? 'var(--expense)' : summary.feeAmount < 0 ? 'var(--income)' : 'var(--muted)' }}>
+                    {summary.feeAmount > 0 ? `+₩${won(summary.feeAmount)}` : summary.feeAmount < 0 ? `−₩${won(-summary.feeAmount)}` : '—'}
+                  </td>
                   <td className="money exp">−₩{won(summary.payAmount)}</td>
                 </tr>
               </tfoot>

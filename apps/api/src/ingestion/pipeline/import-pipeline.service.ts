@@ -11,6 +11,7 @@ import { StatementTxnService } from '../../statement-txn/statement-txn.service.j
 import { readTabular } from '../parsers/tabular.js';
 import type { NormalizedBankRow, NormalizedCardRow } from '../parsers/types.js';
 import { Issuer } from '@ledger/shared';
+import { bankIdentity, cardIdentity, compatibleCardIdentity, duplicateKeyError, isLegacyHash, normalizedMerchant, sameLegacyCard } from './transaction-dedup.js';
 
 /** 발급사 → 은행 표기(자동 생성 계좌 이름·issuer 용) */
 const ISSUER_BANK_LABEL: Record<string, string> = {
@@ -66,12 +67,6 @@ export class ImportPipelineService {
       const result = this.registry
         .get(job.issuer as Issuer)
         .parse(rows, { issuer: job.issuer as Issuer, statementYm: job.statementYm ?? undefined });
-
-      // 파일 내 완전 동일 거래(같은 날·금액·가맹점)는 실제 별건 → 발생 순번을
-      // dedup 키에 붙여 각각 저장. 재업로드는 같은 순번이라 여전히 중복 방지.
-      disambiguateDedup(
-        result.kind === 'bank' ? result.rows : result.statement.rows,
-      );
 
       // 카드 명세서월(청구월)을 잡에 기록 — 업로드 기록에서 표기
       if (result.kind === 'card' && result.statement.statementYm) {
@@ -318,29 +313,41 @@ export class ImportPipelineService {
     // 1) 스테이징 적재 (dedup)
     for (const r of rows) {
       const { code, org } = this.matchBankType(r.txnTypeRaw, types);
-      // dedup은 가구 내에서만(같은 명세서를 다른 가구가 올려도 충돌 없음).
+      const identity = bankIdentity(paymentMethodId, r);
+      // 가구·통장·거래일시·금액·거래처로 비교한다. 잔액/파일명/행 순서는 키에 넣지 않는다.
       const exists = await this.prisma.bankTransaction.findFirst({
-        where: { dedupHash: r.dedupHash },
+        where: { householdId, dedupHash: identity },
         select: { id: true },
       });
       if (exists) continue;
-      await this.prisma.bankTransaction.create({
-        data: {
-          householdId,
-          paymentMethodId,
-          txnAt: r.txnAt,
-          txnTypeCode: code,
-          txnTypeRaw: r.txnTypeRaw,
-          counterpartOrg: org,
-          description: r.description,
-          withdrawal: r.withdrawal,
-          deposit: r.deposit,
-          balance: r.balance,
-          branch: r.branch,
-          importBatch,
-          dedupHash: r.dedupHash,
-        },
+      const day = startOfDay(r.txnAt);
+      const legacy = await this.prisma.bankTransaction.findMany({
+        where: { householdId, paymentMethodId, txnAt: { gte: day, lt: new Date(day.getTime() + 86400000) }, withdrawal: r.withdrawal, deposit: r.deposit },
+        select: { txnAt: true, description: true, balance: true, dedupHash: true },
       });
+      if (legacy.some((b) => isLegacyHash(b.dedupHash) && normalizedMerchant(b.description) === normalizedMerchant(r.description) &&
+        (b.txnAt.getTime() === r.txnAt.getTime() || (b.txnAt.getTime() === day.getTime() && b.balance != null && r.balance != null && Number(b.balance) === r.balance)))) continue;
+      try {
+        await this.prisma.bankTransaction.create({
+          data: {
+            householdId,
+            paymentMethodId,
+            txnAt: r.txnAt,
+            txnTypeCode: code,
+            txnTypeRaw: r.txnTypeRaw,
+            counterpartOrg: org,
+            description: r.description,
+            withdrawal: r.withdrawal,
+            deposit: r.deposit,
+            balance: r.balance,
+            branch: r.branch,
+            importBatch,
+            dedupHash: identity,
+          },
+        });
+      } catch (error) {
+        if (!duplicateKeyError(error)) throw error;
+      }
     }
 
     // 2) 대사 — 카드대금·자기이체를 '분류 제외'로 자동 분류
@@ -370,24 +377,28 @@ export class ImportPipelineService {
       }
       const ym = b.txnAt.toISOString().slice(0, 7);
       months.add(ym);
-      const tx = await this.prisma.transaction.create({
-        data: {
-          householdId,
-          type: isExpense ? 'expense' : 'income',
-          categoryCode,
-          paymentMethodId,
-          description: b.description,
-          amount,
-          transactionDate: startOfDay(b.txnAt),
-          settledDate: startOfDay(b.txnAt),
-          status: 'settled',
-        },
+      const linked = await this.prisma.$transaction(async (db) => {
+        const tx = await db.transaction.create({
+          data: {
+            householdId,
+            type: isExpense ? 'expense' : 'income',
+            categoryCode,
+            paymentMethodId,
+            description: b.description,
+            amount,
+            transactionDate: startOfDay(b.txnAt),
+            settledDate: startOfDay(b.txnAt),
+            status: 'settled',
+          },
+        });
+        const claimed = await db.bankTransaction.updateMany({
+          where: { id: b.id, householdId, transactionId: null },
+          data: { transactionId: tx.id, isClassified: 'Y' },
+        });
+        if (claimed.count === 0) await db.transaction.delete({ where: { id: tx.id } });
+        return claimed.count > 0;
       });
-      await this.prisma.bankTransaction.update({
-        where: { id: b.id },
-        data: { transactionId: tx.id, isClassified: 'Y' },
-      });
-      classified++;
+      if (linked) classified++;
     }
     return { classified, pending };
   }
@@ -424,13 +435,6 @@ export class ImportPipelineService {
     let pending = 0;
     let lastPlanId: number | null = null; // 직전 할부 원거래(미리입금/할인 등 조정행 연결용)
     for (const r of rows) {
-      // dedup은 가구 내에서만
-      const exists = await this.prisma.cardTransaction.findFirst({
-        where: { dedupHash: r.dedupHash },
-        select: { id: true },
-      });
-      if (exists) continue;
-
       const usageDate = startOfDay(r.txnDate);
       const isInstallment = isInstallmentPeriod(r.installmentPeriod);
       // 할부 표시 이용일 = 최초구매일의 '일' + (회차−1)개월 → 해당 명세서 월에 표기.
@@ -438,6 +442,18 @@ export class ImportPipelineService {
       const displayDate = isInstallment
         ? installmentUsageDate(usageDate, r.billingRound)
         : usageDate;
+
+      const identity = cardIdentity(paymentMethodId, r, displayDate);
+      const existsIn = async (db: Pick<PrismaService, 'cardTransaction'>) => {
+        if (await db.cardTransaction.findFirst({ where: { householdId, dedupHash: identity }, select: { id: true } })) return true;
+        // 이전 키와 승인번호 없는 청구명세서도 같은 이용 거래에 연결한다.
+        const candidates = await db.cardTransaction.findMany({
+          where: { householdId, paymentMethodId, txnDate: displayDate },
+          select: { dedupHash: true, merchantName: true, principal: true, fee: true, installmentPeriod: true, billingRound: true, isCanceled: true },
+        });
+        return candidates.some((stored) => sameLegacyCard(stored, r) || compatibleCardIdentity(stored.dedupHash, identity));
+      };
+      if (await existsIn(this.prisma)) continue;
 
       // 할부: 최초 거래 정보를 원거래 테이블에 적재(회차마다 참조).
       // 미리입금/할인 등 조정행(음수·0원)은 직전 할부 원거래에 연결 → 필터·표시 일치.
@@ -457,60 +473,69 @@ export class ImportPipelineService {
       // 할부 월 청구건의 '이용금액' = 이번달 청구액(원금+이자). 전체금액은 원거래 테이블.
       const storedUsage = isInstallment ? r.principal + r.fee : r.usageAmount;
 
-      const ct = await this.prisma.cardTransaction.create({
-        data: {
-          householdId,
-          statementId: stmt.id,
-          paymentMethodId,
-          installmentPlanId,
-          cardLabel: r.cardLabel,
-          cardNo: r.cardNo,
-          txnDate: displayDate,
-          merchantName: r.merchantName,
-          usageAmount: storedUsage,
-          principal: r.principal,
-          fee: r.fee,
-          installmentPeriod: r.installmentPeriod,
-          billingRound: r.billingRound,
-          benefitType: r.benefitType,
-          benefitAmount: r.benefitAmount,
-          region: r.region,
-          saleType: r.saleType,
-          isCanceled: r.isCanceled ? 'Y' : 'N',
-          point: r.point,
-          dedupHash: r.dedupHash,
-        },
-      });
+      try {
+        await this.prisma.$transaction(async (db) => {
+          // 같은 카드의 동시 업로드도 순서대로 재검사한다(승인내역 ↔ 청구명세서 포함).
+          await db.$executeRaw`SELECT pg_advisory_xact_lock(${householdId}::int, ${paymentMethodId}::int)`;
+          if (await existsIn(db)) return;
+          const ct = await db.cardTransaction.create({
+            data: {
+              householdId,
+              statementId: stmt.id,
+              paymentMethodId,
+              installmentPlanId,
+              cardLabel: r.cardLabel,
+              cardNo: r.cardNo,
+              txnDate: displayDate,
+              merchantName: r.merchantName,
+              usageAmount: storedUsage,
+              principal: r.principal,
+              fee: r.fee,
+              installmentPeriod: r.installmentPeriod,
+              billingRound: r.billingRound,
+              benefitType: r.benefitType,
+              benefitAmount: r.benefitAmount,
+              region: r.region,
+              saleType: r.saleType,
+              isCanceled: r.isCanceled ? 'Y' : 'N',
+              point: r.point,
+              dedupHash: identity,
+            },
+          });
 
-      // 실지출 금액 = 결제원금 + 이자. 금액·취소 여부와 무관하게 규칙 매칭 시 같은 분류로.
-      // (환불 음수는 지출에서 차감, 취소·0원 조정행은 0으로 반영 — 오분류 없음)
-      const amount = r.principal + r.fee;
+          // 실지출 금액 = 결제원금 + 이자. 금액·취소 여부와 무관하게 규칙 매칭 시 같은 분류로.
+          // (환불 음수는 지출에서 차감, 취소·0원 조정행은 0으로 반영 — 오분류 없음)
+          const amount = r.principal + r.fee;
 
-      const categoryCode = await this.classifier.classify(r.merchantName);
-      if (!categoryCode) {
-        pending++;
-        continue;
+          const categoryCode = await this.classifier.classify(r.merchantName);
+          if (!categoryCode) {
+            pending++;
+            return;
+          }
+          months.add(displayDate.toISOString().slice(0, 7));
+
+          const tx = await db.transaction.create({
+            data: {
+              householdId,
+              type: 'expense',
+              categoryCode,
+              paymentMethodId,
+              description: r.merchantName,
+              amount,
+              transactionDate: displayDate,
+              settledDate: meta.billingDate ?? displayDate,
+              status: 'settled',
+            },
+          });
+          await db.cardTransaction.update({
+            where: { id: ct.id },
+            data: { transactionId: tx.id, isClassified: 'Y' },
+          });
+          classified++;
+        });
+      } catch (error) {
+        if (!duplicateKeyError(error)) throw error;
       }
-      months.add(displayDate.toISOString().slice(0, 7));
-
-      const tx = await this.prisma.transaction.create({
-        data: {
-          householdId,
-          type: 'expense',
-          categoryCode,
-          paymentMethodId,
-          description: r.merchantName,
-          amount,
-          transactionDate: displayDate,
-          settledDate: meta.billingDate ?? displayDate,
-          status: 'settled',
-        },
-      });
-      await this.prisma.cardTransaction.update({
-        where: { id: ct.id },
-        data: { transactionId: tx.id, isClassified: 'Y' },
-      });
-      classified++;
     }
     return { classified, pending };
   }
@@ -576,20 +601,6 @@ export class ImportPipelineService {
 /** 할부 여부 — 개월 값에 숫자가 있으면 할부. '-'·''·null·'일시불'은 일시불. */
 function isInstallmentPeriod(period: string | null): boolean {
   return !!period && /\d/.test(period);
-}
-
-/**
- * 파일 내 dedup 키가 겹치는 행(완전 동일 거래)에 발생 순번을 붙여 구분.
- * 2번째부터 '#2','#3'… → 같은 파일의 진짜 별건은 각각 저장되고,
- * 재업로드 시엔 동일 순번이 재현되어 중복 방지가 유지된다.
- */
-function disambiguateDedup(rows: Array<{ dedupHash: string }>): void {
-  const seen = new Map<string, number>();
-  for (const r of rows) {
-    const n = (seen.get(r.dedupHash) ?? 0) + 1;
-    seen.set(r.dedupHash, n);
-    if (n > 1) r.dedupHash = `${r.dedupHash}#${n}`;
-  }
 }
 
 /**

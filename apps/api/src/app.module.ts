@@ -29,11 +29,16 @@ import { MerchantRuleModule } from './merchant-rule/merchant-rule.module.js';
       envFilePath: ['.env', '../../.env'],
       validate: validateEnv,
     }),
-    // 적재 파이프라인 큐 (Redis). REDIS_URL 을 host/port 로 파싱.
+    // 공유 호스트 Redis: URL의 DB 번호를 적용해 가계부 큐를 분리한다.
     BullModule.forRoot({
       connection: (() => {
         const u = new URL(process.env.REDIS_URL ?? 'redis://localhost:6379');
-        return { host: u.hostname, port: Number(u.port || 6379) };
+        return {
+          host: u.hostname,
+          port: Number(u.port || 6379),
+          db: Number(u.pathname.slice(1) || 0),
+          connectionName: 'ledger-queue',
+        };
       })(),
     }),
     PrismaModule,

@@ -1,5 +1,14 @@
 # 워크스페이스 부팅 시 서비스 자동 기동
 
+> 2026-09-24 호스트 구성 반영: PostgreSQL은 `host.docker.internal:5432`,
+> Redis는 `host.docker.internal:6379/6`을 사용한다.
+> 2026-09-25 점검에서는 이전에 기록된 호스트 `ledger-runtime.timer`가 없었다.
+> 워크스페이스 재생성 후 자동 기동이 필요하면 아래 Coder 템플릿 등록을 확인한다.
+> DB 일일 백업은 2026-09-25 호스트에 설치한 `ledger-db-backup.timer`가 담당한다.
+> 매일 03:00 한국시간에 암호화 백업·복원 검증·Google Drive 업로드를 실행한다.
+> 일정·보관 개수·복구 키는 [백업 문서](../docs/DB_BACKUP_RECOVERY.md)를 참고한다.
+> Node.js 실행 파일은 홈 볼륨의 `~/.local/bin/node`에 있다.
+
 이 컨테이너는 **PID 1 이 `coder agent`** 라서 systemd·cron 을 쓸 수 없다.
 그래서 서비스(API :4000, 웹 :3000)는 **PM2** 로 관리하고, 워크스페이스가 뜰 때
 `scripts/coder-startup.sh` 가 이를 기동한다.
@@ -70,6 +79,6 @@ cd ~/ledger/apps/web && pnpm build && pm2 restart ledger-web
 
 ## 참고: DB/Redis
 
-`docker-compose.yml` 의 postgres·redis 는 **별도 컨테이너**라 워크스페이스와 별개로
-살아있다. 만약 내려가 있으면 스크립트가 로그에 `WARN postgres 미도달` 을 남기므로,
-그때는 호스트에서 `docker compose up -d` 를 실행한다.
+현재 서버는 호스트 PostgreSQL 컨테이너와 호스트 Redis 서비스를 사용한다.
+워크스페이스 안에서 `docker-compose.yml`로 의존 서비스를 만들지 않는다.
+접속에 실패하면 호스트의 `postgresql` 컨테이너와 `redis-server.service`를 확인한다.

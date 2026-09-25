@@ -1,5 +1,6 @@
 import { Issuer } from '@ledger/shared';
-import { parseAmount, parseDate } from './tabular.js';
+import { parseCardApprovals } from './card-approvals.js';
+import { parseAmount, parseDateTime } from './tabular.js';
 import { cell, dedupHash, locateHeader } from './generic.js';
 import type {
   FieldAliasMap,
@@ -37,6 +38,8 @@ export class HanaCardParser implements StatementParser {
   readonly issuer = Issuer.HANA_CARD;
 
   parse(rows: string[][], ctx: ParseContext): ParseResult {
+    const approvals = parseCardApprovals(rows, { ...ctx, issuer: this.issuer });
+    if (approvals) return approvals;
     const { billingDate, statementYm } = this.extractBilling(rows, ctx);
     const totalHeader = this.extractTotal(rows);
 
@@ -47,7 +50,7 @@ export class HanaCardParser implements StatementParser {
 
     for (let i = headerIndex + 1; i < rows.length; i++) {
       const row = rows[i]!;
-      const txnDate = parseDate(cell(row, columns, 'txnDate'));
+      const txnDate = parseDateTime(cell(row, columns, 'txnDate'));
 
       if (!txnDate) {
         // 날짜가 없으면 카드 그룹 헤더(본인/가족 + 카드번호)인지 확인

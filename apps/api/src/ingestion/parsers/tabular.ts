@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 
 /** 표 형태 파일(xlsx/xls/csv)을 셀 문자열 2차원 배열로 읽는다. */
 export async function readTabular(
@@ -51,18 +51,40 @@ async function readXlsxExcelJS(buffer: Buffer): Promise<string[][]> {
 
 /** SheetJS 폴백 리더 — exceljs 가 못 여는 파일 처리. 전 시트 concat. */
 function readXlsxSheetJS(buffer: Buffer): string[][] {
-  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false });
+  // HTML을 .xls로 제공하는 명세서도 있다. SheetJS는 </td   > 같은 닫는 태그를
+  // 셀 경계로 인식하지 못하므로 정규화한다. latin1 왕복으로 원본 인코딩을 보존한다.
+  const isHtml = /^\s*<(?:!doctype\s+html|html|table)\b/i.test(
+    buffer.toString('utf8', 0, 1024),
+  );
+  const source = isHtml
+    ? Buffer.from(buffer.toString('latin1').replace(/<\/(td|th)\s+>/gi, '</$1>'), 'latin1')
+    : buffer;
+  const wb = XLSX.read(source, {
+    type: 'buffer',
+    cellDates: false,
+    cellNF: true,
+    // HTML의 할부/회차 "3/2" 등이 날짜로 자동 변환되지 않도록 문자열을 유지한다.
+    raw: isHtml,
+  });
   const rows: string[][] = [];
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
     if (!ws) continue;
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, {
-      header: 1,
-      raw: false, // 셀 서식대로 문자열화(날짜/숫자)
-      defval: '',
-      blankrows: false,
-    });
-    for (const r of aoa) rows.push(r.map((c) => String(c ?? '').trim()));
+    // 표시 서식(8/13/26) 대신 실제 날짜 셀 값을 보존한다. 일반 숫자·회차는 그대로 둔다.
+    const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+    for (let ri = range.s.r; ri <= range.e.r; ri++) {
+      const cells = Array.from({ length: range.e.c - range.s.c + 1 }, (_, ci) => ws[XLSX.utils.encode_cell({ r: ri, c: range.s.c + ci })]);
+      if (!cells.some((c) => c && c.t !== 'z' && c.v != null && c.v !== '')) continue;
+      rows.push(cells.map((c) => {
+        if (!c) return '';
+        if (c.t === 'n' && typeof c.v === 'number' && XLSX.SSF.is_date(c.z ?? '')) {
+          // SheetJS Date 변환은 서버의 로컬 시간대를 적용하므로 시리얼을 직접 해석한다.
+          const d = XLSX.SSF.parse_date_code(c.v, { date1904: !!wb.Workbook?.WBProps?.date1904 });
+          if (d) return new Date(Date.UTC(d.y, d.m - 1, d.d, d.H, d.M, d.S)).toISOString();
+        }
+        return XLSX.utils.format_cell(c).trim();
+      }));
+    }
   }
   return rows;
 }
@@ -73,8 +95,8 @@ function cellToString(v: unknown): string {
     // 하이퍼링크/리치텍스트/날짜 등
     const anyV = v as { text?: string; result?: unknown };
     if (typeof anyV.text === 'string') return anyV.text.trim();
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
-    if (anyV.result !== undefined) return String(anyV.result).trim();
+    if (v instanceof Date) return v.toISOString();
+    if (anyV.result !== undefined) return cellToString(anyV.result);
   }
   return String(v).trim();
 }
@@ -102,16 +124,21 @@ export function parseDate(raw: string | undefined, defaultYear?: number): Date |
   m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (m) return toUtc(+m[1]!, +m[2]!, +m[3]!);
 
+  // SheetJS/Excel의 미국식 표시(8/13/26). 연도 우선 표기(26/08/13)와 월 범위로 구분한다.
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})(?:$|[ T])/);
+  if (m && +m[1]! <= 12) return toUtc(m[3]!.length === 2 ? 2000 + +m[3]! : +m[3]!, +m[1]!, +m[2]!);
+
   // 26-01-04 (2자리 연도)
-  m = s.match(/^(\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})$/);
+  m = s.match(/^(\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})(?:$|[ T])/);
   if (m) return toUtc(2000 + +m[1]!, +m[2]!, +m[3]!);
 
   // 일(day)만 있는 경우 — defaultYear/월 컨텍스트 필요 → 호출부에서 처리
   return null;
 }
 
-function toUtc(y: number, mo: number, d: number): Date {
-  return new Date(Date.UTC(y, mo - 1, d));
+function toUtc(y: number, mo: number, d: number): Date | null {
+  const value = new Date(Date.UTC(y, mo - 1, d));
+  return value.getUTCFullYear() === y && value.getUTCMonth() === mo - 1 && value.getUTCDate() === d ? value : null;
 }
 
 /**
@@ -130,7 +157,7 @@ export function parseDateTime(
   const hh = +t[1]!;
   const mm = +t[2]!;
   const ss = t[3] ? +t[3] : 0;
-  if (hh > 23 || mm > 59 || ss > 59) return base;
+  if (hh > 23 || mm > 59 || ss > 59) return null;
   return new Date(
     Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hh, mm, ss),
   );
